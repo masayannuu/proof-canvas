@@ -404,13 +404,18 @@ const CSS = `
 
 /* Evidence */
 .ev { padding: 14px 18px; margin-top: 18px; }
-.ev-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ev-title { font-size: 13.5px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
-.ev-title svg { width: 15px; height: 15px; color: var(--pc-ink-2); }
-.ev-tg { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; min-height: 28px; border: 1px solid var(--pc-bd); border-radius: 7px; padding: 3px 10px; background: var(--pc-surface); color: var(--pc-ink-2); }
-.ev-tg:hover { border-color: var(--pc-bd-strong); background: var(--pc-hover); color: var(--pc-ink); }
-.ev-tg svg { width: 14px; height: 14px; transition: transform 0.16s ease; }
-.ev-tg[aria-expanded="true"] svg { transform: rotate(180deg); }
+.ev-head { margin: 0; font-size: 13.5px; font-weight: 600; }
+.ev-tg { width: calc(100% + 16px); margin: -6px -8px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; display: flex; align-items: center; gap: 7px; text-align: left; color: var(--pc-ink); transition: background 0.14s ease; }
+.ev-tg:hover { background: var(--pc-hover); }
+.ev-chev { display: inline-flex; align-items: center; color: var(--pc-ink-3); flex: none; }
+.ev-chev svg { width: 14px; height: 14px; rotate: -90deg; }
+.ev-tg[aria-expanded="true"] .ev-chev svg { rotate: 0deg; }
+.ev-tg:hover .ev-chev { color: var(--pc-ink); }
+.ev-shield { display: inline-flex; align-items: center; color: var(--pc-ink-2); flex: none; }
+.ev-shield svg { width: 15px; height: 15px; }
+.ev-cue { font-size: 12px; font-weight: 500; color: var(--pc-ink-3); margin-left: 4px; }
+.ev-tg:hover .ev-cue { color: var(--pc-ink-2); }
+@media (prefers-reduced-motion: no-preference) { .ev-chev svg { transition: rotate 0.18s ease; } }
 .ev-facts { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--pc-ink-2); }
 .ev-facts li { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; min-width: 0; }
 .ev-facts li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--pc-bd-strong); flex: none; }
@@ -598,7 +603,7 @@ ${SHARED_FNS}
   const T = {
     navRules: 'Rules', viewAll: (n) => 'Overview (' + n + ')', overview: 'Overview',
     focusLabel: 'Diagram state', linked: 'Linked',
-    evTitle: 'Evidence', evOpen: 'Details', evClose: 'Close',
+    evTitle: 'Evidence', evOpen: 'Show details', evClose: 'Hide details',
     rule: 'Rule', ifOn: 'If enforced', ifOff: 'If not enforced', quote: 'Source text', meta: 'Verification metadata',
     scope: 'Scope', method: 'Method', tool: 'Tool', specHash: 'Spec hash', steps: 'Steps checked',
     cexTitle: 'Counterexample', noCex: 'No counterexample recorded',
@@ -702,21 +707,23 @@ ${SHARED_FNS}
   function evCard(r) {
     const e = r.evidence;
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
-    const body = S.evOpen
-      ? '<div class="ev-body">' +
-          '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
-          '<div class="ev-impacts"><div class="ev-imp"><b class="t-ok">' + esc(T.ifOn) + '</b>' + esc(e.ifEnforced) + '</div>' +
-          '<div class="ev-imp"><b class="t-bad">' + esc(T.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
-          '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(T.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
-          '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(T.meta) + '</div>' +
-          '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, TOOL) +
-          (BOARD.run.specHash ? kv(T.specHash, BOARD.run.specHash, true) : '') +
-          (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
-          '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(T.cexTitle) + '</div><pre class="term">' + esc(e.counterexample || T.noCex) + '</pre></div>' +
-        '</div>'
-      : '';
-    return '<section class="card ev"><div class="ev-top"><h3 class="ev-title">' + ICON.shield + esc(T.evTitle) + '</h3>' +
-      '<button class="ev-tg" type="button" data-act="ev" aria-expanded="' + S.evOpen + '">' + esc(S.evOpen ? T.evClose : T.evOpen) + ICON.chevron + '</button></div>' +
+    const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
+      '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
+      '<div class="ev-impacts"><div class="ev-imp"><b class="t-ok">' + esc(T.ifOn) + '</b>' + esc(e.ifEnforced) + '</div>' +
+      '<div class="ev-imp"><b class="t-bad">' + esc(T.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
+      '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(T.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
+      '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(T.meta) + '</div>' +
+      '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, TOOL) +
+      (BOARD.run.specHash ? kv(T.specHash, BOARD.run.specHash, true) : '') +
+      (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
+      '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(T.cexTitle) + '</div><pre class="term">' + esc(e.counterexample || T.noCex) + '</pre></div>' +
+      '</div></div>';
+    return '<section class="card ev"><h3 class="ev-head">' +
+      '<button class="ev-tg" type="button" data-act="ev" aria-expanded="' + S.evOpen + '">' +
+      '<span class="ev-chev" aria-hidden="true">' + ICON.chevron + '</span>' +
+      '<span class="ev-shield" aria-hidden="true">' + ICON.shield + '</span>' +
+      '<span>' + esc(T.evTitle) + '</span>' +
+      '<span class="ev-cue">' + esc(S.evOpen ? T.evClose : T.evOpen) + '</span></button></h3>' +
       '<ul class="ev-facts" role="list"><li>' + esc(r.source) + '</li><li>' + esc(e.checkerSummary) + '</li>' + liveStatusItem(r) + '</ul>' + body + '</section>';
   }
 
@@ -982,6 +989,18 @@ ${SHARED_FNS}
     if (nav) nav.style.maxHeight = getComputedStyle(nav).position === 'sticky' ? Math.min(720, Math.max(320, window.innerHeight - 84)) + 'px' : '';
     root.querySelectorAll('[data-board]').forEach(drawLink);
   }
+
+  root.addEventListener('beforematch', (e) => {
+    if (e.target && e.target.closest && e.target.closest('.ev-panel') && !S.evOpen) {
+      S.evOpen = true;
+      const btn = root.querySelector('[data-act="ev"]');
+      if (btn) {
+        btn.setAttribute('aria-expanded', 'true');
+        const cue = btn.querySelector('.ev-cue');
+        if (cue) cue.textContent = T.evClose;
+      }
+    }
+  });
 
   // ---- events ----
   root.addEventListener('click', (e) => {
