@@ -226,6 +226,8 @@ export function validateHtmlContent(html, label = '<html>', { specPaths = [], lo
         } catch (err) {
           errors.push(err.message);
         }
+      } else if (bindingOk && binding.level !== 'self-reported') {
+        warnings.push('binding: embedded evidence was not re-checked against --spec/--log files');
       }
       if (meta.__layout !== layoutFor(board)) errors.push(`data: cached __layout "${meta.__layout}" does not match "${layoutFor(board)}"`);
       if (meta.__titleOverride !== undefined && (typeof meta.__titleOverride !== 'string' || !meta.__titleOverride.trim())) {

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { GEOM, layoutBoxLabel, textW } from './figure.mjs';
-import { ALL_MODULES, modParts, provLabel, renderBoardHtml, toolLabel } from './render_board.mjs';
+import { ALL_MODULES, footerMarkup, modParts, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
 import { validateHtmlContent } from './validate_board.mjs';
@@ -702,13 +702,16 @@ test('binding: Quint example renders and rechecks the actual files with a determ
   const binding = bindingIn(html);
   assert.equal(binding.specHash, refund.run.specHash);
   assert.match(binding.logHash, /^sha256:[0-9a-f]{64}$/);
-  assert.match(footerNote(html), /Quint log sha256:/);
+  assert.match(footerNote(html), /Quint 0\.32\.0 log sha256:/);
   const lines = readFileSync(refundSpec, 'utf8').split('\n');
   for (const rule of refund.rules) {
     const ref = binding.refs[rule.id];
     assert.equal(ref.file, 'refund_guard.qnt');
     assert.equal(ref.snippet, lines.slice(ref.line - 1, ref.endLine).join('\n'));
     assert.match(ref.snippet, new RegExp('^  val ' + rule.property + ' ='));
+    const details = ruleEvidenceDetails(rule, refund, binding);
+    assert.equal(details.tool, 'Quint 0.32.0');
+    assert.equal(details.source, 'refund_guard.qnt:' + ref.line);
   }
   assert.equal(html.includes(refundDir), false);
   assert.equal(CJK.test(html), false);
@@ -736,10 +739,13 @@ test('binding: derive a missing hash without altering the board or masking a sup
   const html = renderBoardHtml(board, refundEvidence);
   expectPass(html);
   assert.equal(bindingIn(html).specHash, refund.run.specHash);
+  assert.match(footerMarkup(resolveProvenance(board, bindingIn(html)), board, bindingIn(html)),
+    new RegExp('<code>spec: ' + refund.run.specHash.slice(0, 19) + '</code>'));
   const output = tmpFile('derived.html', html);
   for (const flags of [[], ['--spec', refundSpec, '--log', refundLog]]) {
     const check = node('validate_board.mjs', ['--in', input, ...flags, output]);
     assert.equal(check.status, 0, check.stdout + check.stderr);
+    assert.equal(check.stdout.includes('binding: embedded evidence was not re-checked against --spec/--log files'), flags.length === 0);
   }
   const standalone = node('validate_board.mjs', ['--in', input, '--spec', refundSpec, '--log', refundLog]);
   assert.equal(standalone.status, 0, standalone.stdout + standalone.stderr);
@@ -754,7 +760,7 @@ test('binding: derive a missing hash without altering the board or masking a sup
 test('binding: repeatable CLI flags hash and render files in basename order', () => {
   const cap = tmpFile('A.qnt', 'pure val refundsWithinPaid = true\n');
   const balance = tmpFile('B.qnt', 'val balanceNonNegative = true\n');
-  const capLog = tmpFile('A.log', 'Checking invariant refundsWithinPaid\n[ok] No violation found.\n');
+  const capLog = tmpFile('A.log', '$ quint verify A.qnt --invariant=refundsWithinPaid\n[ok] No violation found.\n');
   const balanceLog = tmpFile('B.log', '$ quint verify B.qnt --invariant balanceNonNegative\n[ok] No violation found.\n');
   const forward = ['--spec', cap, '--spec', balance, '--log', capLog, '--log', balanceLog];
   const reverse = ['--log', balanceLog, '--log', capLog, '--spec', balance, '--spec', cap];
@@ -801,14 +807,16 @@ test('binding: only declarations outside comments count in each supported langua
 });
 
 test('binding: paths reported by checker logs do not appear in HTML and source excerpts cannot reveal them', () => {
-  const spec = tmpFile('Path.qnt', 'val Real = true\n');
-  const log = tmpFile('path.log', 'Checking invariant Real\n[ok] No violation found.\nWorking file: ' + spec + '\n');
+  const spec = tmpFile('Path.qnt', 'val Real = "/api/v1/refunds"\n');
+  const log = tmpFile('path.log', '$ quint verify "' + spec + '" --invariant=Real\n[ok] No violation found.\nWorking file: ' + spec + '\n');
   const board = oneRule('Real');
   const html = renderBoardHtml(board, { specPaths: [spec], logPaths: [log] });
   expectPass(html);
   assert.equal(html.includes(TMP), false);
-  writeFileSync(spec, 'val Real = "' + spec + '"\n');
-  assert.throws(() => renderBoardHtml(board, { specPaths: [spec] }), /binding: rule .* spec excerpt contains an absolute file path/);
+  for (const path of ['\x60/Users/example/model.qnt\x60', '[/etc/passwd]', '</opt/x/y>', '"~/model.qnt"', 'C:\\specs\\Model.qnt', '\\\\server\\share', 'file:///Model.qnt']) {
+    writeFileSync(spec, 'val Real = true // ' + path + '\n');
+    assert.throws(() => renderBoardHtml(board, { specPaths: [spec] }), /binding: rule .* spec excerpt contains an absolute file path/);
+  }
 });
 
 test('binding: excerpts preserve CRLF and truncate complete source at 10 lines or 600 characters', () => {
@@ -829,21 +837,23 @@ test('binding: excerpts preserve CRLF and truncate complete source at 10 lines o
   assert.ok(wideRef.snippet.endsWith('…'));
 });
 
-test('binding: a TLC pass supports one property and a named violation contradicts that property', () => {
+test('binding: a TLC pass requires configured scope and a named violation contradicts that property', () => {
   const spec = tmpFile('Spend.tla', '---- MODULE Spend ----\nNoDoubleSpend == TRUE\n====\n');
+  const config = tmpFile('Spend.cfg', 'INVARIANT NoDoubleSpend\n');
   const pass = tmpFile('tlc-pass.log', 'Model checking completed. No error has been found.\n1,027 states generated, 30 distinct states found.\n');
   const fail = tmpFile('tlc-fail.log', 'Error: Invariant NoDoubleSpend is violated.\nError: The behavior up to this point is:\n');
   const board = oneRule('NoDoubleSpend');
-  const html = renderBoardHtml(board, { specPaths: [spec], logPaths: [pass] });
+  assert.throws(() => renderBoardHtml(board, { specPaths: [spec], logPaths: [pass] }), /binding: a TLC pass requires/);
+  const html = renderBoardHtml(board, { specPaths: [spec, config], logPaths: [pass] });
   expectPass(html);
   assert.equal(bindingIn(html).logFiles[0].checker, 'TLC');
   assert.equal(bindingIn(html).logFiles[0].statesGenerated, 1027);
   assert.throws(() => renderBoardHtml(board, { specPaths: [spec], logPaths: [fail] }), /binding: checker log contradicts verified rule .*NoDoubleSpend/);
   markedFailed(board);
-  assert.throws(() => renderBoardHtml(board, { specPaths: [spec], logPaths: [pass] }), /binding: no failing checker verdict/);
+  assert.throws(() => renderBoardHtml(board, { specPaths: [spec, config], logPaths: [pass] }), /binding: checker log contradicts failed rule/);
   const failure = renderBoardHtml(board, { specPaths: [spec], logPaths: [fail] });
   assert.equal(expectPass(failure).provenance, 'failed');
-  assert.match(footerNote(failure), /TLC log sha256:/);
+  assert.match(footerNote(failure), /TLA\+ TLC 2\.19 log sha256:/);
 });
 
 test('binding: unnamed Quint pass cannot assign multiple results, and violations or errors cannot produce a green badge', () => {
@@ -851,11 +861,11 @@ test('binding: unnamed Quint pass cannot assign multiple results, and violations
   const violation = tmpFile('quint-violation.log', '[violation] Found an issue.\n');
   const quoted = tmpFile('quint-named-violation.log', "[violation] Found an issue.\nInvariant 'refundsWithinPaid' was violated.\n");
   const trace = tmpFile('quint-trace.log', '[violation] Found an issue.\n  \u274c refundsWithinPaid\n');
-  const error = tmpFile('quint-error.log', '$ quint verify bad.qnt --invariant=refundsWithinPaid\n[error] Type error.\n');
+  const error = tmpFile('quint-error.log', '$ quint verify refund_guard.qnt --invariant=refundsWithinPaid\n[error] Type error.\n');
   const errorThenPass = tmpFile('quint-error-before-command.log', 'Error: syntax error\n' + readFileSync(refundLog, 'utf8'));
   assert.throws(() => renderBoardHtml(refund, { logPaths: [errorThenPass] }), /binding: .*requires run.status/);
-  expectPass(renderBoardHtml(oneRule('refundsWithinPaid'), { logPaths: [pass] }));
-  assert.throws(() => renderBoardHtml(refund, { logPaths: [pass] }), /binding: no passing checker verdict/);
+  assert.throws(() => renderBoardHtml(oneRule('refundsWithinPaid'), { logPaths: [pass] }), /binding: unrecognized checker log format/);
+  assert.throws(() => renderBoardHtml(refund, { logPaths: [pass] }), /binding: unrecognized checker log format/);
   for (const log of [violation, quoted, trace, error]) {
     assert.throws(() => renderBoardHtml(refund, { logPaths: [refundLog, log] }), /binding: .*requires run.status|binding: checker log contradicts verified rule/);
   }
@@ -875,23 +885,23 @@ test('binding: unnamed Quint pass cannot assign multiple results, and violations
 
 test('binding: Apalache accepts ordinary progress and rejects a counterexample or explicit error', () => {
   const board = oneRule('NoDoubleSpend');
-  const pass = tmpFile('apalache-pass.log', 'State 0: Checking 1 state invariant I@12:00:00\nState 0: state invariant 0 holds.\nThe outcome is: NoError\n');
+  const pass = tmpFile('apalache-pass.log', ' > Set an invariant to NoDoubleSpend I@12:00:00\nState 0: Generating 1 symbolic transitions\nState 0: Picking a transition...\nThe outcome is: NoError\n');
   expectPass(renderBoardHtml(board, { logPaths: [pass] }));
-  for (const message of ['The outcome is: Error', 'Checker has found an error', 'State 0:\n  x = 0']) {
+  for (const message of ['The outcome is: Error', 'The outcome is: Deadlock', 'The outcome is: RuntimeError', 'Checker has found an error', 'Checker has found a deadlock', 'State 0:\n  x = 0', 'State 0: <Initial predicate>\n  x = 0']) {
     const fail = tmpFile('apalache-fail.log', message + '\n');
     assert.throws(() => renderBoardHtml(board, { logPaths: [fail] }), /binding: checker log contradicts verified rule/);
   }
 });
 
-test('binding: unrecognized logs are rejected when no checker reports a verdict', () => {
+test('binding: unrecognized logs are rejected individually', () => {
   for (const text of ['', 'Just some text', '[ok] pending']) {
     const log = tmpFile('unknown.log', text);
     assert.throws(() => renderBoardHtml(refund, { specPaths: [refundSpec], logPaths: [log] }), /binding: unrecognized checker log format/);
   }
   const log = tmpFile('unrecognized-extra.log', 'Additional context');
-  const html = renderBoardHtml(refund, { specPaths: [refundSpec], logPaths: [refundLog, log] });
-  assert.equal(bindingIn(html).logFiles[1].checker, null);
-  expectPass(html);
+  assert.throws(() => renderBoardHtml(refund, { specPaths: [refundSpec], logPaths: [refundLog, log] }), /binding: unrecognized checker log format in "unrecognized-extra.log"/);
+  const html = renderBoardHtml(refund, refundEvidence);
+  expectFail(tamper(html, (d) => { d.__binding.logFiles[0].results = []; }), 'provenance: binding: invalid embedded evidence metadata');
 });
 
 test('binding: structured receipts require exact properties, verdicts, and reported step counts', () => {
@@ -916,6 +926,208 @@ test('binding: structured receipts require exact properties, verdicts, and repor
   markedFailed(board);
   const failing = write({ ...receipt, results: [{ ...result, status: 'failed' }] });
   assert.equal(expectPass(renderBoardHtml(board, { logPaths: [failing] })).provenance, 'failed');
+});
+
+test('binding: Alloy reads assertion names and final solver verdicts after terminal overwrites', () => {
+  const spec = tmpFile('Approval.als', 'assert Safe {\n  no none\n}\ncheck Safe for 5\npred Node.reachable[n: Node] {}\n');
+  const board = oneRule('Safe');
+  const check = (line) => ({ specPaths: [spec], logPaths: [tmpFile('alloy.log', line + '\n')] });
+  for (const row of ['00. check Safe    0    UNSAT', '01. alias: check Safe  0  UNSAT', '02. check alias: Safe  0  UNSAT',
+    'Working...\r00. check Safe    0    \x1b[32mUNSAT\x1b[0m']) {
+    const html = renderBoardHtml(board, check(row));
+    assert.equal(expectPass(html).provenance, 'verified');
+    assert.equal(bindingIn(html).refs.stock_never_negative.snippet, 'assert Safe {\n  no none\n}');
+  }
+  const failed = check('00. check Safe    0\b\b\b\b\b    1/1     SAT');
+  assert.throws(() => renderBoardHtml(board, failed), /binding: checker log contradicts verified rule/);
+  assert.equal(expectPass(renderBoardHtml(markedFailed(clone(board)), failed)).provenance, 'failed');
+  for (const row of ['00. run Safe    1/1    SAT', '00. check Safe    0']) {
+    assert.throws(() => renderBoardHtml(board, check(row)), /binding: unrecognized checker log format/);
+  }
+  expectPass(renderBoardHtml(oneRule('reachable'), { specPaths: [spec] }));
+  assert.throws(() => renderBoardHtml(oneRule('Node'), { specPaths: [spec] }), /binding: rule .* not found/);
+});
+
+test('binding: TLC certifies only configured identifiers and includes the config in the manifest', () => {
+  const [first, second] = refund.rules.map((rule) => rule.property);
+  const original = 'INVARIANT ' + first + '\nPROPERTIES\n  ' + second + '\n';
+  const spec = tmpFile('Scoped.tla', '---- MODULE Scoped ----\n' + first + ' == TRUE\n' + second + ' == TRUE\n====\n');
+  const config = tmpFile('Scoped.cfg', original);
+  const other = tmpFile('Other.cfg', 'INVARIANTS\n  ' + first + '\n');
+  const pass = 'Model checking completed. No error has been found.\n';
+  const log = tmpFile('scoped-tlc.log', pass);
+  const opts = { specPaths: [spec, config], logPaths: [log] };
+  const board = clone(refund);
+  delete board.run.specHash;
+  assert.throws(() => renderBoardHtml(board, { ...opts, specPaths: [spec] }), /binding: a TLC pass requires/);
+  const html = renderBoardHtml(board, opts);
+  assert.equal(expectPass(html).provenance, 'verified');
+
+  writeFileSync(config, 'INVARIANTS\n  ' + first + ' \\* ' + second + '\n(* outer (* inner *) PROPERTY ' + second + ' *)\nINIT Init\n');
+  assert.throws(() => renderBoardHtml(board, opts), /no passing checker verdict .*balanceNonNegative/);
+  assert.throws(() => renderBoardHtml(oneRule(second), opts), /no passing checker verdict .*balanceNonNegative/);
+  assert.notEqual(bindingIn(renderBoardHtml(oneRule(first), opts)).specHash, bindingIn(html).specHash);
+  writeFileSync(config, original);
+
+  const multi = { ...opts, specPaths: [spec, config, other] };
+  assert.throws(() => renderBoardHtml(board, multi), /binding: a TLC pass requires/);
+  writeFileSync(log, '$ java -cp tla2tools.jar tlc2.TLC -config Scoped.cfg Scoped.tla\n' + pass);
+  assert.equal(expectPass(renderBoardHtml(board, multi)).provenance, 'verified');
+});
+
+test('binding: Apalache pass scope comes from checked invariants or the command', () => {
+  const spec = tmpFile('Apalache.tla', '---- MODULE Apalache ----\nInv == TRUE\nBad == FALSE\n====\n');
+  const pass = 'The outcome is: NoError\n';
+  const cfg = (prefix) => ({ specPaths: [spec], logPaths: [tmpFile('apalache-scope.log', prefix + pass)] });
+  for (const prefix of [' > Set an invariant to Inv\n', '$ apalache-mc check --inv=Inv Apalache.tla\n']) {
+    assert.equal(expectPass(renderBoardHtml(oneRule('Inv'), cfg(prefix))).provenance, 'verified');
+    assert.throws(() => renderBoardHtml(oneRule('Bad'), cfg(prefix)), /binding: no passing checker verdict/);
+  }
+  assert.throws(() => renderBoardHtml(oneRule('Inv'), cfg('')), /binding: unrecognized checker log format/);
+});
+
+test('binding: Quint accepts supported command forms and requires explicit formal scope', () => {
+  const [first, second] = refund.rules.map((r) => r.property);
+  const transcript = (command, output = '[ok] No violation found.\n') => tmpFile('quint-scoped.log', command + '\n' + output);
+  for (const command of [
+    '% npx quint verify refund_guard.qnt --invariants=' + first + ' --invariants ' + second,
+    'mise exec quint@0.32.0 -- quint verify refund_guard.qnt --invariants ' + first + ' ' + second + ' --verbosity=1',
+    'PS C:\\> quint.cmd verify "C:\\example files\\refund_guard.qnt" --inductive-invariant=' + first + ' --temporal ' + second,
+  ]) {
+    const html = renderBoardHtml(refund, { specPaths: [refundSpec], logPaths: [transcript(command)] });
+    assert.equal(expectPass(html).provenance, 'verified');
+    assert.equal(html.includes('example files'), false);
+  }
+  const board = oneRule(first);
+  const opts = (command, output) => ({ specPaths: [refundSpec], logPaths: [transcript(command, output)] });
+  for (const command of [
+    'quint verify refund_guard.qnt --max-steps=2',
+    'quint run refund_guard.qnt --invariant=' + first,
+    'quint verify refund_guard.qnt --invariant="' + first + ' or ' + second + '"',
+  ]) {
+    assert.throws(() => renderBoardHtml(board, opts(command)), /binding: unrecognized checker log format/);
+  }
+  assert.throws(() => renderBoardHtml(board, opts('quint verify foreign.qnt --invariant=' + first)), /references spec "foreign\.qnt"/);
+  for (const [mode, trailer] of [['verify', 'found a counterexample'], ['run', 'Invariant violated']]) {
+    const failure = opts('quint ' + mode + ' refund_guard.qnt --invariant=' + first,
+      '[violation] Found an issue.\nerror: ' + trailer + '\n');
+    const failed = markedFailed(clone(board));
+    assert.equal(expectPass(renderBoardHtml(failed, failure)).provenance, 'failed');
+    assert.throws(() => renderBoardHtml(markedFailed(oneRule(second)), failure), /no failing checker verdict/);
+  }
+});
+
+test('binding: a pending rule cannot hide a named failure', () => {
+  const board = markedFailed(clone(refund), []);
+  delete board.provenance;
+  board.rules[0].status = 'pending';
+  board.rules[1].status = 'failed';
+  const log = tmpFile('pending-violation.log', '$ quint verify refund_guard.qnt --invariants refundsWithinPaid balanceNonNegative\n[violation] Found an issue.\nInvariant refundsWithinPaid was violated.\nInvariant balanceNonNegative was violated.\n');
+  assert.throws(() => renderBoardHtml(board, { specPaths: [refundSpec], logPaths: [log] }), /checker log contradicts pending rule .*refundsWithinPaid/);
+});
+
+test('binding: native and structured verdicts must match the property source family and any declared hash', () => {
+  const board = oneRule('Real');
+  const qnt = tmpFile('Receipt.qnt', 'val Real = true\n');
+  const tla = tmpFile('Receipt.tla', 'Other == TRUE\n');
+  const alloy = tmpFile('Receipt.als', 'assert Real {}\ncheck Real for 5\n');
+  const cfg = tmpFile('Receipt.cfg', 'INVARIANT Real\n');
+  const other = tmpFile('OtherReceipt.qnt', 'val Spare = false\n');
+  const assertMismatch = (specPaths, log) => assert.throws(() => renderBoardHtml(board, { specPaths, logPaths: [log] }), /checker or spec in log does not match rule/);
+  assertMismatch([qnt], tmpFile('wrong-alloy.log', '00. check Real    0    UNSAT\n'));
+  assertMismatch([qnt], tmpFile('wrong-apalache.log', ' > Set an invariant to Real\nThe outcome is: NoError\n'));
+  assertMismatch([qnt, tla, cfg], tmpFile('wrong-tlc.log', 'Parsing file Receipt.tla\nModel checking completed. No error has been found.\n'));
+  assertMismatch([alloy], tmpFile('wrong-quint.log', '$ quint verify --invariant=Real\n[ok] No violation found.\n'));
+  const receipt = (checker, specHash) => tmpFile('hash-receipt.json', JSON.stringify({
+    schemaVersion: 'proof-canvas-log-1', checker, specHash, results: [{ property: 'Real', status: 'verified' }],
+  }));
+  assertMismatch([qnt], receipt('Alloy 6.2.0'));
+  const specPaths = [qnt, other];
+  const manifest = bindingIn(renderBoardHtml(board, { specPaths })).specHash;
+  const digest = (path) => 'sha256:' + createHash('sha256').update(readFileSync(path)).digest('hex');
+  for (const hash of [manifest, digest(qnt)]) {
+    assert.equal(expectPass(renderBoardHtml(board, { specPaths, logPaths: [receipt('Quint 0.32.0', hash)] })).provenance, 'verified');
+  }
+  assertMismatch(specPaths, receipt('Quint', digest(other)));
+  assert.throws(() => renderBoardHtml(board, { specPaths, logPaths: [receipt('Quint', 'sha256:' + '1'.repeat(64))] }), /spec hash mismatch in checker receipt/);
+  assert.throws(() => renderBoardHtml(board, { logPaths: [receipt('Quint', digest(qnt))] }), /spec hash mismatch in checker receipt/);
+});
+
+test('binding: UTF-16 log BOMs are decoded and the raw bytes are hashed', () => {
+  const text = readFileSync(refundLog, 'utf8');
+  for (const swap of [false, true]) {
+    const bytes = Buffer.from('\uFEFF' + text, 'utf16le');
+    if (swap) bytes.swap16();
+    const log = tmpFile('powershell.log', bytes);
+    const html = renderBoardHtml(refund, { specPaths: [refundSpec], logPaths: [log] });
+    assert.equal(expectPass(html).provenance, 'verified');
+    assert.equal(bindingIn(html).logHash, 'sha256:' + createHash('sha256').update(bytes).digest('hex'));
+  }
+});
+
+test('binding: source ranges keep full bodies and exclude local or out-of-module definitions', () => {
+  const cases = [
+    ['Scope.tla', 'Early == TRUE\n---- MODULE Scope ----\nReal[n \\in Nat] ==\n  /\\ n \\in {1, 2}\n  /\\ n > 0\n====\nLate == TRUE\n', 'Real[n \\in Nat] ==\n  /\\ n \\in {1, 2}\n  /\\ n > 0', ['Early', 'Late']],
+    ['Scopes.qnt', 'module Scopes {\n  def Real = {\n    val Local = {1, 2}\n    Local.size() > 0\n  }\n  val Other = true\n}\n', '  def Real = {\n    val Local = {1, 2}\n    Local.size() > 0\n  }', ['Local']],
+    ['Attributes.lean', '@[simp] theorem Real {a : Type} (v : a) :\n  v = v := by\n  rfl\n', '@[simp] theorem Real {a : Type} (v : a) :\n  v = v := by\n  rfl', []],
+    ['Attributes.dfy', 'lemma {:induction false} Real(s: set<int>)\n  requires s != {}\n{\n  assert |s| > 0;\n}\n', 'lemma {:induction false} Real(s: set<int>)\n  requires s != {}\n{\n  assert |s| > 0;\n}', []],
+    ['Inline.qnt', 'val Real = Set({1, 2})\n  .size() > 0\n', 'val Real = Set({1, 2})\n  .size() > 0', []],
+  ];
+  for (const [file, text, snippet, excluded] of cases) {
+    const options = { specPaths: [tmpFile(file, text)] };
+    const board = oneRule('Real');
+    const html = renderBoardHtml(board, options);
+    expectPass(html);
+    const details = ruleEvidenceDetails(board.rules[0], board, bindingIn(html));
+    assert.equal(details.ref.snippet, snippet);
+    assert.equal(details.source, file + ':' + details.ref.line + '-' + details.ref.endLine);
+    for (const property of excluded) {
+      assert.throws(() => renderBoardHtml(oneRule(property), options), /binding: rule .* not found/);
+    }
+  }
+  const commented = tmpFile('SameLine.qnt', '/* comment\n  closes */ val Real = true\n');
+  const html = renderBoardHtml(oneRule('Real'), { specPaths: [commented] });
+  expectPass(html);
+  for (const marker of ['// */', '// Some text */']) {
+    expectFail(tamper(html, (d) => { d.__binding.refs.stock_never_negative.snippet = marker + ' val Real = true'; }),
+      'provenance: binding: invalid embedded spec reference');
+  }
+});
+
+test('binding: native combined example renders and validates deterministically with per-rule evidence', () => {
+  const example = (...paths) => join(ROOT, 'examples', '05_multi_verifier', ...paths);
+  const specPaths = ['escrow_ledger.qnt', 'delegation_rbac.als', 'period_lock.tla', 'period_lock.cfg'].map((f) => example(f));
+  const logPaths = ['quint_escrow.log', 'alloy_rbac.log', 'tlc_pass.log'].map((f) => example(f));
+  const input = example('multi_verifier.board.json');
+  const board = JSON.parse(readFileSync(input, 'utf8'));
+  const flags = [...specPaths.flatMap((p) => ['--spec', p]), ...logPaths.flatMap((p) => ['--log', p])];
+  const output = join(TMP, 'multi-verifier.html');
+  const rendered = node('render_board.mjs', ['--in', input, ...flags, '--out', output]);
+  assert.equal(rendered.status, 0, rendered.stderr);
+  const html = readFileSync(output, 'utf8');
+  assert.equal(html, renderBoardHtml(board, { specPaths: [...specPaths].reverse(), logPaths: [...logPaths].reverse() }));
+  assert.match(html, /pc-prov-good[^>]*><span[^>]*><\/span>Spec &amp; log verified \(6\/6\)/);
+  assert.equal(CJK.test(html), false);
+  assert.equal(html.includes(ROOT), false);
+  const validated = node('validate_board.mjs', ['--in', input, ...flags, output]);
+  assert.equal(validated.status, 0, validated.stdout + validated.stderr);
+  assert.match(validated.stdout, /\[PASS\] HTML/);
+  const binding = bindingIn(html);
+  assert.equal(binding.specHash, board.run.specHash);
+  assert.match(footerNote(html), /Alloy, Quint, TLC log sha256:/);
+  for (const [i, rule] of board.rules.entries()) {
+    const family = Math.floor(i / 2);
+    const details = ruleEvidenceDetails(rule, board, binding);
+    assert.equal(details.tool, ['Quint', 'Alloy', 'TLC'][family]);
+    assert.equal(details.logFiles.length, 1);
+    const expectedHash = createHash('sha256').update(readFileSync(logPaths[family])).digest('hex');
+    assert.equal(details.logFiles[0].hash, 'sha256:' + expectedHash);
+    const lines = readFileSync(specPaths[family], 'utf8').split('\n');
+    assert.equal(details.ref.snippet, lines.slice(details.ref.line - 1, details.ref.endLine).join('\n'));
+    assert.match(details.ref.snippet, new RegExp('\\b' + rule.property + '\\b'));
+  }
+  const embedded = renderBoardHtml(board, { specPaths, logPaths, mode: 'embed' });
+  assert.equal(expectPass(embedded).mode, 'embed');
 });
 
 test('binding: structural validation detects forged levels, references, hashes and provenance copy', () => {

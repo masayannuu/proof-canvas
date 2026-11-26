@@ -1,0 +1,2 @@
+00. check NoCyclicDelegation       0       UNSAT
+01. check ApproverNotRequester     0       UNSAT

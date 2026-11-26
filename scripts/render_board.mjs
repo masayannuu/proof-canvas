@@ -73,8 +73,30 @@ export function bindingLabel(level) {
   return 'Self-reported JSON';
 }
 
-export function boundTools(binding) {
-  return [...new Set(binding.logFiles.map((file) => file.checker).filter(Boolean))].join(', ');
+export function boundTools(binding, run) {
+  const tools = [...new Set(binding.logFiles.map((file) => file.checker))];
+  const label = toolLabel(run);
+  if (tools.length === 1 && run?.toolVersion
+    && run.tool.toLowerCase().split(/[^a-z0-9+]+/).includes(tools[0].toLowerCase())) return label;
+  return tools.join(', ');
+}
+
+export function ruleEvidenceDetails(rule, board, binding) {
+  const ref = Object.hasOwn(binding.refs, rule.id) ? binding.refs[rule.id] : null;
+  const source = ref ? ref.file + ':' + ref.line + (ref.line === ref.endLine ? '' : '-' + ref.endLine) : '';
+  const ids = binding.ruleEvidence && Object.hasOwn(binding.ruleEvidence, rule.id) ? binding.ruleEvidence[rule.id] : [];
+  const logFiles = binding.logFiles.filter((file) => ids.includes(file.file));
+  return {
+    ref, source, logFiles,
+    tool: boundTools({ logFiles }, board.run) || (binding.logFiles.length ? 'No bound checker verdict' : toolLabel(board.run)),
+  };
+}
+
+export function footerMarkup(p, board, binding, specHash = binding.specHash || board.run.specHash) {
+  const tool = boundTools(binding, board.run) || toolLabel(board.run);
+  return '<footer class="pc-foot" data-provenance-note="' + p.kind + '"><span>' + esc(provNote(p, board, binding)) + '</span><span class="pc-spacer"></span>' +
+    '<code>run: ' + esc(board.runId) + '</code>' + (specHash ? '<code>spec: ' + esc(String(specHash).slice(0, 19)) + '</code>' : '') +
+    '<code>tool: ' + esc(tool) + '</code></footer>';
 }
 
 export function provLabel(p) {
@@ -118,11 +140,11 @@ export function provNote(p, board, binding) {
 
   let evidence = '';
   if (p.level === 'spec-and-log') {
-    evidence = boundTools(binding) + ' log ' + binding.logHash + ' matched the reported verdicts. Spec ' + binding.specHash + ' matched the rule definitions.';
+    evidence = boundTools(binding, board.run) + ' log ' + binding.logHash + ' matched the reported verdicts. Spec ' + binding.specHash + ' matched the rule definitions.';
   } else if (p.level === 'spec-only') {
     evidence = 'Spec definitions and hash were checked (' + binding.specHash + '). No checker log was verified.';
   } else if (p.level === 'log-only') {
-    evidence = boundTools(binding) + ' log ' + binding.logHash + ' matched the reported verdicts. No spec file was checked.';
+    evidence = boundTools(binding, board.run) + ' log ' + binding.logHash + ' matched the reported verdicts. No spec file was checked.';
   } else if (p.kind !== 'verified') {
     evidence = 'Self-reported JSON. No spec file or checker log was checked.';
   }
@@ -550,7 +572,7 @@ const CSS = `
 `;
 
 // Functions shared with the browser runtime. Their source is injected verbatim.
-const SHARED_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figSvg, ruleStatus, toolLabel, bindingLabel, boundTools, provLabel, provenanceBadge, provNote, modParts, logLineTone]
+const SHARED_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figSvg, ruleStatus, toolLabel, bindingLabel, boundTools, ruleEvidenceDetails, footerMarkup, provLabel, provenanceBadge, provNote, modParts, logLineTone]
   .map((f) => f.toString()).join('\n');
 
 const CLIENT_JS = `(() => {
@@ -664,7 +686,6 @@ ${SHARED_FNS}
   const modOf = (r) => r.moduleId || MODS[0].id;
   const STATUS = Object.fromEntries(RULES.map((r) => [r.id, ruleStatus(r)]));
   const HAY = Object.fromEntries(RULES.map((r) => [r.id, norm([r.no, r.short, r.title, r.property, r.category || '', r.source, r.evidence.ruleSummary, MOD_BY_ID[modOf(r)].title].join(' '))]));
-  const TOOL = boundTools(BINDING) || toolLabel(BOARD.run);
   const SPEC_HASH = BINDING.specHash || BOARD.run.specHash;
 
   const S = {
@@ -746,7 +767,7 @@ ${SHARED_FNS}
 
   function evCard(r) {
     const e = r.evidence;
-    const ref = Object.hasOwn(BINDING.refs, r.id) ? BINDING.refs[r.id] : null;
+    const { ref, source, logFiles, tool } = ruleEvidenceDetails(r, BOARD, BINDING);
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
       '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
@@ -754,12 +775,12 @@ ${SHARED_FNS}
       '<div class="ev-imp"><b class="t-bad">' + esc(T.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
       '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(T.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
       '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(T.meta) + '</div>' +
-      '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, TOOL) +
+      '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, tool) +
       kv('Evidence binding', bindingLabel(BINDING.level)) +
       (SPEC_HASH ? kv(T.specHash, SPEC_HASH, true) : '') +
-      (BINDING.logHash ? kv('Log hash', BINDING.logHash, true) : '') +
+      logFiles.map((file) => kv('Log hash', file.hash, true)).join('') +
       (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
-      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">Spec source (' + esc(ref.file + ':' + ref.line + '-' + ref.endLine) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
+      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">Spec source (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
       '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(T.cexTitle) + '</div><pre class="term">' + esc(e.counterexample || T.noCex) + '</pre></div>' +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
@@ -783,9 +804,7 @@ ${SHARED_FNS}
   }
 
   function footerHtml() {
-    return '<footer class="pc-foot" data-provenance-note="' + PROV.kind + '"><span>' + esc(provNote(PROV, BOARD, BINDING)) + '</span><span class="pc-spacer"></span>' +
-      '<code>run: ' + esc(BOARD.runId) + '</code>' + (BOARD.run.specHash ? '<code>spec: ' + esc(String(BOARD.run.specHash).slice(0, 19)) + '</code>' : '') +
-      '<code>tool: ' + esc(TOOL) + '</code></footer>';
+    return footerMarkup(PROV, BOARD, BINDING, SPEC_HASH);
   }
 
   function setRootData() {

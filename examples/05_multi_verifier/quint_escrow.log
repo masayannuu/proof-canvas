@@ -1,0 +1,86 @@
+$ quint verify specs/escrow_ledger.qnt --invariant=refundsWithinEscrow,nonNegativeEscrowBalance --max-steps=5 --verbosity=2 --server-endpoint=localhost:18822
+# Usage statistics is OFF. We care about your privacy.
+# If you want to help our project, consider enabling statistics with config --enable-stats=true.
+
+# APALACHE version: 0.56.1 | build: 70cdaf4                       I@03:08:56.522
+Starting checker server on port 18822...                          I@03:08:56.528
+The Apalache server is running on port 18822. Press Ctrl-C to stop.
+PASS #0: SanyParser                                               I@03:08:58.975
+PASS #1: TypeCheckerSnowcat                                       I@03:08:59.459
+ > Running Snowcat .::.                                           I@03:08:59.459
+ > Your types are purrfect!                                       I@03:08:59.649
+ > All expressions are typed                                      I@03:08:59.649
+PASS #2: ConfigurationPass                                        I@03:08:59.655
+  > Set the initialization predicate to q::init                   I@03:08:59.658
+  > Set the transition predicate to q::step                       I@03:08:59.659
+  > Set an invariant to q::inv                                    I@03:08:59.659
+PASS #3: DesugarerPass                                            I@03:08:59.662
+  > Desugaring...                                                 I@03:08:59.662
+PASS #4: InlinePass                                               I@03:08:59.667
+Leaving only relevant operators: CInitPrimed, q::init, q::initPrimed, q::inv, q::step I@03:08:59.667
+PASS #5: TemporalPass                                             I@03:08:59.745
+  > Rewriting temporal operators...                               I@03:08:59.745
+  > No temporal property specified, nothing to encode             I@03:08:59.745
+PASS #6: InlinePass                                               I@03:08:59.746
+Leaving only relevant operators: CInitPrimed, q::init, q::initPrimed, q::inv, q::step I@03:08:59.746
+PASS #7: PrimingPass                                              I@03:08:59.748
+  > Introducing q::initPrimed for q::init'                        I@03:08:59.751
+PASS #8: VCGen                                                    I@03:08:59.755
+  > Producing verification conditions from the invariant q::inv   I@03:08:59.756
+  > VCGen produced 2 verification condition(s)                    I@03:08:59.759
+PASS #9: PreprocessingPass                                        I@03:08:59.763
+  > Before preprocessing: unique renaming                         I@03:08:59.763
+ > Applying standard transformations:                             I@03:08:59.766
+  > PrimePropagation                                              I@03:08:59.766
+  > Desugarer                                                     I@03:08:59.766
+  > UniqueRenamer                                                 I@03:08:59.767
+  > Normalizer                                                    I@03:08:59.769
+  > Keramelizer                                                   I@03:08:59.770
+  > After preprocessing: UniqueRenamer                            I@03:08:59.798
+PASS #10: TransitionFinderPass                                    I@03:08:59.802
+  > Found 1 initializing transitions                              I@03:08:59.833
+  > Found 2 transitions                                           I@03:08:59.867
+  > No constant initializer                                       I@03:08:59.867
+  > Applying unique renaming                                      I@03:08:59.868
+PASS #11: OptimizationPass                                        I@03:08:59.882
+ > Applying optimizations:                                        I@03:08:59.890
+  > ConstSimplifier                                               I@03:08:59.891
+  > ExprOptimizer                                                 I@03:08:59.892
+  > SetMembershipSimplifier                                       I@03:08:59.898
+  > ConstSimplifier                                               I@03:08:59.898
+PASS #12: AnalysisPass                                            I@03:08:59.899
+ > Marking skolemizable existentials and sets to be expanded...   I@03:08:59.900
+  > Skolemization                                                 I@03:08:59.900
+  > Expansion                                                     I@03:08:59.901
+  > Remove unused let-in defs                                     I@03:08:59.901
+ > Running analyzers...                                           I@03:08:59.916
+  > Introduced expression grades                                  I@03:08:59.918
+PASS #13: BoundedChecker                                          I@03:08:59.919
+State 0: Checking 2 state invariants                              I@03:09:00.764
+State 0: state invariant 0 holds.                                 I@03:09:00.766
+State 0: state invariant 1 holds.                                 I@03:09:00.770
+Step 0: picking a transition out of 1 transition(s)               I@03:09:00.770
+State 1: Checking 2 state invariants                              I@03:09:00.775
+State 1: state invariant 0 holds.                                 I@03:09:00.775
+State 1: state invariant 1 holds.                                 I@03:09:00.775
+Step 1: picking a transition out of 2 transition(s)               I@03:09:00.777
+State 2: Checking 2 state invariants                              I@03:09:00.790
+State 2: state invariant 0 holds.                                 I@03:09:00.790
+State 2: state invariant 1 holds.                                 I@03:09:00.790
+Step 2: picking a transition out of 2 transition(s)               I@03:09:00.791
+State 3: Checking 2 state invariants                              I@03:09:00.794
+State 3: state invariant 0 holds.                                 I@03:09:00.794
+State 3: state invariant 1 holds.                                 I@03:09:00.794
+Step 3: picking a transition out of 2 transition(s)               I@03:09:00.795
+State 4: Checking 2 state invariants                              I@03:09:00.797
+State 4: state invariant 0 holds.                                 I@03:09:00.798
+State 4: state invariant 1 holds.                                 I@03:09:00.798
+Step 4: picking a transition out of 2 transition(s)               I@03:09:00.841
+State 5: Checking 2 state invariants                              I@03:09:00.849
+State 5: state invariant 0 holds.                                 I@03:09:00.850
+State 5: state invariant 1 holds.                                 I@03:09:00.853
+Step 5: picking a transition out of 2 transition(s)               I@03:09:00.856
+The outcome is: NoError                                           I@03:09:00.858
+[ok] No violation found (5599ms).
+You may increase --max-steps.
+Use --verbosity to produce more (or less) output.

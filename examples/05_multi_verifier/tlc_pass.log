@@ -1,0 +1,17 @@
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 32 and seed 3048543027269162305 with 1 worker on 8 cores with 5461MB heap and 64MB offheap memory [pid: 46197] (Mac OS X 26.7.3 aarch64, Eclipse Adoptium 21.0.12 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file period_lock.tla
+Parsing file Naturals.tla
+Semantic processing of module Naturals
+Semantic processing of module period_lock
+Starting... (2026-11-27 03:09:15)
+Computing initial states...
+Finished computing initial states: 1 distinct state generated at 2026-11-27 03:09:15.
+Model checking completed. No error has been found.
+  Estimates of the probability that TLC did not check all reachable states
+  because two distinct states had the same fingerprint:
+  calculated (optimistic):  val = 2.0E-18
+12 states generated, 6 distinct states found, 0 states left on queue.
+The depth of the complete state graph search is 4.
+The average outdegree of the complete state graph is 1 (minimum is 0, the maximum 2 and the 95th percentile is 2).
+Finished in 00s at (2026-11-27 03:09:15)

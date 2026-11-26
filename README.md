@@ -52,13 +52,15 @@ in [`SKILL.md`](SKILL.md).
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, search, filters, module overview |
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
+| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`.
 
 ## Check a spec and checker log
 
 Render and validate the [refund guard example](examples/04_refund_guard/) with its
-Quint 0.32.0 spec and recorded checker output.
+Quint 0.32.0 spec. Its `refund_guard.quint.log` records the Quint command followed by
+its verbatim output.
 
 ```bash
 example=examples/04_refund_guard/refund_guard
@@ -82,9 +84,39 @@ A board whose rules all pass uses the following labels.
 | Board JSON only | **Self-reported** |
 | Any files with a board declared as sample | **Sample data** |
 
-Supported spec files include Quint, TLA+, Alloy, Lean, and Dafny. The log reader supports
-Quint, TLC, Apalache, and [JSON receipts](SKILL.md#5-honesty-rules).
-Supply named verdicts when the board covers multiple properties.
+Use `--spec` for Quint, TLA+, Alloy, Lean, and Dafny sources. Include the TLC `.cfg`
+with `--spec` to bind a passing TLC log to the properties the config lists.
+Use `--log` for native Quint, Alloy 6, TLC, and Apalache logs or
+[`proof-canvas-log-1` JSON receipts](SKILL.md#checker-logs). Every passing verdict
+needs a named property. For Quint verification, include the command with its
+invariant or temporal options.
+
+### Combine native logs on one board
+
+The [multi-verifier example](examples/05_multi_verifier/) uses captured checker
+output with host paths and localized diagnostics removed. The solver verdicts
+are verbatim.
+
+```bash
+example=examples/05_multi_verifier
+flags=(
+  --spec "$example/escrow_ledger.qnt"
+  --spec "$example/delegation_rbac.als"
+  --spec "$example/period_lock.tla"
+  --spec "$example/period_lock.cfg"
+  --log "$example/quint_escrow.log"
+  --log "$example/alloy_rbac.log"
+  --log "$example/tlc_pass.log"
+)
+node scripts/render_board.mjs --in "$example/multi_verifier.board.json" "${flags[@]}" \
+  --out out/05_multi_verifier.html
+node scripts/validate_board.mjs --in "$example/multi_verifier.board.json" "${flags[@]}" \
+  out/05_multi_verifier.html
+```
+
+The board shows **Spec & log verified (6/6)**. Each **Evidence** card shows the
+rule's checker, log hash, and source excerpt. The footer lists the three checkers
+and the combined log hash.
 
 ## Use it as an Agent Skill
 
@@ -144,7 +176,7 @@ scripts/
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
-examples/             00-04, described above
+examples/             00-05, described above
 ```
 
 ## Acknowledgements

@@ -215,7 +215,8 @@ Each gate reports a distinct error prefix.
 7. `sync:` with `--in`, the HTML must embed exactly that JSON (a `--title` override is stored
    separately and does not count as a difference).
 8. `binding:` with `--spec` or `--log`, recompute evidence from the files and compare it with
-   the embedded binding. Use the same set of files you passed to the renderer.
+   the embedded binding. Use the same set of files you passed to the renderer. Validating
+   a bound HTML file without the source files or logs warns that the evidence was not re-checked.
 
 Regenerate older HTML boards to add the evidence metadata required by this validator.
 
@@ -251,7 +252,8 @@ The badge also depends on which files you supply.
 ### Spec files
 
 Repeat `--spec` for Quint (`.qnt`), TLA+ (`.tla`), Alloy (`.als`), Lean (`.lean`),
-and Dafny (`.dfy`) files. Each rule's `property` must match exactly one declaration.
+and Dafny (`.dfy`) files. Include any TLC `.cfg` files used to scope passing logs.
+Configs contribute to the spec hash. Each rule's `property` must match exactly one declaration.
 Evidence includes the source basename, line range, and up to 10 lines or 600 characters.
 Keep absolute paths out of source excerpts before publishing the board.
 
@@ -264,10 +266,23 @@ derived hash is saved in the evidence and the input board stays in sync.
 
 ### Checker logs
 
-Repeat `--log` for Quint, TLC, Apalache, or JSON receipts. Use logs from your actual
-checker invocation. For multiple properties, capture the Quint command with its named
-invariants or supply named results in a JSON receipt. A passing text verdict that
-contains no property name can support a board covering one property.
+Repeat `--log` for native logs or `proof-canvas-log-1` JSON receipts from your actual
+checker runs. Every supplied file must contain a recognized verdict.
+
+- **Quint.** Include the `quint verify` command and its named invariant or temporal
+  options. A passing `quint run` simulation cannot substantiate a verified rule.
+- **Alloy 6.** Include the `exec` output. A `check` row ending in `UNSAT` confirms
+  the assertion within its scope. A row ending in `SAT` reports a violation.
+- **TLC.** A passing log covers the invariants and properties in its supplied `.cfg`.
+  If you supply multiple configs, prefix each passing log with its TLC command
+  and `-config` argument. With multiple TLA+ specs, keep the log line that names
+  the parsed spec file.
+- **Apalache.** A passing log covers the named invariants reported by the checker
+  or recorded in the command's `--inv=` argument.
+
+Log names are matched to rule properties. With `--spec`, the checker family must
+match the bound source. Quint uses `.qnt`, Alloy uses `.als`, and TLC and Apalache
+use `.tla`. Only named passes can substantiate a verified rule.
 
 A JSON receipt uses a checker name and an array with one result per property.
 
@@ -279,14 +294,16 @@ A JSON receipt uses a checker name and an array with one result per property.
 }
 ```
 
-Use `verified` or `failed` in the receipt. The schema version and `stepsChecked`
-are optional. If the board and receipt both include a step count, the counts must
-match.
+Use `verified` or `failed` in the receipt. The schema version, `specHash`, and
+`stepsChecked` are optional. If present, `specHash` must match the full manifest
+or the spec file bound to the reported rule. If the board and receipt both include
+a step count, the counts must match.
 
-proof-canvas compares the supplied files and verdicts. The log producer supplies the
-record of what the checker ran. To try the real Quint example, use
-[`examples/04_refund_guard/`](examples/04_refund_guard/) with both flags. The
-[README](README.md#check-a-spec-and-checker-log) has the complete commands.
+The log producer supplies the record of what the checker ran. In the
+[`examples/04_refund_guard/`](examples/04_refund_guard/) example,
+`refund_guard.quint.log` records the Quint command followed by its verbatim output.
+See the [README](README.md#check-a-spec-and-checker-log) for the commands and the
+combined native-log example.
 
 ## 6. Scale benchmark
 

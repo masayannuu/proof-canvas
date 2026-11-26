@@ -1,0 +1,835 @@
+{
+  "version": 1,
+  "runId": "multi_verifier",
+  "title": "Access & Escrow System",
+  "subtitle": "Formal verification of escrow refunds, delegated approval, and period posting",
+  "generatedAt": "2026-11-26T18:09:18+00:00",
+  "run": {
+    "tool": "Multiple checkers",
+    "specHash": "sha256:55cb9e26947178c2cefc6f816df4b25e71685891134084d0374e5bfa5c759309",
+    "status": "verified"
+  },
+  "rules": [
+    {
+      "id": "refund_cap",
+      "no": 1,
+      "moduleId": "escrow",
+      "property": "refundsWithinEscrow",
+      "short": "Refund cap",
+      "title": "Total refunds stay within escrow",
+      "source": "Escrow ledger",
+      "previewTitle": "Escrow ledger",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Refund request",
+          "src2": "Escrow amount",
+          "gate": "Check refund cap",
+          "pass": "Issue refund",
+          "hold": "Reject refund",
+          "bad": "Overpayment"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A second refund uses the remaining escrow.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Refunded / escrow",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "A second refund uses the remaining escrow.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "3 / 2",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A third refund exceeds the two-unit escrow.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Refunded / escrow",
+                "v": "3 / 2",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A third refund exceeds the two-unit escrow.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The ledger rejects a third refund.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Refunded / escrow",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The ledger rejects a third refund.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "Total refunds stay within escrow.",
+        "ifEnforced": "The ledger rejects a third refund.",
+        "ifNotEnforced": "A third refund exceeds the two-unit escrow.",
+        "checkerSummary": "Quint found no violation within 5 steps.",
+        "scope": "One two-unit escrow, checked through 5 transitions.",
+        "method": "Quint verify 0.32.0 with Apalache 0.56.1"
+      }
+    },
+    {
+      "id": "nonnegative",
+      "no": 2,
+      "moduleId": "escrow",
+      "property": "nonNegativeEscrowBalance",
+      "short": "Escrow balance",
+      "title": "The escrow balance stays at or above zero",
+      "source": "Escrow ledger",
+      "previewTitle": "Escrow ledger",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Refund request",
+          "src2": "Current balance",
+          "gate": "Check balance",
+          "pass": "Record refund",
+          "hold": "Reject refund",
+          "bad": "Negative balance"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "1 unit",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The first refund leaves one unit in escrow.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Remaining balance",
+                "v": "1 unit",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The first refund leaves one unit in escrow.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "-1 unit",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A refund after the balance reaches zero takes it to minus one.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Remaining balance",
+                "v": "-1 unit",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A refund after the balance reaches zero takes it to minus one.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "0 units",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The zero balance blocks further refunds.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Remaining balance",
+                "v": "0 units",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The zero balance blocks further refunds.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "The escrow balance stays at or above zero.",
+        "ifEnforced": "The zero balance blocks further refunds.",
+        "ifNotEnforced": "A refund after the balance reaches zero takes it to minus one.",
+        "checkerSummary": "Quint found no violation within 5 steps.",
+        "scope": "One two-unit escrow, checked through 5 transitions.",
+        "method": "Quint verify 0.32.0 with Apalache 0.56.1"
+      }
+    },
+    {
+      "id": "delegation_cycle",
+      "no": 3,
+      "moduleId": "delegation",
+      "property": "NoCyclicDelegation",
+      "short": "Delegation cycles",
+      "title": "Delegation never forms a cycle",
+      "source": "Approval delegation",
+      "previewTitle": "Approval delegation",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Delegation",
+          "src2": "Approval ranks",
+          "gate": "Compare ranks",
+          "pass": "Grant delegation",
+          "hold": "Reject delegation",
+          "bad": "Delegation cycle"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "Rank 1 to 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A principal delegates to a principal with higher rank.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Delegation",
+                "v": "Rank 1 to 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "A principal delegates to a principal with higher rank.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "Rank 2 to 1",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A reverse edge makes a cycle.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Delegation",
+                "v": "Rank 2 to 1",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A reverse edge makes a cycle.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "Rank 2 to 1",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The rank constraint excludes the reverse edge.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Delegation",
+                "v": "Rank 2 to 1",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The rank constraint excludes the reverse edge.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "Delegation never forms a cycle.",
+        "ifEnforced": "The rank constraint excludes the reverse edge.",
+        "ifNotEnforced": "A reverse edge makes a cycle.",
+        "checkerSummary": "Alloy returned UNSAT at scope 5.",
+        "scope": "Overall scope 5, 4-bit integers.",
+        "method": "Alloy 6.2.0 check with SAT4J"
+      }
+    },
+    {
+      "id": "self_approval",
+      "no": 4,
+      "moduleId": "delegation",
+      "property": "ApproverNotRequester",
+      "short": "Self-approval",
+      "title": "A requester cannot approve their own release",
+      "source": "Approval delegation",
+      "previewTitle": "Approval delegation",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Escrow release",
+          "src2": "Delegation list",
+          "gate": "Check approver",
+          "pass": "Authorize release",
+          "hold": "Reject approval",
+          "bad": "Self-approved"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "A / B",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The requester assigns approval to a delegate.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Requester / approver",
+                "v": "A / B",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The requester assigns approval to a delegate.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "A / A",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The requester approves their own release.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Requester / approver",
+                "v": "A / A",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The requester approves their own release.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "A / A",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The requester has no self-delegation and cannot approve.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Requester / approver",
+                "v": "A / A",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The requester has no self-delegation and cannot approve.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "A requester cannot approve their own release.",
+        "ifEnforced": "The requester has no self-delegation and cannot approve.",
+        "ifNotEnforced": "The requester approves their own release.",
+        "checkerSummary": "Alloy returned UNSAT at scope 5.",
+        "scope": "Overall scope 5, 4-bit integers.",
+        "method": "Alloy 6.2.0 check with SAT4J"
+      }
+    },
+    {
+      "id": "period_closed",
+      "no": 5,
+      "moduleId": "period",
+      "property": "ClosedPeriodImmutable",
+      "short": "Period lock",
+      "title": "Closing the period freezes recorded spending",
+      "source": "Accounting period",
+      "previewTitle": "Accounting period",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "New release",
+          "src2": "Period status",
+          "gate": "Check period lock",
+          "pass": "Post release",
+          "hold": "Reject posting",
+          "bad": "Record changed"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "Open",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "An open period accepts an eligible release.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Period status",
+                "v": "Open",
+                "tone": "ok"
+              }
+            ],
+            "alert": "An open period accepts an eligible release.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "Closed",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Spending changes after the period is closed.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Period status",
+                "v": "Closed",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Spending changes after the period is closed.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "Closed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The closed period rejects the posting.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Period status",
+                "v": "Closed",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The closed period rejects the posting.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "Closing the period freezes recorded spending.",
+        "ifEnforced": "The closed period rejects the posting.",
+        "ifNotEnforced": "Spending changes after the period is closed.",
+        "checkerSummary": "TLC exhausted the baseline state space without an error.",
+        "scope": "One period with a two-unit budget.",
+        "method": "TLC 2.19 from TLA+ tools v1.7.4, breadth-first"
+      }
+    },
+    {
+      "id": "draft_budget",
+      "no": 6,
+      "moduleId": "period",
+      "property": "DraftBudgetLimit",
+      "short": "Draft budget",
+      "title": "Open-period spending stays within budget",
+      "source": "Accounting period",
+      "previewTitle": "Accounting period",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Release posting",
+          "src2": "Period budget",
+          "gate": "Check budget",
+          "pass": "Post release",
+          "hold": "Reject posting",
+          "bad": "Budget exceeded"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "condition",
+          "a3": "allowed",
+          "a4": "blocked",
+          "a5": "bypass"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Allowed",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The second release fits the period budget.",
+          "preview": {
+            "statusBadge": "Allowed",
+            "rows": [
+              {
+                "k": "Spent / limit",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The second release fits the period budget.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Violation",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "3 / 2",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The third release raises spending to three against a limit of two.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Spent / limit",
+                "v": "3 / 2",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The third release raises spending to three against a limit of two.",
+            "buttonLabel": "Proceed",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The spending limit blocks the third release.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Spent / limit",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The spending limit blocks the third release.",
+            "buttonLabel": "Blocked",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "Open-period spending stays within budget.",
+        "ifEnforced": "The spending limit blocks the third release.",
+        "ifNotEnforced": "The third release raises spending to three against a limit of two.",
+        "checkerSummary": "TLC exhausted the baseline state space without an error.",
+        "scope": "One period with a two-unit budget.",
+        "method": "TLC 2.19 from TLA+ tools v1.7.4, breadth-first"
+      }
+    }
+  ],
+  "modules": [
+    {
+      "id": "escrow",
+      "title": "Escrow ledger",
+      "summary": "Refund a two-unit escrow without overpaying."
+    },
+    {
+      "id": "delegation",
+      "title": "Approval delegation",
+      "summary": "Assign escrow release approval through ranked delegation."
+    },
+    {
+      "id": "period",
+      "title": "Accounting period",
+      "summary": "Post escrow releases while the period is open and within budget."
+    }
+  ]
+}
