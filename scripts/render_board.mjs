@@ -7,6 +7,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { bindEvidence } from './evidence.mjs';
 import { ARROWS, FS, GEOM, HOT, TONES, charEm, esc, figSvg, fitFontSize, layoutBoxLabel, splitTwo, textW } from './figure.mjs';
 import {
   BASE64_RE, DATA_ELEMENT_ID, GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, PAYLOAD_MODES, ROOT_ELEMENT_ID, encodePayload,
@@ -20,10 +21,11 @@ export const ALL_MODULES = '*';
 const USAGE = `Usage:
   node scripts/render_board.mjs --in <board.json> --out <board.html>
        [--title "..."] [--mode standalone|embed] [--payload auto|json|gzip]
+       [--spec <path>]... [--log <path>]...
 `;
 
 function parseArgs(argv) {
-  const opts = { inPath: '', outPath: '', title: undefined, mode: 'standalone', payload: 'auto' };
+  const opts = { inPath: '', outPath: '', title: undefined, mode: 'standalone', payload: 'auto', specPaths: [], logPaths: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '-h' || a === '--help') {
@@ -31,6 +33,8 @@ function parseArgs(argv) {
       process.exit(0);
     } else if (a === '--in' && argv[i + 1]) {
       opts.inPath = argv[++i];
+    } else if ((a === '--spec' || a === '--log') && argv[i + 1] && !argv[i + 1].startsWith('-')) {
+      opts[a === '--spec' ? 'specPaths' : 'logPaths'].push(argv[++i]);
     } else if (a === '--out' && argv[i + 1]) {
       opts.outPath = argv[++i];
     } else if (a === '--title' && argv[i + 1]) {
@@ -62,33 +66,67 @@ export function toolLabel(run) {
   return rest.length ? tool + ' ' + rest.join(' ') : tool;
 }
 
+export function bindingLabel(level) {
+  if (level === 'spec-and-log') return 'Spec & log verified';
+  if (level === 'spec-only') return 'Spec checked (log self-reported)';
+  if (level === 'log-only') return 'Log checked (spec self-reported)';
+  return 'Self-reported JSON';
+}
+
+export function boundTools(binding) {
+  return [...new Set(binding.logFiles.map((file) => file.checker).filter(Boolean))].join(', ');
+}
+
 export function provLabel(p) {
-  if (p.kind === 'verified') return 'Verified (' + p.verifiedCount + '/' + p.total + ')';
+  if (p.kind === 'verified') {
+    const label = p.level === 'spec-and-log' ? bindingLabel(p.level)
+      : p.level === 'spec-only' ? 'Spec checked · self-reported log'
+        : p.level === 'log-only' ? 'Log checked · self-reported spec' : 'Self-reported';
+    return label + ' (' + p.verifiedCount + '/' + p.total + ')';
+  }
   if (p.kind === 'failed') return (p.failedCount ? p.failedCount + ' failed' : 'Run failed') + ' · ' + p.verifiedCount + '/' + p.total + ' verified';
   if (p.kind === 'mixed') return 'Partially verified (' + p.verifiedCount + '/' + p.total + ')';
   if (p.kind === 'sample') return 'Sample data';
   return (p.verifiedCount ? 'Unverified (' : 'Not checked yet (') + p.verifiedCount + '/' + p.total + ')';
 }
 
-export function provNote(p, board) {
-  if (board.provenanceNote) return board.provenanceNote;
+export function provenanceBadge(p) {
+  return '<span class="pc-prov pc-prov-' + p.tone + '" data-provenance="' + p.kind + '"><span class="pc-prov-dot" aria-hidden="true"></span>' + esc(provLabel(p)) + '</span>';
+}
+
+export function provNote(p, board, binding) {
   const rules = (n) => n + (n === 1 ? ' rule' : ' rules');
+  let status;
   if (p.kind === 'verified') {
-    const hash = board.run.specHash ? ' (spec ' + String(board.run.specHash).slice(0, 19) + ')' : '';
-    return 'All ' + rules(p.total) + ' verified with ' + toolLabel(board.run) + hash + '.';
-  }
-  if (p.kind === 'failed') {
-    return (p.failedCount ? rules(p.failedCount) + ' failed' : 'The run failed') + '; ' + p.verifiedCount + ' of ' + rules(p.total) + ' verified.';
-  }
-  if (p.kind === 'mixed') {
-    return p.pendingCount
-      ? p.verifiedCount + ' of ' + rules(p.total) + ' verified; ' + p.pendingCount + ' not checked yet.'
+    status = 'All ' + rules(p.total) + ' are marked verified in JSON';
+    if (p.level === 'self-reported') {
+      status += ', but no spec file or checker log was checked by proof-canvas.';
+    } else status += '.';
+  } else if (p.kind === 'failed') {
+    status = (p.failedCount ? rules(p.failedCount) + ' failed.' : 'The run failed.') + ' ' + p.verifiedCount + ' of ' + rules(p.total) + ' marked verified.';
+  } else if (p.kind === 'mixed') {
+    status = p.pendingCount
+      ? p.verifiedCount + ' of ' + rules(p.total) + ' marked verified. ' + p.pendingCount + ' still pending.'
       : 'All ' + rules(p.total) + ' are marked verified, but the run is not (it needs status "verified" and a real spec hash) or the board is declared partially verified.';
+  } else if (p.kind === 'sample') {
+    status = 'Sample data. The board is illustrative.';
+  } else {
+    status = p.verifiedCount
+      ? p.verifiedCount + ' of ' + rules(p.total) + ' are marked verified, but the board is declared unverified.'
+      : 'No rule is marked verified or failed.';
   }
-  if (p.kind === 'sample') return 'Sample data: these statuses were not produced by a checker run.';
-  return p.verifiedCount
-    ? p.verifiedCount + ' of ' + rules(p.total) + ' are marked verified, but the board is declared unverified.'
-    : 'No rule has been checked yet.';
+
+  let evidence = '';
+  if (p.level === 'spec-and-log') {
+    evidence = boundTools(binding) + ' log ' + binding.logHash + ' matched the reported verdicts. Spec ' + binding.specHash + ' matched the rule definitions.';
+  } else if (p.level === 'spec-only') {
+    evidence = 'Spec definitions and hash were checked (' + binding.specHash + '). No checker log was verified.';
+  } else if (p.level === 'log-only') {
+    evidence = boundTools(binding) + ' log ' + binding.logHash + ' matched the reported verdicts. No spec file was checked.';
+  } else if (p.kind !== 'verified') {
+    evidence = 'Self-reported JSON. No spec file or checker log was checked.';
+  }
+  return status + (evidence ? ' ' + evidence : '') + (board.provenanceNote ? ' Board note: ' + board.provenanceNote : '');
 }
 
 // A module title that already starts with "M1" keeps its own tag instead of getting "M1 · M1 ...".
@@ -512,7 +550,7 @@ const CSS = `
 `;
 
 // Functions shared with the browser runtime. Their source is injected verbatim.
-const SHARED_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figSvg, ruleStatus, toolLabel, provLabel, provNote, modParts, logLineTone]
+const SHARED_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figSvg, ruleStatus, toolLabel, bindingLabel, boundTools, provLabel, provenanceBadge, provNote, modParts, logLineTone]
   .map((f) => f.toString()).join('\n');
 
 const CLIENT_JS = `(() => {
@@ -580,6 +618,7 @@ ${SHARED_FNS}
   const MODE = root.dataset.mode === 'embed' ? 'embed' : 'standalone';
   const LAYOUT = BOARD.__layout;
   const PROV = BOARD.__provenance;
+  const BINDING = BOARD.__binding;
   const TITLE = BOARD.__titleOverride || BOARD.title;
   const ALL = ${JSON.stringify(ALL_MODULES)};
   const STATE_ORDER = ['normal', 'bug', 'fixed'];
@@ -625,7 +664,8 @@ ${SHARED_FNS}
   const modOf = (r) => r.moduleId || MODS[0].id;
   const STATUS = Object.fromEntries(RULES.map((r) => [r.id, ruleStatus(r)]));
   const HAY = Object.fromEntries(RULES.map((r) => [r.id, norm([r.no, r.short, r.title, r.property, r.category || '', r.source, r.evidence.ruleSummary, MOD_BY_ID[modOf(r)].title].join(' '))]));
-  const TOOL = toolLabel(BOARD.run);
+  const TOOL = boundTools(BINDING) || toolLabel(BOARD.run);
+  const SPEC_HASH = BINDING.specHash || BOARD.run.specHash;
 
   const S = {
     ruleId: RULES[0].id,
@@ -706,6 +746,7 @@ ${SHARED_FNS}
 
   function evCard(r) {
     const e = r.evidence;
+    const ref = Object.hasOwn(BINDING.refs, r.id) ? BINDING.refs[r.id] : null;
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
       '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
@@ -714,8 +755,11 @@ ${SHARED_FNS}
       '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(T.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
       '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(T.meta) + '</div>' +
       '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, TOOL) +
-      (BOARD.run.specHash ? kv(T.specHash, BOARD.run.specHash, true) : '') +
+      kv('Evidence binding', bindingLabel(BINDING.level)) +
+      (SPEC_HASH ? kv(T.specHash, SPEC_HASH, true) : '') +
+      (BINDING.logHash ? kv('Log hash', BINDING.logHash, true) : '') +
       (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
+      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">Spec source (' + esc(ref.file + ':' + ref.line + '-' + ref.endLine) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
       '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(T.cexTitle) + '</div><pre class="term">' + esc(e.counterexample || T.noCex) + '</pre></div>' +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
@@ -735,11 +779,11 @@ ${SHARED_FNS}
 
   function headerHtml() {
     return '<header class="pc-head"><div class="pc-brand"><h1 class="pc-title" title="' + esc(TITLE) + '">' + esc(TITLE) + '</h1><p class="pc-sub" title="' + esc(BOARD.subtitle) + '">' + esc(BOARD.subtitle) + '</p></div>' +
-      '<div class="pc-head-right"><span class="pc-prov pc-prov-' + PROV.tone + '" data-provenance="' + PROV.kind + '"><span class="pc-prov-dot" aria-hidden="true"></span>' + esc(provLabel(PROV)) + '</span></div></header>';
+      '<div class="pc-head-right">' + provenanceBadge(PROV) + '</div></header>';
   }
 
   function footerHtml() {
-    return '<footer class="pc-foot" data-provenance-note="' + PROV.kind + '"><span>' + esc(provNote(PROV, BOARD)) + '</span><span class="pc-spacer"></span>' +
+    return '<footer class="pc-foot" data-provenance-note="' + PROV.kind + '"><span>' + esc(provNote(PROV, BOARD, BINDING)) + '</span><span class="pc-spacer"></span>' +
       '<code>run: ' + esc(BOARD.runId) + '</code>' + (BOARD.run.specHash ? '<code>spec: ' + esc(String(BOARD.run.specHash).slice(0, 19)) + '</code>' : '') +
       '<code>tool: ' + esc(TOOL) + '</code></footer>';
   }
@@ -1127,20 +1171,29 @@ function checkOptions(opts) {
   if (!RENDER_MODES.includes(mode)) throw new Error(`Invalid mode "${mode}" (expected ${RENDER_MODES.join(' or ')})`);
   if (!PAYLOAD_MODES.includes(payload)) throw new Error(`Invalid payload "${payload}" (expected ${PAYLOAD_MODES.join(', ')})`);
   if (opts.title !== undefined && (typeof opts.title !== 'string' || !opts.title.trim())) throw new Error('title must be a non-empty string when given');
-  return { mode, payload, title: opts.title };
+  const { specPaths = [], logPaths = [] } = opts;
+  for (const paths of [specPaths, logPaths]) {
+    if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string' || !p)) {
+      throw new Error('specPaths and logPaths must be arrays of file paths');
+    }
+  }
+  return { mode, payload, title: opts.title, specPaths, logPaths };
 }
 
 // Public entry point. Throws on an invalid board or invalid options; never renders a partial page.
 export function renderBoardHtml(boardInput, options = {}) {
-  const { mode, payload: payloadMode, title } = checkOptions(options);
-  const check = validateBoardData(boardInput);
+  const checked = checkOptions(options);
+  const check = validateBoardData(boardInput, { checkHash: checked.specPaths.length === 0 });
   if (!check.ok) throw new Error(`Invalid board:\n  - ${check.errors.join('\n  - ')}`);
 
-  const board = structuredClone(boardInput);
+  return render(structuredClone(boardInput), bindEvidence(boardInput, checked), checked);
+}
+
+function render(board, binding, { mode, payload: payloadMode, title }) {
   const shownTitle = title ?? board.title;
-  const prov = resolveProvenance(board);
+  const prov = resolveProvenance(board, binding);
   const layout = layoutFor(board);
-  const payload = encodePayload({ ...board, __provenance: prov, __layout: layout, ...(title !== undefined ? { __titleOverride: title } : {}) }, payloadMode);
+  const payload = encodePayload({ ...board, __provenance: prov, __layout: layout, __binding: binding, ...(title !== undefined ? { __titleOverride: title } : {}) }, payloadMode);
 
   const first = board.rules[0];
   const firstSt = first.states[first.defaultFocus];
@@ -1148,13 +1201,13 @@ export function renderBoardHtml(boardInput, options = {}) {
   // Pre-hydration shell: header, provenance badge and the first rule's figure.
   const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="focus" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}">` +
     `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
-    `<div class="pc-head-right"><span class="pc-prov pc-prov-${prov.tone}" data-provenance="${prov.kind}"><span class="pc-prov-dot" aria-hidden="true"></span>${esc(provLabel(prov))}</span></div></header>` +
+    `<div class="pc-head-right">${provenanceBadge(prov)}</div></header>` +
     `<main class="pc-canvas"><div class="pc-wrap pc-main"><div class="board" data-board="focus-${esc(first.id)}" data-here="${firstSt.here}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
     `<section class="card fig" data-fig><div class="fig-head"><span class="no">${esc(first.no)}</span><h2 class="fig-title">${esc(first.title)}</h2></div>` +
     `<div class="fg-wrap">${figSvg(first, firstSt, `focus-${first.id}`, false)}</div><p class="take take-${firstSt.tone}">${esc(firstSt.takeaway)}</p></section>` +
     `<section class="card pv pv-${firstSt.tone} link-target"><div class="pv-chrome"><span class="pv-title">${esc(first.previewTitle)}</span></div><div class="pv-body"><span class="pv-badge pv-badge-${firstSt.tone}">${esc(firstSt.preview.statusBadge)}</span></div></section>` +
     `<svg class="link-layer" aria-hidden="true"></svg></div></div></main>` +
-    `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board))}</span></footer>` +
+    `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding))}</span></footer>` +
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
     `${renderNoscript(board, shownTitle, prov)}</div>`;
 
@@ -1180,20 +1233,22 @@ function main() {
   try {
     const opts = parseArgs(process.argv.slice(2));
     const board = JSON.parse(readFileSync(resolve(opts.inPath), 'utf8'));
-    const check = validateBoardData(board);
+    const check = validateBoardData(board, { checkHash: opts.specPaths.length === 0 });
     for (const w of check.warnings) process.stderr.write(`warning: ${w}\n`);
     if (!check.ok) {
       process.stderr.write(`Invalid board JSON (${opts.inPath}):\n`);
       for (const e of check.errors) process.stderr.write(`  - ${e}\n`);
       process.exit(1);
     }
-    const html = renderBoardHtml(board, { title: opts.title, mode: opts.mode, payload: opts.payload });
+    const checked = checkOptions(opts);
+    const binding = bindEvidence(board, checked);
+    const html = render(board, binding, checked);
     const outAbs = resolve(opts.outPath);
     mkdirSync(dirname(outAbs), { recursive: true });
     writeFileSync(outAbs, html, 'utf8');
     const bytes = Buffer.byteLength(html, 'utf8');
     process.stdout.write(
-      `Rendered ${opts.outPath} (${bytes} bytes, ${(bytes / 1024).toFixed(1)} KB, ${board.rules.length} rule(s), layout=${layoutFor(board)}, mode=${opts.mode}, provenance=${resolveProvenance(board).kind})\n`,
+      `Rendered ${opts.outPath} (${bytes} bytes, ${(bytes / 1024).toFixed(1)} KB, ${board.rules.length} rule(s), layout=${layoutFor(board)}, mode=${opts.mode}, provenance=${resolveProvenance(board, binding).kind})\n`,
     );
   } catch (err) {
     process.stderr.write(`render_board error: ${err instanceof Error ? err.message : String(err)}\n`);

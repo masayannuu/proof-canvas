@@ -1,0 +1,2 @@
+$ quint verify refund_guard.qnt --invariant=refundsWithinPaid,balanceNonNegative --max-steps=5 --verbosity=1
+[ok] No violation found (4949ms).

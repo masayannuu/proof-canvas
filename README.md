@@ -22,15 +22,11 @@ All four screenshots below are rendered directly from the bundled examples in [`
 | ![20-rule multi-module overview with search and filters](docs/images/03-overview-20rules.png) | ![Embed mode at 900x700 viewport](docs/images/04-embed-900.png) |
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
-- **Deterministic.** The same JSON always renders to the same bytes.
-- **Consistent by construction.** The status badge is computed from the rule statuses in your
-  JSON, and the validator rejects any page whose badge disagrees with them. A board can only
-  show "Verified" when the run is verified, the spec hash is real and every rule is verified;
-  hand-written or synthetic data is labeled "Sample data". proof-canvas cannot tell whether your
-  statuses came from a real checker run: that part is up to you.
-- **Visualization only.** proof-canvas does not run a checker, read a spec or decide whether a
-  rule holds. It draws what your checker (TLA+ / TLC, Apalache, Quint, Alloy, Lean, Dafny,
-  property-based tests, or anything else) already produced.
+- **Deterministic.** The same board and evidence files render to the same bytes.
+- **Evidence binding.** Supply spec files and checker logs to check rule names, file hashes,
+  and reported verdicts. The badge and Evidence panel show which files were checked.
+- **Visualization.** You run the checker. proof-canvas renders its results and can compare
+  those results with the board JSON.
 - **Scales from 1 to 100+ rules.** Up to 6 rules get a compact pill bar; larger apps get
   modules, a rule index, search, a status filter (All / Failed / Verified / Not checked) and a
   module overview.
@@ -55,9 +51,40 @@ in [`SKILL.md`](SKILL.md).
 | `examples/01_room_booking.board.json` | 3 / none | Compact layout |
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, search, filters, module overview |
+| `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
 
-All examples are illustrative sample data (`"provenance": "sample"`): their statuses and
-counterexamples were written by hand, and no checker was run.
+Examples 00 through 03 are illustrative and declare `"provenance": "sample"`.
+
+## Check a spec and checker log
+
+Render and validate the [refund guard example](examples/04_refund_guard/) with its
+Quint 0.32.0 spec and recorded checker output.
+
+```bash
+example=examples/04_refund_guard/refund_guard
+node scripts/render_board.mjs --in "$example.board.json" --spec "$example.qnt" \
+  --log "$example.quint.log" --out out/04_refund_guard.html
+node scripts/validate_board.mjs --in "$example.board.json" --spec "$example.qnt" \
+  --log "$example.quint.log" out/04_refund_guard.html
+```
+
+The board shows **Spec & log verified (2/2)**. Open **Evidence** for the exact source and
+line range of each invariant. Repeat `--spec` and `--log` for additional files. Use the
+same set of files on both commands to verify the embedded evidence against disk.
+
+A board whose rules all pass uses the following labels.
+
+| Evidence supplied | Badge |
+|---|---|
+| Spec and checker log | **Spec & log verified** |
+| Spec only | **Spec checked · self-reported log** |
+| Checker log only | **Log checked · self-reported spec** |
+| Board JSON only | **Self-reported** |
+| Any files with a board declared as sample | **Sample data** |
+
+Supported spec files include Quint, TLA+, Alloy, Lean, and Dafny. The log reader supports
+Quint, TLC, Apalache, and [JSON receipts](SKILL.md#5-honesty-rules).
+Supply named verdicts when the board covers multiple properties.
 
 ## Use it as an Agent Skill
 
@@ -108,7 +135,8 @@ boards never need Python or Playwright.
 SKILL.md              agent instructions: schema, commands, honesty rules
 scripts/
   render_board.mjs    board JSON -> single-file HTML
-  validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync
+  validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync, binding
+  evidence.mjs        spec hashes, source excerpts, and checker log verdicts
   schema.mjs          board schema, layout and provenance rules
   figure.mjs          figure geometry, text fitting and the SVG builder (shared with the browser)
   payload.mjs         JSON / gzip + base64 payload codec
@@ -116,7 +144,7 @@ scripts/
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
-examples/             00-03, described above
+examples/             00-04, described above
 ```
 
 ## Acknowledgements

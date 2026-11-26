@@ -7,13 +7,12 @@ description: Turn formal-verification or property-testing results (TLA+ / TLC, A
 
 Visualize formal-verification results for people who do not read TLA+, Quint, Alloy or Lean.
 
-You (or your agent) describe the checked rules in one JSON file. `proof-canvas` renders it into a
-deterministic, zero-dependency, offline HTML file (< 512 KB), and a validator proves the file is
-safe to share: no network access, safe to embed, and a status badge that always agrees with the
-rule statuses in the file.
+Describe the checked rules in a board JSON file. proof-canvas renders one deterministic offline
+HTML file under 512 KB. The validator checks its structure, offline use, embed safety, and
+provenance.
 
-proof-canvas only draws what you give it. It does not run a checker, read a spec or decide
-whether a rule holds: every status, counterexample and number on the board comes from your JSON.
+Run your checker separately. Supply spec files and checker logs to compare their definitions,
+hashes, and verdicts with the board JSON.
 
 `SKILL_DIR` below is the directory that contains this `SKILL.md`. Requires Node 22 or later and
 nothing else (no `npm install`).
@@ -28,8 +27,9 @@ Start from an example:
 | `examples/01_room_booking.board.json` | 3 | none | Compact layout: pill bar and overview |
 | `examples/02_escrow_payout.board.json` | 12 | 3 | Index layout, TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with search, filters and the module overview |
+| `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
 
-All four examples are illustrative and declare `"provenance": "sample"`: their statuses and
+Examples 00 through 03 are illustrative and declare `"provenance": "sample"`: their statuses and
 counterexamples were written by hand, and no checker was run.
 
 The minimal board (`examples/00_minimal.board.json`, verbatim):
@@ -105,8 +105,8 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `runId` | string | Identifier of the run or data set, shown in the footer. |
 | `title`, `subtitle` | string | Page header. |
 | `generatedAt` | string | ISO 8601 timestamp. |
-| `provenance` | optional `verified \| mixed \| sample \| unverified` | Declared trust level; see section 5. Synthetic or hand-written data must use `sample`. |
-| `provenanceNote` | optional string | Replaces the computed footer note. |
+| `provenance` | optional `verified \| mixed \| sample \| unverified` | Declared provenance. Use `sample` for illustrative data. See section 5. |
+| `provenanceNote` | optional string | Adds a board note after the computed footer note. |
 | `run` | object | The checker run (below). |
 | `modules` | optional array | `{ id, title, summary? }`. When present, every rule needs a `moduleId`. |
 | `rules` | array, 1..N | One entry per checked rule (below). |
@@ -117,7 +117,7 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 |---|---|---|
 | `tool` | string | Checker name, for example `"TLA+ TLC"`, `"Alloy"`, `"fast-check"`. |
 | `toolVersion` | optional string | Shown after the tool; a repeated tool name is removed (`"TLA+ TLC"` + `"TLC 2.19"` shows `TLA+ TLC 2.19`). |
-| `specHash` | optional string | Fingerprint of the checked spec: optional `sha1:` / `sha256:` / `sha512:` prefix, then 7-128 hex digits, not all zeros. Anything else warns and blocks Verified. |
+| `specHash` | optional string | Spec fingerprint. With `--spec`, omit it for a derived hash or supply the full SHA-256. Without `--spec`, a hash needs 7–128 hex digits and can use a `sha1:`, `sha256:`, or `sha512:` prefix. |
 | `status` | `verified \| failed \| pending` | Outcome of the run as a whole. |
 
 **`rules[]`**
@@ -181,6 +181,7 @@ node "$SKILL_DIR/scripts/render_board.mjs" --in board.json --out board.html
   layout: a floating pill bar (`1. ... | 2. ... | Overview`). Anything larger gets the *index*
   layout: module selector, rule index, search (`/`), a status filter (All / Failed / Verified /
   Not checked, with counts) and a module overview with numbered rule chips colored by status.
+- **Evidence.** Repeat `--spec <path>` and `--log <path>` to bind files. See section 5.
 - **Payload.** `auto` embeds readable JSON up to 192 KB and gzip + base64 above that, decoded
   by the browser's built-in `DecompressionStream`. The decoded board may not exceed 4 MiB.
 - **Embedding.** `--mode embed` drops page-level CSS (`html`, `body`) so the board can sit inside
@@ -198,7 +199,7 @@ node "$SKILL_DIR/scripts/render_board.mjs" --in board.json --out board.html
 node "$SKILL_DIR/scripts/validate_board.mjs" --in board.json board.html   # exit 0 = pass
 ```
 
-Six gates, each failing with its own prefix, plus a sync check:
+Each gate reports a distinct error prefix.
 
 1. `size:` strictly < 512 KB; warns above the per-scale budget (up to 6 rules 100 KB, 20 rules
    200 KB, 50 rules 350 KB, more 512 KB).
@@ -210,10 +211,13 @@ Six gates, each failing with its own prefix, plus a sync check:
 4. `svg-markers:` static SVG arrow markers present and ids unique.
 5. `embed-safety:` no `100vh`-style heights, no `:root` override of host design tokens, no
    `html` / `body` styling in embed mode.
-6. `provenance:` exactly one badge, and the badge, the footer and the cached value all equal the
-   provenance computed from the embedded statuses.
+6. `provenance:` the badge, footer, and cached value agree with the embedded board and evidence.
 7. `sync:` with `--in`, the HTML must embed exactly that JSON (a `--title` override is stored
    separately and does not count as a difference).
+8. `binding:` with `--spec` or `--log`, recompute evidence from the files and compare it with
+   the embedded binding. Use the same set of files you passed to the renderer.
+
+Regenerate older HTML boards to add the evidence metadata required by this validator.
 
 `node "$SKILL_DIR/scripts/test_validator.mjs"` runs the self-tests.
 
@@ -225,32 +229,64 @@ rules in one click.
 
 ## 5. Honesty rules
 
-**Consistent by construction.** The badge is computed from the statuses in your JSON, and the
-validator rejects any HTML whose badge, footer or cached value disagrees with them. proof-canvas
-cannot check that those statuses came from a real checker run: that part is your responsibility.
+Use checker results for rule verdicts, step counts, and counterexamples. Describe the
+scope and method in the evidence. Use `pending` for rules that still need a verdict
+and `sample` for illustrative boards.
 
-- Put `verified`, `failed`, counterexamples and step counts in only if a checker produced them.
-  Everything else is `pending`, or the whole board is `sample`.
-- State what the check covered: `method` and `scope` name the technique and its bounds.
-- Keep `sourceQuote` verbatim; put interpretation in `ruleSummary`.
-- Hand-written, generated or synthetic data must declare `"provenance": "sample"`.
+A board declared as `sample` always shows **Sample data**. A failed run or rule shows
+a failure badge. A board with verified and pending rules shows **Partially verified**.
+A board with no verified rules shows **Not checked yet**. Declaring `mixed` or
+`unverified` limits the badge.
 
-The badge is the first row that applies, top to bottom:
+A board declared as `verified` needs a verified run, a spec hash, and verified rules.
+The badge also depends on which files you supply.
 
-| # | Badge | When |
-|---|---|---|
-| 1 | Sample data | `provenance` is declared `sample` |
-| 2 | `N failed · v/t verified` (red) | any rule is `failed`, or `run.status` is `failed` (even without a spec hash) |
-| 3 | Sample data | `run.specHash` is present but malformed, and no rule is verified |
-| 4 | Verified (green) | `run.status` is `verified`, `run.specHash` is real, every rule is `verified`, and `provenance` is not declared `mixed` or `unverified` |
-| 5 | Partially verified (`v/t`) | at least one rule is verified (this includes a board that meets row 4 but declares `mixed`) |
-| 6 | Not checked yet (`0/t`), or Unverified (`v/t`) | no rule is verified, or `provenance` is declared `unverified` |
+| Files supplied | Badge when every rule is verified |
+|---|---|
+| Spec and log | **Spec & log verified** in green |
+| Spec only | **Spec checked · self-reported log** in amber |
+| Log only | **Log checked · self-reported spec** in amber |
+| Neither | **Self-reported** in amber |
 
-A declared `mixed` or `unverified` only ever lowers the badge; it never raises it. The footer
-note under the board says which condition applied.
+### Spec files
 
-Declaring `"provenance": "verified"` on a board that does not meet the Verified row is a schema
-error that lists the reasons.
+Repeat `--spec` for Quint (`.qnt`), TLA+ (`.tla`), Alloy (`.als`), Lean (`.lean`),
+and Dafny (`.dfy`) files. Each rule's `property` must match exactly one declaration.
+Evidence includes the source basename, line range, and up to 10 lines or 600 characters.
+Keep absolute paths out of source excerpts before publishing the board.
+
+For one file, the hash is `sha256:` followed by the digest of the raw bytes. For several
+files, hash the manifest. Sort by basename, encode each entry as the basename, a
+newline, and the lowercase hex digest. Join entries with one newline. Use distinct
+basenames. Apply the same convention to log hashes. If `run.specHash` is present, it
+must match the full spec digest, with or without the `sha256:` prefix. If omitted, the
+derived hash is saved in the evidence and the input board stays in sync.
+
+### Checker logs
+
+Repeat `--log` for Quint, TLC, Apalache, or JSON receipts. Use logs from your actual
+checker invocation. For multiple properties, capture the Quint command with its named
+invariants or supply named results in a JSON receipt. A passing text verdict that
+contains no property name can support a board covering one property.
+
+A JSON receipt uses a checker name and an array with one result per property.
+
+```json
+{
+  "schemaVersion": "proof-canvas-log-1",
+  "checker": "Dafny",
+  "results": [{ "property": "RefundCap", "status": "verified", "stepsChecked": 5 }]
+}
+```
+
+Use `verified` or `failed` in the receipt. The schema version and `stepsChecked`
+are optional. If the board and receipt both include a step count, the counts must
+match.
+
+proof-canvas compares the supplied files and verdicts. The log producer supplies the
+record of what the checker ran. To try the real Quint example, use
+[`examples/04_refund_guard/`](examples/04_refund_guard/) with both flags. The
+[README](README.md#check-a-spec-and-checker-log) has the complete commands.
 
 ## 6. Scale benchmark
 

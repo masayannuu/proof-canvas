@@ -16,7 +16,7 @@ export const RULE_STATUSES = ['verified', 'failed', 'pending'];
 export const PROVENANCE_VALUES = ['verified', 'mixed', 'sample', 'unverified'];
 
 // Keys the renderer adds to the embedded payload. They are never part of an input board.
-export const RENDERER_KEYS = ['__provenance', '__layout', '__titleOverride'];
+export const RENDERER_KEYS = ['__provenance', '__layout', '__titleOverride', '__binding'];
 
 // Recommended label lengths (characters). Longer labels still render; the validator warns.
 export const SHORT_WARN_CHARS = 20;
@@ -80,7 +80,7 @@ export const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
 const HASH_RE = /^(?:sha(?:1|256|512):)?([0-9a-f]{7,128})$/i;
 
 // A real spec fingerprint: optional sha1:/sha256:/sha512: prefix, 7-128 hex digits, not all zeros.
-// The validator only checks the shape: the producer is responsible for hashing the checked spec.
+// Without a supplied spec file, only the hash format can be checked.
 export function isRealHash(h) {
   if (typeof h !== 'string') return false;
   const m = h.trim().match(HASH_RE);
@@ -88,7 +88,7 @@ export function isRealHash(h) {
 }
 
 // Reasons a board cannot display "Verified" (empty = it can).
-export function verifiedBlockers(board) {
+export function verifiedBlockers(board, { checkHash = true, specHash = board?.run?.specHash } = {}) {
   const rules = Array.isArray(board?.rules) ? board.rules : [];
   const run = isPlainObject(board?.run) ? board.run : {};
   const out = [];
@@ -96,8 +96,10 @@ export function verifiedBlockers(board) {
     out.push(`provenance is declared "${board.provenance}"`);
   }
   if (run.status !== 'verified') out.push(`run.status is "${run.status}", not "verified"`);
-  if (run.specHash === undefined) out.push('run.specHash is missing');
-  else if (!isRealHash(run.specHash)) out.push('run.specHash is not a real hash');
+  if (checkHash) {
+    if (specHash === undefined) out.push('run.specHash is missing');
+    else if (!isRealHash(specHash)) out.push('run.specHash is not a real hash');
+  }
   if (rules.length === 0) out.push('there are no rules');
   const notVerified = rules.filter((r) => ruleStatus(r) !== 'verified').length;
   if (notVerified > 0) out.push(`${notVerified} of ${rules.length} rule(s) are not "verified"`);
@@ -111,25 +113,27 @@ const RANK = { unverified: 0, mixed: 1, verified: 2 };
 //   2. any failed rule, or run.status "failed" -> failed (even without a spec hash)
 //   3. malformed spec hash and nothing verified -> sample
 //   4. otherwise verified / mixed / unverified, capped by a declared "mixed" or "unverified".
-export function resolveProvenance(board) {
+export function resolveProvenance(board, binding) {
   const rules = Array.isArray(board?.rules) ? board.rules : [];
   const run = isPlainObject(board?.run) ? board.run : {};
   const verifiedCount = rules.filter((r) => ruleStatus(r) === 'verified').length;
   const failedCount = rules.filter((r) => ruleStatus(r) === 'failed').length;
   const total = rules.length;
-  const base = { verifiedCount, failedCount, pendingCount: total - verifiedCount - failedCount, total };
+  const level = binding?.level ?? 'self-reported';
+  const specHash = binding?.specHash ?? run.specHash;
+  const base = { verifiedCount, failedCount, pendingCount: total - verifiedCount - failedCount, total, level };
   const declared = board?.provenance;
 
   if (declared === 'sample') return { kind: 'sample', tone: 'warn', ...base };
   if (failedCount > 0 || run.status === 'failed') return { kind: 'failed', tone: 'bad', ...base };
-  if (run.specHash !== undefined && !isRealHash(run.specHash) && verifiedCount === 0) return { kind: 'sample', tone: 'warn', ...base };
+  if (specHash !== undefined && !isRealHash(specHash) && verifiedCount === 0) return { kind: 'sample', tone: 'warn', ...base };
 
-  let kind = verifiedBlockers(board).length === 0 ? 'verified' : verifiedCount > 0 ? 'mixed' : 'unverified';
+  let kind = verifiedBlockers(board, { specHash }).length === 0 ? 'verified' : verifiedCount > 0 ? 'mixed' : 'unverified';
   if ((declared === 'mixed' || declared === 'unverified') && RANK[declared] < RANK[kind]) kind = declared;
-  return { kind, tone: kind === 'verified' ? 'good' : 'warn', ...base };
+  return { kind, tone: kind === 'verified' && level === 'spec-and-log' ? 'good' : 'warn', ...base };
 }
 
-export function validateBoardData(board) {
+export function validateBoardData(board, { checkHash = true } = {}) {
   const errors = [];
   const warnings = [];
   const err = (path, msg) => errors.push(`${path}: ${msg}`);
@@ -167,7 +171,7 @@ export function validateBoardData(board) {
     if (run.specHash !== undefined) {
       if (typeof run.specHash !== 'string') err('$.run.specHash', 'must be a string when present');
       else if (!isRealHash(run.specHash)) {
-        warn('$.run.specHash', `"${run.specHash.slice(0, 40)}" is not a real hash (expected an optional sha1:/sha256:/sha512: prefix and 7-128 hex digits, not all zeros); the board cannot show Verified`);
+        warn('$.run.specHash', `"${run.specHash.slice(0, 40)}" is not a real hash (expected an optional sha1:/sha256:/sha512: prefix and 7-128 hex digits, not all zeros); the board cannot show a verified run`);
       }
     }
   }
@@ -364,7 +368,7 @@ export function validateBoardData(board) {
 
   // Honesty: a declared "verified" must be backed by the board's own statuses.
   if (board.provenance === 'verified' && errors.length === 0) {
-    const blockers = verifiedBlockers(board);
+    const blockers = verifiedBlockers(board, { checkHash });
     if (blockers.length) err('$.provenance', `declared "verified" but ${blockers.join('; ')}`);
   }
 

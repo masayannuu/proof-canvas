@@ -9,22 +9,27 @@
 //   4. SVG IDs          (svg-markers:)   static <marker> present and unique
 //   5. embed safety     (embed-safety:)  no 100vh-style heights, no :root host-token overrides,
 //                                         no page-level CSS in embed mode
-//   6. provenance       (provenance:)    badge matches the board's own statuses
-// With --in <board.json>, a seventh check (sync:) requires the HTML to embed exactly that board.
+//   6. provenance       (provenance:)    badge and footer match the statuses and evidence
+//   7. sync             (sync:)          --in checks the embedded board against the input JSON
+//   8. evidence binding (binding:)       --spec / --log check evidence against the supplied files
 
 import { readFileSync, realpathSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { bindEvidence, validateBinding } from './evidence.mjs';
+import { esc } from './figure.mjs';
+import { provenanceBadge, provNote } from './render_board.mjs';
 import { DATA_ELEMENT_ID, ROOT_ELEMENT_ID, decodePayload, findPayloads, stripPayloads } from './payload.mjs';
 import { MAX_BYTES, RESERVED_HOST_TOKENS, layoutFor, resolveProvenance, sizeBudgetFor, splitRendererKeys, validateBoardData } from './schema.mjs';
 
 const USAGE = `Usage:
   node scripts/validate_board.mjs <board.html | board.json> [--in <board.json>] [--json]
+       [--spec <path>]... [--log <path>]...
 `;
 
 function parseArgs(argv) {
-  const opts = { target: '', jsonPath: '', asJson: false };
+  const opts = { target: '', jsonPath: '', asJson: false, specPaths: [], logPaths: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '-h' || a === '--help') {
@@ -32,6 +37,8 @@ function parseArgs(argv) {
       process.exit(0);
     } else if (a === '--in' && argv[i + 1]) {
       opts.jsonPath = argv[++i];
+    } else if ((a === '--spec' || a === '--log') && argv[i + 1] && !argv[i + 1].startsWith('-')) {
+      opts[a === '--spec' ? 'specPaths' : 'logPaths'].push(argv[++i]);
     } else if (a === '--json') {
       opts.asJson = true;
     } else if (!a.startsWith('-') && !opts.target) {
@@ -115,7 +122,7 @@ function offlineErrors(html) {
   return out;
 }
 
-export function validateHtmlContent(html, label = '<html>') {
+export function validateHtmlContent(html, label = '<html>', { specPaths = [], logPaths = [] } = {}) {
   const errors = [];
   const warnings = [];
   const bytes = Buffer.byteLength(html, 'utf8');
@@ -170,6 +177,7 @@ export function validateHtmlContent(html, label = '<html>') {
   let board = null;
   let meta = {};
   let decodedOk = false;
+  let checkedBinding;
   if (payloads.length === 1 && bytes < MAX_BYTES) {
     try {
       decoded = decodePayload(payloads[0].type, payloads[0].text);
@@ -180,17 +188,45 @@ export function validateHtmlContent(html, label = '<html>') {
   }
   if (decodedOk) {
     ({ board, meta } = splitRendererKeys(decoded));
-    const schemaRes = validateBoardData(board);
+    const schemaRes = validateBoardData(board, { checkHash: board?.run?.specHash !== undefined || !meta.__binding?.specHash });
     errors.push(...schemaRes.errors.map((e) => `board.${e}`));
     warnings.push(...schemaRes.warnings.map((w) => `board.${w}`));
     if (schemaRes.ok) {
-      // 6b. Every displayed provenance value must equal the one computed from the embedded statuses.
-      const expected = resolveProvenance(board);
-      if (badges.length === 1 && badges[0] !== expected.kind) {
-        errors.push(`provenance: HTML badge shows "${badges[0]}" but the embedded board resolves to "${expected.kind}"`);
+      // 6b. Check embedded evidence before trusting any badge or note that uses it.
+      const binding = meta.__binding;
+      let bindingOk = false;
+      try {
+        validateBinding(board, binding);
+        bindingOk = true;
+        checkedBinding = binding;
+      } catch (err) {
+        errors.push('provenance: ' + err.message);
       }
-      if (notes.some((n) => n !== expected.kind)) errors.push(`provenance: footer note kind does not match "${expected.kind}"`);
-      if (!isDeepStrictEqual(meta.__provenance, expected)) errors.push('provenance: cached __provenance in the payload does not match the embedded statuses');
+      if (bindingOk) {
+        const expected = resolveProvenance(board, binding);
+        if (badges.length === 1) {
+          if (badges[0] !== expected.kind) {
+            errors.push(`provenance: HTML badge shows "${badges[0]}" but the embedded board resolves to "${expected.kind}"`);
+          } else if (!domHtml.includes(provenanceBadge(expected))) {
+            errors.push('provenance: HTML badge text or tone differs from the embedded evidence');
+          }
+        }
+        const note = `<footer class="pc-foot" data-provenance-note="${expected.kind}"><span>${esc(provNote(expected, board, binding))}</span></footer>`;
+        if (notes.length !== 1 || notes[0] !== expected.kind || !domHtml.includes(note)) {
+          errors.push(`provenance: footer note does not match the embedded evidence for "${expected.kind}"`);
+        }
+        if (!isDeepStrictEqual(meta.__provenance, expected)) errors.push('provenance: cached __provenance in the payload does not match the embedded statuses and evidence');
+      }
+
+      // 8. Re-read the files even when the HTML evidence passes the structural checks.
+      if (specPaths.length || logPaths.length) {
+        try {
+          const actual = bindEvidence(board, { specPaths, logPaths });
+          if (!isDeepStrictEqual(binding, actual)) errors.push('binding: embedded evidence does not match supplied files');
+        } catch (err) {
+          errors.push(err.message);
+        }
+      }
       if (meta.__layout !== layoutFor(board)) errors.push(`data: cached __layout "${meta.__layout}" does not match "${layoutFor(board)}"`);
       if (meta.__titleOverride !== undefined && (typeof meta.__titleOverride !== 'string' || !meta.__titleOverride.trim())) {
         errors.push('data: __titleOverride must be a non-empty string when present');
@@ -221,6 +257,7 @@ export function validateHtmlContent(html, label = '<html>') {
     errors,
     warnings,
     board,
+    binding: checkedBinding,
   };
 }
 
@@ -244,13 +281,21 @@ export function syncErrors(inputBoard, htmlBoard) {
   return d ? [`sync: the HTML embeds a different board than the input JSON (first difference at ${d})`] : [];
 }
 
-function jsonCheck(parsed, label) {
-  const res = validateBoardData(parsed);
+function jsonCheck(parsed, label, { specPaths = [], logPaths = [] } = {}, binding) {
+  const res = validateBoardData(parsed, { checkHash: !binding?.specHash && specPaths.length === 0 });
+  if (res.ok && (specPaths.length || logPaths.length)) {
+    try {
+      binding = bindEvidence(parsed, { specPaths, logPaths });
+    } catch (err) {
+      res.errors.push(err.message);
+      res.ok = false;
+    }
+  }
   return {
     kind: 'json',
     file: label,
     rules: Array.isArray(parsed?.rules) ? parsed.rules.length : 0,
-    provenance: res.ok ? resolveProvenance(parsed).kind : null,
+    provenance: res.ok ? resolveProvenance(parsed, binding).kind : null,
     ...res,
   };
 }
@@ -259,26 +304,23 @@ function main() {
   try {
     const opts = parseArgs(process.argv.slice(2));
     const report = { ok: true, checks: [] };
+    const inputBoard = opts.jsonPath ? JSON.parse(readFileSync(resolve(opts.jsonPath), 'utf8')) : undefined;
 
-    let inputBoard;
-    if (opts.jsonPath) {
-      inputBoard = JSON.parse(readFileSync(resolve(opts.jsonPath), 'utf8'));
-      report.checks.push(jsonCheck(inputBoard, opts.jsonPath));
-    }
-
-    if (opts.target) {
+    if (opts.target && extname(opts.target).toLowerCase() !== '.json') {
       const raw = readFileSync(resolve(opts.target), 'utf8');
-      if (extname(opts.target).toLowerCase() === '.json') {
-        report.checks.push(jsonCheck(JSON.parse(raw), opts.target));
-      } else {
-        const htmlRes = validateHtmlContent(raw, opts.target);
-        if (opts.jsonPath) {
-          if (htmlRes.board) htmlRes.errors.push(...syncErrors(inputBoard, htmlRes.board));
-          else htmlRes.errors.push('sync: no decodable board in the HTML to compare with the input JSON');
-          htmlRes.ok = htmlRes.errors.length === 0;
-        }
-        const { board: _omit, ...summary } = htmlRes;
-        report.checks.push({ kind: 'html', ...summary });
+      const { board, binding, ...summary } = validateHtmlContent(raw, opts.target, opts);
+      if (opts.jsonPath) {
+        report.checks.push(jsonCheck(inputBoard, opts.jsonPath, {}, binding));
+        if (board) summary.errors.push(...syncErrors(inputBoard, board));
+        else summary.errors.push('sync: no decodable board in the HTML to compare with the input JSON');
+        summary.ok = summary.errors.length === 0;
+      }
+      report.checks.push({ kind: 'html', ...summary });
+    } else {
+      if (opts.jsonPath) report.checks.push(jsonCheck(inputBoard, opts.jsonPath, opts));
+      if (opts.target) {
+        const raw = readFileSync(resolve(opts.target), 'utf8');
+        report.checks.push(jsonCheck(JSON.parse(raw), opts.target, opts));
       }
     }
     report.ok = report.checks.every((c) => c.ok);

@@ -1,0 +1,276 @@
+{
+  "version": 1,
+  "runId": "refund-guard-quint",
+  "title": "Refund guard",
+  "subtitle": "Two invariants for a two-unit payment",
+  "generatedAt": "2026-11-27T02:46:00Z",
+  "provenance": "verified",
+  "run": {
+    "tool": "Quint",
+    "toolVersion": "0.32.0",
+    "specHash": "sha256:5aba910fb3b748006caa73cd7ca22b284fbf0defd43815edb8d3a173b785bae0",
+    "status": "verified"
+  },
+  "rules": [
+    {
+      "id": "refund_cap",
+      "no": 1,
+      "short": "Refund cap",
+      "title": "Total refunds stay within the amount paid",
+      "property": "refundsWithinPaid",
+      "source": "Refund guard",
+      "previewTitle": "Refund request",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Refund request",
+          "src2": "Total paid",
+          "gate": "Refund cap",
+          "pass": "Issue refund",
+          "hold": "Reject refund",
+          "bad": "Overpayment"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "cap",
+          "a3": "within cap",
+          "a4": "over cap",
+          "a5": "no cap"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Issued",
+          "chips": [
+            {
+              "box": "gate",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A refund takes the total refunded from one to two units, equal to the amount paid.",
+          "preview": {
+            "statusBadge": "Issued",
+            "rows": [
+              {
+                "k": "Refunded / paid",
+                "v": "2 / 2"
+              }
+            ],
+            "alert": "The refund fits the cap.",
+            "buttonLabel": "Refund",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Overpaid",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "3 / 2",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Removing the cap would allow a third unit to be refunded against a two-unit payment.",
+          "preview": {
+            "statusBadge": "Overpaid",
+            "rows": [
+              {
+                "k": "Refunded / paid",
+                "v": "3 / 2"
+              }
+            ],
+            "alert": "The refund would exceed the payment.",
+            "buttonLabel": "Refund",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Rejected",
+          "chips": [
+            {
+              "box": "gate",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "When two units are already refunded, the guard prevents a third refund.",
+          "preview": {
+            "statusBadge": "Rejected",
+            "rows": [
+              {
+                "k": "Refunded / paid",
+                "v": "2 / 2"
+              }
+            ],
+            "alert": "The refund cap has been reached.",
+            "buttonLabel": "Refund",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "The amount refunded is at most the amount paid in every checked state.",
+        "ifEnforced": "A refund stops when the payment has been fully refunded.",
+        "ifNotEnforced": "Total refunds can exceed the payment.",
+        "checkerSummary": "Quint found no violation.",
+        "scope": "One two-unit payment. Each transition refunds one unit or leaves the state unchanged.",
+        "method": "Quint verify with Apalache, bounded to five steps."
+      }
+    },
+    {
+      "id": "positive_balance",
+      "no": 2,
+      "short": "Refundable balance",
+      "title": "The remaining refundable balance stays at or above zero",
+      "property": "balanceNonNegative",
+      "source": "Refund guard",
+      "previewTitle": "Refundable balance",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "Payment",
+          "src2": "Refund total",
+          "gate": "Balance check",
+          "pass": "Update balance",
+          "hold": "Keep balance",
+          "bad": "Negative balance"
+        },
+        "arrows": {
+          "a1": "paid",
+          "a2": "refunded",
+          "a3": "balance >= 0",
+          "a4": "would go < 0",
+          "a5": "skip check"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Updated",
+          "chips": [
+            {
+              "box": "gate",
+              "text": "1 unit",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "One unit remains refundable after the first refund.",
+          "preview": {
+            "statusBadge": "Updated",
+            "rows": [
+              {
+                "k": "Remaining",
+                "v": "1 unit"
+              }
+            ],
+            "alert": "Balance updated.",
+            "buttonLabel": "Refund",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Negative",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "-1 unit",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Refunding a third unit would take the remaining balance to minus one.",
+          "preview": {
+            "statusBadge": "Negative",
+            "rows": [
+              {
+                "k": "Remaining",
+                "v": "-1 unit"
+              }
+            ],
+            "alert": "The balance would be negative.",
+            "buttonLabel": "Refund",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Kept",
+          "chips": [
+            {
+              "box": "gate",
+              "text": "0 units",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The guard keeps the remaining balance at zero after the payment is fully refunded.",
+          "preview": {
+            "statusBadge": "Kept",
+            "rows": [
+              {
+                "k": "Remaining",
+                "v": "0 units"
+              }
+            ],
+            "alert": "There is no remaining amount to refund.",
+            "buttonLabel": "Refund",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "The amount paid minus the amount refunded is never negative in the checked states.",
+        "ifEnforced": "The balance reaches zero when the last unit is refunded.",
+        "ifNotEnforced": "A refund can leave a negative balance.",
+        "checkerSummary": "Quint found no violation.",
+        "scope": "One two-unit payment. Each transition refunds one unit or leaves the state unchanged.",
+        "method": "Quint verify with Apalache, bounded to five steps."
+      }
+    }
+  ]
+}
