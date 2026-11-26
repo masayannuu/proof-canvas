@@ -11,6 +11,16 @@ three switchable states: **normal**, **bug** (what happens without the rule) and
 linked screen preview shows what a user would see, and an evidence panel says what was checked,
 how, and within which bounds.
 
+## At a glance
+
+All four screenshots below are rendered directly from the bundled examples in [`examples/`](examples/).
+
+| Compact starter (3 rules, fixed state) | Failed rule with TLA+ counterexample & evidence (12 rules) |
+|---|---|
+| ![Compact 3-rule room booking board](docs/images/01-compact.png) | ![Failed escrow payout rule with counterexample and evidence](docs/images/02-failed-counterexample.png) |
+| **Module overview with search & status filters (20 rules)** | **Embed mode (`--mode embed`, 900×700 iframe/pane)** |
+| ![20-rule multi-module overview with search and filters](docs/images/03-overview-20rules.png) | ![Embed mode at 900x700 viewport](docs/images/04-embed-900.png) |
+
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same JSON always renders to the same bytes.
 - **Consistent by construction.** The status badge is computed from the rule statuses in your
