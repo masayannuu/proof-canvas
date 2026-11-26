@@ -1,0 +1,12 @@
+{
+  "name": "proof-canvas",
+  "displayName": "Proof Canvas",
+  "version": "1.0.0",
+  "description": "Render formal-verification results as an offline HTML board.",
+  "author": {
+    "name": "masayannuu"
+  },
+  "repository": "https://github.com/masayannuu/proof-canvas",
+  "license": "MIT",
+  "skills": "./skills/"
+}

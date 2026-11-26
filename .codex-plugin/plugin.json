@@ -1,0 +1,20 @@
+{
+  "name": "proof-canvas",
+  "version": "1.0.0",
+  "description": "Render formal-verification results as an offline HTML board.",
+  "author": {
+    "name": "masayannuu"
+  },
+  "repository": "https://github.com/masayannuu/proof-canvas",
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Proof Canvas",
+    "shortDescription": "Render formal-verification results as an offline HTML board.",
+    "longDescription": "Create a single HTML file with rule diagrams, counterexamples, and checker evidence.",
+    "developerName": "masayannuu",
+    "category": "Productivity",
+    "capabilities": ["Instructions"],
+    "websiteURL": "https://github.com/masayannuu/proof-canvas"
+  }
+}

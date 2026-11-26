@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "proof-canvas",
+  "version": "1.0.0",
+  "description": "Render formal-verification results as an offline HTML board.",
+  "author": {
+    "name": "masayannuu"
+  },
+  "repository": "https://github.com/masayannuu/proof-canvas",
+  "license": "MIT"
+}

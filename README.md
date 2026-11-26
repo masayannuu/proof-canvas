@@ -43,7 +43,7 @@ open board.html   # or xdg-open / start
 
 Write your own board by copying `examples/00_minimal.board.json` (one rule) and filling in your
 checker's real results. The full schema, render options, validation gates and honesty rules are
-in [`SKILL.md`](SKILL.md).
+in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 
 | Example | Rules / modules | Shows |
 |---|---|---|
@@ -87,7 +87,7 @@ A board whose rules all pass uses the following labels.
 Use `--spec` for Quint, TLA+, Alloy, Lean, and Dafny sources. Include the TLC `.cfg`
 with `--spec` to bind a passing TLC log to the properties the config lists.
 Use `--log` for native Quint, Alloy 6, TLC, and Apalache logs or
-[`proof-canvas-log-1` JSON receipts](SKILL.md#checker-logs). Every passing verdict
+[`proof-canvas-log-1` JSON receipts](skills/proof-canvas/SKILL.md#checker-logs). Every passing verdict
 needs a named property. For Quint verification, include the command with its
 invariant or temporal options.
 
@@ -118,17 +118,36 @@ The board shows **Spec & log verified (6/6)**. Each **Evidence** card shows the
 rule's checker, log hash, and source excerpt. The footer lists the three checkers
 and the combined log hash.
 
-## Use it as an Agent Skill
+## Install
 
-The skill is this folder, with `SKILL.md` at its root. For Claude Code, copy or symlink it to
-`~/.claude/skills/proof-canvas/` (personal) or `.claude/skills/proof-canvas/` (project):
+**Claude Code**. Run these commands in Claude Code.
 
-```bash
-git clone <this repository> ~/.claude/skills/proof-canvas
+```text
+/plugin marketplace add masayannuu/proof-canvas
+/plugin install proof-canvas@proof-canvas
 ```
 
-For any other agent, point it at `SKILL.md`; the scripts only need Node. Then ask, for example:
-*"Render our TLC results as a proof-canvas board and validate it."*
+**Codex**. Run these commands in your terminal.
+
+```bash
+codex plugin marketplace add masayannuu/proof-canvas
+codex plugin add proof-canvas
+```
+
+**Antigravity**. Run this command in your terminal.
+
+```bash
+agy plugin install https://github.com/masayannuu/proof-canvas
+```
+
+**Cursor**. In Customize, choose **Import from Disk** and select the repository root.
+The repository includes a [Cursor plugin manifest](.cursor-plugin/plugin.json).
+
+**Other agents and standalone use**. Point your agent at
+[`skills/proof-canvas/SKILL.md`](skills/proof-canvas/SKILL.md) in a complete checkout,
+or run the [quickstart commands](#quickstart) from the repository root.
+
+After installing, ask your agent to "Render our TLC results as a proof-canvas board and validate it."
 
 ## Scale benchmark
 
@@ -164,7 +183,19 @@ boards never need Python or Playwright.
 ## Layout
 
 ```
-SKILL.md              agent instructions: schema, commands, honesty rules
+plugin.json           Antigravity and Agent Plugins manifest
+.claude-plugin/
+  icon.png            Claude Code plugin icon
+  plugin.json         Claude Code plugin manifest
+  marketplace.json    Claude Code marketplace
+.codex-plugin/
+  plugin.json         Codex plugin manifest
+.agents/plugins/
+  marketplace.json    Codex marketplace
+.cursor-plugin/
+  plugin.json         Cursor plugin manifest
+skills/proof-canvas/
+  SKILL.md            agent instructions, board schema, and commands
 scripts/
   render_board.mjs    board JSON -> single-file HTML
   validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync, binding
@@ -176,7 +207,10 @@ scripts/
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
-examples/             00-05, described above
+examples/
+  00-03               sample boards
+  04_refund_guard/    Quint spec and log
+  05_multi_verifier/  Quint, Alloy, and TLC specs and logs
 ```
 
 ## Acknowledgements

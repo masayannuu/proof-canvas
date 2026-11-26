@@ -1,6 +1,6 @@
 ---
 name: proof-canvas
-description: Turn formal-verification or property-testing results (TLA+ / TLC, Apalache, Quint, Alloy, Lean 4, Dafny, Hypothesis, fast-check, or any other checker) into one offline, single-file HTML board that people who do not read spec code can review. Each rule is drawn as a 6-box flow with normal / bug / fixed states, a linked screen preview and an evidence panel. Scales from 1 rule to 100+ rules across modules. Use when you need to show what a checked rule protects, what breaks without it, and how much of the claim was actually checked.
+description: Render formal-verification or property-testing results as one offline HTML board. Use for TLA+, Quint, Alloy, Lean, or other checker results that need reviewable rule diagrams, counterexamples, and evidence.
 ---
 
 # proof-canvas
@@ -14,8 +14,16 @@ provenance.
 Run your checker separately. Supply spec files and checker logs to compare their definitions,
 hashes, and verdicts with the board JSON.
 
-`SKILL_DIR` below is the directory that contains this `SKILL.md`. Requires Node 22 or later and
-nothing else (no `npm install`).
+Use Node 22 or later. Set `SKILL_DIR` to the absolute directory containing this `SKILL.md`.
+The installed plugin keeps its scripts in `../../scripts/` relative to that directory.
+Resolve the plugin root before running commands from your project directory.
+
+```bash
+SKILL_DIR=/absolute/path/to/skills/proof-canvas
+PLUGIN_ROOT="$(cd -P "$SKILL_DIR" && cd ../.. && pwd)"
+```
+
+The examples below live in `$PLUGIN_ROOT/examples/`.
 
 ## 1. Write the board JSON
 
@@ -173,7 +181,7 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 ## 2. Render
 
 ```bash
-node "$SKILL_DIR/scripts/render_board.mjs" --in board.json --out board.html
+node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
 #   [--mode standalone|embed] [--title "..."] [--payload auto|json|gzip]
 ```
 
@@ -196,7 +204,7 @@ node "$SKILL_DIR/scripts/render_board.mjs" --in board.json --out board.html
 ## 3. Validate (required)
 
 ```bash
-node "$SKILL_DIR/scripts/validate_board.mjs" --in board.json board.html   # exit 0 = pass
+node "$PLUGIN_ROOT/scripts/validate_board.mjs" --in board.json board.html   # exit 0 = pass
 ```
 
 Each gate reports a distinct error prefix.
@@ -220,7 +228,7 @@ Each gate reports a distinct error prefix.
 
 Regenerate older HTML boards to add the evidence metadata required by this validator.
 
-`node "$SKILL_DIR/scripts/test_validator.mjs"` runs the self-tests.
+`node "$PLUGIN_ROOT/scripts/test_validator.mjs"` runs the self-tests.
 
 ## 4. Look at it
 
@@ -300,21 +308,21 @@ or the spec file bound to the reported rule. If the board and receipt both inclu
 a step count, the counts must match.
 
 The log producer supplies the record of what the checker ran. In the
-[`examples/04_refund_guard/`](examples/04_refund_guard/) example,
+[`examples/04_refund_guard/`](../../examples/04_refund_guard/) example,
 `refund_guard.quint.log` records the Quint command followed by its verbatim output.
-See the [README](README.md#check-a-spec-and-checker-log) for the commands and the
+See the [README](../../README.md#check-a-spec-and-checker-log) for the commands and the
 combined native-log example.
 
 ## 6. Scale benchmark
 
 ```bash
-node "$SKILL_DIR/scripts/bench_scale.mjs"              # Node + headless Chromium (needs uv)
-node "$SKILL_DIR/scripts/bench_scale.mjs" --no-browser # Node-only metrics
+node "$PLUGIN_ROOT/scripts/bench_scale.mjs"              # Node + headless Chromium (needs uv)
+node "$PLUGIN_ROOT/scripts/bench_scale.mjs" --no-browser # Node-only metrics
 ```
 
 Renders 3 / 12 / 20 / 50 / 100-rule boards and an embed-mode board, validates them, checks
 byte-identical re-renders, then measures load, DOM size, heap, layout (every rule in every
 state) and interaction latency in headless Chromium, and writes `out/bench/`. Results:
-`BENCHMARK.md`. Make stress boards with
-`node scripts/synth_board.mjs --rules 100 --modules 20 --failed 5 --unverified 20 --out x.json`
+[`BENCHMARK.md`](../../BENCHMARK.md). Make stress boards with
+`node "$PLUGIN_ROOT/scripts/synth_board.mjs" --rules 100 --modules 20 --failed 5 --unverified 20 --out x.json`
 (`--unverified` sets how many rules are `pending`).

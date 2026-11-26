@@ -1,0 +1,13 @@
+{
+  "name": "proof-canvas",
+  "description": "Install proof-canvas to review formal-verification results in an offline HTML board.",
+  "owner": {
+    "name": "masayannuu"
+  },
+  "plugins": [
+    {
+      "name": "proof-canvas",
+      "source": "./"
+    }
+  ]
+}

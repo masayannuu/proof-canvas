@@ -109,7 +109,7 @@ for (const [name, board] of Object.entries(EXAMPLES)) {
   }
 }
 test('docs: SKILL.md reproduces examples/00_minimal.board.json verbatim', () => {
-  const skill = readFileSync(join(ROOT, 'SKILL.md'), 'utf8');
+  const skill = readFileSync(join(ROOT, 'skills', 'proof-canvas', 'SKILL.md'), 'utf8');
   const minimal = readFileSync(join(ROOT, 'examples', '00_minimal.board.json'), 'utf8');
   assert.ok(skill.includes(`\`\`\`json\n${minimal}\`\`\``), 'SKILL.md and 00_minimal.board.json differ');
 });
