@@ -1,0 +1,689 @@
+{
+  "version": 1,
+  "runId": "room-booking-starter-sample",
+  "title": "Room booking: 3 rules",
+  "subtitle": "A compact starter board: one module, three rules",
+  "generatedAt": "2026-11-27T00:00:00Z",
+  "provenance": "sample",
+  "provenanceNote": "Illustrative sample: statuses were written by hand to show the format; no checker was run.",
+  "run": {
+    "tool": "TLA+ TLC",
+    "toolVersion": "TLC 2.19",
+    "status": "verified"
+  },
+  "rules": [
+    {
+      "id": "no_double_booking",
+      "no": 1,
+      "short": "No double booking",
+      "title": "A room is never booked twice for the same time",
+      "property": "NoOverlappingBookings",
+      "category": "safety",
+      "source": "Booking requirements 2.1",
+      "previewTitle": "Booking confirmation",
+      "figure": {
+        "boxes": {
+          "src1": "Booking request",
+          "src2": "Existing bookings",
+          "gate": "Overlap check",
+          "pass": "Confirm booking",
+          "hold": "Suggest another slot",
+          "bad": "Double booking"
+        },
+        "arrows": {
+          "a1": "room + time",
+          "a2": "same room",
+          "a3": "free",
+          "a4": "overlaps",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:00-11:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no overlap",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "compare times",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Room A is free from 10:00 to 11:00, so the booking is confirmed.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:00-11:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Existing booking",
+                "v": "none in the morning",
+                "tone": "ok"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:00, 11:00)",
+              "overlap(A, 10:00..11:00) = empty",
+              "state -> confirmed"
+            ],
+            "alert": "The slot is free. You can confirm the booking.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "30 min clash",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:30-11:30",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no overlap check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "2 bookings at 10:30",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Without the overlap check, a 10:30 booking is confirmed on top of the 10:00 meeting.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:30-11:30",
+                "tone": "normal"
+              },
+              {
+                "k": "Existing booking",
+                "v": "10:00-11:00 standup",
+                "tone": "bad"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:30, 11:30)",
+              "overlap check skipped",
+              "NoOverlappingBookings = false"
+            ],
+            "alert": "Confirm is still enabled although the slot overlaps.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:30-11:30",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "standup 10-11",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "compare times",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "suggest 11:00",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The 30-minute overlap is caught at the gate, and 11:00 is offered instead.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:30-11:30",
+                "tone": "warn"
+              },
+              {
+                "k": "Existing booking",
+                "v": "suggest 11:00-12:00",
+                "tone": "ok"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:30, 11:30)",
+              "overlap = 10:30..11:00 -> blocked",
+              "suggest 11:00..12:00"
+            ],
+            "alert": "This slot overlaps an existing booking, so Confirm is locked.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 18432,
+      "evidence": {
+        "ruleSummary": "Two confirmed bookings of the same room never have intersecting [start, end) intervals.",
+        "ifEnforced": "Any request that overlaps an existing booking by even one minute is rejected, and the nearest free slot is suggested.",
+        "ifNotEnforced": "Two teams arrive at the same room for the same meeting time.",
+        "checkerSummary": "Sample: no violation, 18,432 states",
+        "scope": "1 building, 3 rooms, 4 users, 8 half-hour slots",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run",
+        "sourceQuote": "A room cannot be booked by two meetings at the same time."
+      }
+    },
+    {
+      "id": "capacity",
+      "no": 2,
+      "short": "Capacity",
+      "title": "Attendees never exceed the room’s capacity",
+      "property": "AttendeesWithinCapacity",
+      "category": "boundary",
+      "source": "Room policy 1.1",
+      "previewTitle": "Attendee list",
+      "figure": {
+        "boxes": {
+          "src1": "Add attendees",
+          "src2": "Room capacity",
+          "gate": "Capacity check",
+          "pass": "Update the list",
+          "hold": "Suggest bigger room",
+          "bad": "Room over capacity"
+        },
+        "arrows": {
+          "a1": "attendees",
+          "a2": "seats",
+          "a3": "fits",
+          "a4": "too many",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Fits",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "8 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "8 seats",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "count <= seats",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "list updated",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Eight attendees in an eight-seat room is exactly at capacity, so it is accepted.",
+          "preview": {
+            "statusBadge": "Fits",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "8",
+                "tone": "ok"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 8,
+                "limit": 8,
+                "max": 12,
+                "ok": true
+              }
+            ],
+            "alert": "Everyone fits.",
+            "buttonLabel": "Update the list",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Over by 3",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "11 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no seat count",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "11 in 8 seats",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The invite list grows to eleven in a room with eight seats.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "11",
+                "tone": "bad"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 11,
+                "limit": 8,
+                "max": 12,
+                "ok": false
+              }
+            ],
+            "alert": "Three people will be standing.",
+            "buttonLabel": "Update the list (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Too many",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "11 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "8 seats",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "count <= seats",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "Room C, 12 seats",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The capacity check stops the list at eight and suggests a twelve-seat room.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "11 (suggest Room C)",
+                "tone": "warn"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 8,
+                "limit": 8,
+                "max": 12,
+                "ok": true
+              }
+            ],
+            "alert": "Move to Room C (12 seats) to invite everyone.",
+            "buttonLabel": "Update the list",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 4096,
+      "evidence": {
+        "ruleSummary": "For every confirmed booking, the number of attendees is at most the room’s seat count.",
+        "ifEnforced": "Large meetings are steered to rooms that fit them.",
+        "ifNotEnforced": "Meetings are overbooked and people stand or leave.",
+        "checkerSummary": "Sample: no violation, 4,096 states",
+        "scope": "3 rooms (4, 8, 12 seats), up to 14 attendees",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "organizer_edits",
+      "no": 3,
+      "short": "Organizer edits",
+      "title": "Only the organizer can change a booking",
+      "property": "OnlyOrganizerEdits",
+      "category": "security",
+      "source": "Access policy 2.4",
+      "previewTitle": "Booking details",
+      "figure": {
+        "boxes": {
+          "src1": "Edit request",
+          "src2": "Booking organizer",
+          "gate": "Permission check",
+          "pass": "Apply the edit",
+          "hold": "Show not allowed",
+          "bad": "Edited by other"
+        },
+        "arrows": {
+          "a1": "editor",
+          "a2": "organizer",
+          "a3": "organizer",
+          "a4": "other user",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Saved",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ana edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "editor = owner",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "saved",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Ana organizes the meeting, so her change is saved.",
+          "preview": {
+            "statusBadge": "Saved",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "allowed",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Your changes are saved.",
+            "buttonLabel": "Apply the edit",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Hijacked",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ben edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "any attendee",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "moved by Ben",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Any attendee can move or shorten someone else’s meeting.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ben",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "allowed",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Ana’s meeting was moved without her knowing.",
+            "buttonLabel": "Apply the edit (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Denied",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ben edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "editor = owner",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "not allowed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Only the organizer, or an assistant they named, can change the booking.",
+          "preview": {
+            "statusBadge": "Denied",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ben",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "denied",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Only Ana can change this booking.",
+            "buttonLabel": "Apply the edit",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 5402,
+      "evidence": {
+        "ruleSummary": "A booking is modified only by its organizer or a delegate the organizer named.",
+        "ifEnforced": "Meetings change only when their owner says so.",
+        "ifNotEnforced": "Attendees silently move each other’s meetings.",
+        "checkerSummary": "Sample: no violation, 5,402 states",
+        "scope": "4 users, 2 bookings, 1 delegate",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    }
+  ]
+}

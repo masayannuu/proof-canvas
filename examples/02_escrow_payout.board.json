@@ -1,0 +1,2600 @@
+{
+  "version": 1,
+  "runId": "escrow-payouts-sample",
+  "title": "Escrow payouts: 12 rules in 3 modules",
+  "subtitle": "TLA+ properties for deposits, disputes and payouts",
+  "generatedAt": "2026-11-27T00:00:00Z",
+  "provenance": "sample",
+  "provenanceNote": "Illustrative sample: statuses and the TLC-style counterexample were written by hand; no checker was run.",
+  "run": {
+    "tool": "TLA+ TLC",
+    "toolVersion": "TLC 2.19",
+    "status": "failed"
+  },
+  "modules": [
+    {
+      "id": "deposits",
+      "title": "Deposits & holds",
+      "summary": "Funding escrows and holding the money."
+    },
+    {
+      "id": "disputes",
+      "title": "Disputes",
+      "summary": "Opening, evidencing and resolving disputes."
+    },
+    {
+      "id": "payouts",
+      "title": "Payouts",
+      "summary": "Paying sellers safely and once."
+    }
+  ],
+  "rules": [
+    {
+      "id": "min_deposit",
+      "no": 1,
+      "moduleId": "deposits",
+      "short": "Minimum deposit",
+      "title": "An escrow opens only with the minimum deposit",
+      "property": "DepositAtLeastMinimum",
+      "category": "boundary",
+      "source": "Escrow terms 2.1",
+      "previewTitle": "Open escrow",
+      "figure": {
+        "boxes": {
+          "src1": "Open escrow",
+          "src2": "Minimum deposit",
+          "gate": "Amount check",
+          "pass": "Open the escrow",
+          "hold": "Ask for more",
+          "bad": "Underfunded escrow"
+        },
+        "arrows": {
+          "a1": "deposit",
+          "a2": "min $100",
+          "a3": "enough",
+          "a4": "too low",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Opened",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$100",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "min $100",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "amount >= min",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "opened",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A $100 deposit meets the minimum exactly, so the escrow opens.",
+          "preview": {
+            "statusBadge": "Opened",
+            "rows": [
+              {
+                "k": "Deposit",
+                "v": "$100",
+                "tone": "normal"
+              },
+              {
+                "k": "Minimum",
+                "v": "$100",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "opened",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Escrow opened.",
+            "buttonLabel": "Open the escrow",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Underfunded",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$40",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no amount check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "opened with $40",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "An escrow opens with $40, below the $100 minimum.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Deposit",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "Minimum",
+                "v": "$100",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "opened",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Fees exceed the escrowed amount.",
+            "buttonLabel": "Open the escrow (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Rejected",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$40",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "min $100",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "amount >= min",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "add $60",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Deposits under the minimum are rejected with the shortfall shown.",
+          "preview": {
+            "statusBadge": "Rejected",
+            "rows": [
+              {
+                "k": "Deposit",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "Minimum",
+                "v": "$100",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "add $60",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Deposit at least $100 to open an escrow.",
+            "buttonLabel": "Open the escrow",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 41280,
+      "evidence": {
+        "ruleSummary": "Every open escrow holds at least the minimum deposit.",
+        "ifEnforced": "No escrow is too small to cover its fees.",
+        "ifNotEnforced": "Tiny escrows cost more to run than they hold.",
+        "checkerSummary": "No violation in 41,280 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "exposure_cap",
+      "no": 2,
+      "moduleId": "deposits",
+      "short": "Exposure cap",
+      "title": "A buyer’s open exposure stays at or under $10k",
+      "property": "ExposureWithinCap",
+      "category": "boundary",
+      "source": "Risk policy 1.3",
+      "previewTitle": "Risk check",
+      "figure": {
+        "boxes": {
+          "src1": "New deposit",
+          "src2": "Open exposure",
+          "gate": "Exposure check",
+          "pass": "Hold the funds",
+          "hold": "Ask for review",
+          "bad": "Over the cap"
+        },
+        "arrows": {
+          "a1": "deposit",
+          "a2": "open total",
+          "a3": "within cap",
+          "a4": "over cap",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Held",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$2k",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "$8k open",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "total <= $10k",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "funds held",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "With $8k already open, a $2k deposit lands exactly on the $10k cap.",
+          "preview": {
+            "statusBadge": "Held",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "B-17",
+                "tone": "normal"
+              },
+              {
+                "k": "Open escrows",
+                "v": "3",
+                "tone": "normal"
+              },
+              {
+                "k": "Exposure",
+                "v": "$10k",
+                "tone": "ok"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Exposure <= 10k",
+                "value": 10,
+                "limit": 10,
+                "max": 14,
+                "unit": "k USD",
+                "ok": true
+              }
+            ],
+            "alert": "Within the exposure cap.",
+            "buttonLabel": "Hold the funds",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Over cap",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$3.5k",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "$8k open",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "per deposit only",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "$11.5k open",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Each deposit is checked alone, so the buyer’s open exposure reaches $11.5k.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "B-17",
+                "tone": "normal"
+              },
+              {
+                "k": "Open escrows",
+                "v": "4",
+                "tone": "normal"
+              },
+              {
+                "k": "Exposure",
+                "v": "$11.5k",
+                "tone": "bad"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Exposure <= 10k",
+                "value": 11.5,
+                "limit": 10,
+                "max": 14,
+                "unit": "k USD",
+                "ok": false
+              }
+            ],
+            "alert": "Risk exposure exceeds policy.",
+            "buttonLabel": "Hold the funds (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Review",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$3.5k",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "$8k open",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "total <= $10k",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "needs review",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Deposits that would push exposure past $10k go to manual review.",
+          "preview": {
+            "statusBadge": "Review",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "B-17",
+                "tone": "normal"
+              },
+              {
+                "k": "Open escrows",
+                "v": "3",
+                "tone": "normal"
+              },
+              {
+                "k": "Exposure",
+                "v": "$8k (+$3.5k held)",
+                "tone": "warn"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Exposure <= 10k",
+                "value": 8,
+                "limit": 10,
+                "max": 14,
+                "unit": "k USD",
+                "ok": true
+              }
+            ],
+            "alert": "This deposit needs a risk review.",
+            "buttonLabel": "Hold the funds",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 58920,
+      "evidence": {
+        "ruleSummary": "The sum of a buyer’s open escrows is at most $10,000.",
+        "ifEnforced": "Risk per buyer is bounded.",
+        "ifNotEnforced": "One buyer can concentrate unlimited risk across many escrows.",
+        "checkerSummary": "No violation in 58,920 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "deposit_idempotent",
+      "no": 3,
+      "moduleId": "deposits",
+      "short": "Deposit retries",
+      "title": "A retried deposit is applied once",
+      "property": "DepositIdempotent",
+      "category": "concurrency",
+      "source": "API spec 4.2",
+      "previewTitle": "Deposit API",
+      "figure": {
+        "boxes": {
+          "src1": "POST /deposit",
+          "src2": "Idempotency keys",
+          "gate": "Key already consumed?",
+          "pass": "Credit the escrow",
+          "hold": "Return HTTP 409 Conflict",
+          "bad": "Credited twice"
+        },
+        "arrows": {
+          "a1": "key k-91",
+          "a2": "used keys",
+          "a3": "new key",
+          "a4": "reused key",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Credited",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "k-91 first",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "k-91 unused",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "Check @enqueue",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "credited $500",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A new idempotency key credits the escrow once.",
+          "preview": {
+            "statusBadge": "Credited",
+            "rows": [
+              {
+                "k": "Key",
+                "v": "k-91",
+                "tone": "normal"
+              },
+              {
+                "k": "Request",
+                "v": "first",
+                "tone": "normal"
+              },
+              {
+                "k": "Credits",
+                "v": "1 x $500",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Deposit received.",
+            "buttonLabel": "Credit the escrow",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Twice",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "k-91 retry",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no key check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "credited $1,000",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The client retries after a timeout and the escrow is credited twice.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Key",
+                "v": "k-91",
+                "tone": "normal"
+              },
+              {
+                "k": "Request",
+                "v": "retry",
+                "tone": "normal"
+              },
+              {
+                "k": "Credits",
+                "v": "2 x $500",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The escrow shows money that was never sent.",
+            "buttonLabel": "Credit the escrow (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "409",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "k-91 retry",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "k-91 consumed",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "Check @enqueue",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "409 Conflict",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A reused key returns 409 Conflict with the original result.",
+          "preview": {
+            "statusBadge": "Conflict",
+            "rows": [
+              {
+                "k": "Key",
+                "v": "k-91",
+                "tone": "normal"
+              },
+              {
+                "k": "Request",
+                "v": "retry",
+                "tone": "normal"
+              },
+              {
+                "k": "Credits",
+                "v": "1 x $500",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Already processed. Returning the original deposit.",
+            "buttonLabel": "Credit the escrow",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 73410,
+      "evidence": {
+        "ruleSummary": "Each idempotency key credits an escrow at most once.",
+        "ifEnforced": "Client retries are safe.",
+        "ifNotEnforced": "Timeouts create phantom balances.",
+        "checkerSummary": "No violation in 73,410 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run",
+        "sourceQuote": "Servers MUST treat a repeated request with the same Idempotency-Key as the original request."
+      }
+    },
+    {
+      "id": "held_until_confirmed",
+      "no": 4,
+      "moduleId": "deposits",
+      "short": "Held until confirmed",
+      "title": "Funds stay held until both parties confirm",
+      "property": "HeldUntilBothConfirm",
+      "category": "safety",
+      "source": "Escrow terms 3.1",
+      "previewTitle": "Escrow status",
+      "figure": {
+        "boxes": {
+          "src1": "Release request",
+          "src2": "Confirmations",
+          "gate": "Two-party check",
+          "pass": "Release funds to seller",
+          "hold": "Keep holding",
+          "bad": "Released early"
+        },
+        "arrows": {
+          "a1": "release",
+          "a2": "buyer + seller",
+          "a3": "both",
+          "a4": "one missing",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Released",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "release E-3",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "both confirmed",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "both required",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "released",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Buyer and seller both confirmed delivery, so funds go to the seller.",
+          "preview": {
+            "statusBadge": "Released",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "confirmed",
+                "tone": "normal"
+              },
+              {
+                "k": "Seller",
+                "v": "confirmed",
+                "tone": "normal"
+              },
+              {
+                "k": "Funds",
+                "v": "released",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Funds released to the seller.",
+            "buttonLabel": "Release funds to seller",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Too early",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "release E-3",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "seller only",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "seller is enough",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "released early",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The seller alone triggers the release before the buyer confirms.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "waiting",
+                "tone": "warn"
+              },
+              {
+                "k": "Seller",
+                "v": "confirmed",
+                "tone": "normal"
+              },
+              {
+                "k": "Funds",
+                "v": "released",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The buyer paid for goods not yet received.",
+            "buttonLabel": "Release funds to seller (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Held",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "release E-3",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "seller only",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "both required",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "still held",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Funds stay held until the buyer confirms too.",
+          "preview": {
+            "statusBadge": "Held",
+            "rows": [
+              {
+                "k": "Buyer",
+                "v": "waiting",
+                "tone": "warn"
+              },
+              {
+                "k": "Seller",
+                "v": "confirmed",
+                "tone": "normal"
+              },
+              {
+                "k": "Funds",
+                "v": "held",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Waiting for the buyer to confirm.",
+            "buttonLabel": "Release funds to seller",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 64003,
+      "evidence": {
+        "ruleSummary": "An escrow is released only after both buyer and seller confirm.",
+        "ifEnforced": "Neither side can take the money alone.",
+        "ifNotEnforced": "Sellers can collect before delivery.",
+        "checkerSummary": "No violation in 64,003 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "no_release_in_dispute",
+      "no": 5,
+      "moduleId": "disputes",
+      "short": "Frozen in dispute",
+      "title": "No payout while a dispute is open",
+      "property": "InvNoReleaseDuringDispute",
+      "category": "concurrency",
+      "source": "Dispute policy 1.1",
+      "previewTitle": "Payout queue",
+      "figure": {
+        "boxes": {
+          "src1": "Queued payout",
+          "src2": "Dispute state",
+          "gate": "Freeze check",
+          "pass": "Pay the seller",
+          "hold": "Freeze the payout",
+          "bad": "Paid while disputed"
+        },
+        "arrows": {
+          "a1": "payout E-7",
+          "a2": "disputed?",
+          "a3": "no dispute",
+          "a4": "disputed",
+          "a5": "checked early"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Paid",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "payout E-7",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no dispute",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check at send",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "paid",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "There is no dispute, so the queued payout is sent.",
+          "preview": {
+            "statusBadge": "Paid",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-7",
+                "tone": "normal"
+              },
+              {
+                "k": "Dispute",
+                "v": "none",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "sent",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Payout sent.",
+            "buttonLabel": "Pay the seller",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Disputed!",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "payout E-7",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "opened later",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "Check @enqueue",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "paid anyway",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The dispute opens after the payout was queued, and the payout is still sent.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-7",
+                "tone": "normal"
+              },
+              {
+                "k": "Dispute",
+                "v": "opened 10:02",
+                "tone": "warn"
+              },
+              {
+                "k": "Payout",
+                "v": "sent 10:05",
+                "tone": "bad"
+              }
+            ],
+            "logLines": [
+              "enqueue(E-7) checks dispute = none",
+              "openDispute(E-7)",
+              "send(E-7)",
+              "InvNoReleaseDuringDispute = false"
+            ],
+            "alert": "Money left escrow during an open dispute.",
+            "buttonLabel": "Pay the seller (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Frozen",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "payout E-7",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "opened later",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check at send",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "frozen",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The dispute is checked again at send time, so the payout is frozen.",
+          "preview": {
+            "statusBadge": "Frozen",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-7",
+                "tone": "normal"
+              },
+              {
+                "k": "Dispute",
+                "v": "opened 10:02",
+                "tone": "warn"
+              },
+              {
+                "k": "Payout",
+                "v": "frozen",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Frozen until the dispute is resolved.",
+            "buttonLabel": "Pay the seller",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "status": "failed",
+      "evidence": {
+        "ruleSummary": "While an escrow has an open dispute, no payout from it is sent.",
+        "ifEnforced": "Disputed money stays in escrow until an arbiter decides.",
+        "ifNotEnforced": "A race between queueing and disputing lets money leave escrow.",
+        "checkerSummary": "Counterexample at depth 4 (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run",
+        "counterexample": "Error: Invariant InvNoReleaseDuringDispute is violated.\nState 1: <Initial predicate>\n  escrow = [E7 |-> \"funded\"], dispute = [E7 |-> FALSE], queue = <<>>\nState 2: <EnqueuePayout(E7)>\n  queue = <<E7>>\nState 3: <OpenDispute(E7)>\n  dispute = [E7 |-> TRUE]\nState 4: <SendPayout(E7)>\n  escrow = [E7 |-> \"paid\"], dispute = [E7 |-> TRUE]"
+      }
+    },
+    {
+      "id": "dispute_window",
+      "no": 6,
+      "moduleId": "disputes",
+      "short": "Dispute window",
+      "title": "Disputes can be opened for 14 days after delivery",
+      "property": "DisputeWithinWindow",
+      "category": "boundary",
+      "source": "Dispute policy 1.2",
+      "previewTitle": "Open a dispute",
+      "figure": {
+        "boxes": {
+          "src1": "Dispute request",
+          "src2": "Delivery date",
+          "gate": "Window check",
+          "pass": "Open the dispute",
+          "hold": "Show window closed",
+          "bad": "Late dispute"
+        },
+        "arrows": {
+          "a1": "today",
+          "a2": "delivered",
+          "a3": "within 14 d",
+          "a4": "after 14 d",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Opened",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 14",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "delivered 1 Nov",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "days <= 14",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "opened",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Day 14 is the last day of the window, so the dispute opens.",
+          "preview": {
+            "statusBadge": "Opened",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "15 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Days",
+                "v": "14",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Dispute opened.",
+            "buttonLabel": "Open the dispute",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Too late",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 40",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "delivered 1 Nov",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no window check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "opened late",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A dispute opened 40 days after delivery freezes a long-settled escrow.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "11 Dec",
+                "tone": "normal"
+              },
+              {
+                "k": "Days",
+                "v": "40",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A settled escrow is reopened.",
+            "buttonLabel": "Open the dispute (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Closed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 40",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "delivered 1 Nov",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "days <= 14",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "window closed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Requests after day 14 are refused with the deadline shown.",
+          "preview": {
+            "statusBadge": "Closed",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "11 Dec",
+                "tone": "normal"
+              },
+              {
+                "k": "Days",
+                "v": "40 (closed)",
+                "tone": "warn"
+              }
+            ],
+            "alert": "The dispute window closed on 15 Nov.",
+            "buttonLabel": "Open the dispute",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 22016,
+      "evidence": {
+        "ruleSummary": "A dispute is opened at most 14 days after delivery.",
+        "ifEnforced": "Settled escrows stay settled.",
+        "ifNotEnforced": "Old transactions can be frozen at any time.",
+        "checkerSummary": "No violation in 22,016 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "evidence_deadline",
+      "no": 7,
+      "moduleId": "disputes",
+      "short": "Evidence deadline",
+      "title": "Evidence submitted after the deadline is not considered",
+      "property": "EvidenceBeforeDeadline",
+      "category": "boundary",
+      "source": "Dispute policy 2.4",
+      "previewTitle": "Dispute evidence",
+      "figure": {
+        "boxes": {
+          "src1": "Evidence upload",
+          "src2": "Deadline",
+          "gate": "Deadline check",
+          "pass": "Attach evidence",
+          "hold": "Mark as late",
+          "bad": "Late evidence used"
+        },
+        "arrows": {
+          "a1": "uploaded at",
+          "a2": "72 h limit",
+          "a3": "on time",
+          "a4": "late",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Attached",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "at 60 h",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "72 h limit",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "time <= limit",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "attached",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Evidence uploaded 60 hours in is on time.",
+          "preview": {
+            "statusBadge": "Attached",
+            "rows": [
+              {
+                "k": "Opened",
+                "v": "Mon 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Uploaded",
+                "v": "Wed 21:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "on time",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Evidence attached to the case.",
+            "buttonLabel": "Attach evidence",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Late",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "at 90 h",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not loaded",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no deadline check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "used late",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Evidence uploaded after the deadline still sways the decision.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Opened",
+                "v": "Mon 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Uploaded",
+                "v": "Fri 03:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "used",
+                "tone": "bad"
+              }
+            ],
+            "alert": "One party gets extra time the other did not.",
+            "buttonLabel": "Attach evidence (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Marked late",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "at 90 h",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "72 h limit",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "time <= limit",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "marked late",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Late evidence is kept on file but excluded from the decision.",
+          "preview": {
+            "statusBadge": "Late",
+            "rows": [
+              {
+                "k": "Opened",
+                "v": "Mon 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Uploaded",
+                "v": "Fri 03:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "excluded",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Submitted after the 72-hour deadline.",
+            "buttonLabel": "Attach evidence",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "pending",
+      "evidence": {
+        "ruleSummary": "Only evidence uploaded within 72 hours of the dispute opening is considered.",
+        "ifEnforced": "Both parties get the same time to respond.",
+        "ifNotEnforced": "Deadlines are meaningless.",
+        "checkerSummary": "Not run yet",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "arbiter_only",
+      "no": 8,
+      "moduleId": "disputes",
+      "short": "Arbiter decides",
+      "title": "Only an assigned arbiter can resolve a dispute",
+      "property": "OnlyArbiterResolves",
+      "category": "security",
+      "source": "Dispute policy 3.1",
+      "previewTitle": "Resolve dispute",
+      "figure": {
+        "boxes": {
+          "src1": "Resolve request",
+          "src2": "Assigned arbiter",
+          "gate": "Role check",
+          "pass": "Resolve the case",
+          "hold": "Show not allowed",
+          "bad": "Self-resolved"
+        },
+        "arrows": {
+          "a1": "actor",
+          "a2": "arbiter",
+          "a3": "arbiter",
+          "a4": "other",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Resolved",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Avery",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Avery assigned",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "actor = arbiter",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "resolved",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Avery is the assigned arbiter, so the decision is recorded.",
+          "preview": {
+            "statusBadge": "Resolved",
+            "rows": [
+              {
+                "k": "Actor",
+                "v": "Avery",
+                "tone": "normal"
+              },
+              {
+                "k": "Arbiter",
+                "v": "Avery",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "resolved",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Decision recorded.",
+            "buttonLabel": "Resolve the case",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Self-ruled",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "seller",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Avery assigned",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "any staff role",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "seller wins",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The seller’s own support login resolves the dispute in their favor.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Actor",
+                "v": "seller",
+                "tone": "normal"
+              },
+              {
+                "k": "Arbiter",
+                "v": "Avery",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "resolved",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A party decided its own dispute.",
+            "buttonLabel": "Resolve the case (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Denied",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "seller",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Avery assigned",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "actor = arbiter",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "not allowed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Only the assigned arbiter can resolve the case.",
+          "preview": {
+            "statusBadge": "Denied",
+            "rows": [
+              {
+                "k": "Actor",
+                "v": "seller",
+                "tone": "normal"
+              },
+              {
+                "k": "Arbiter",
+                "v": "Avery",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "denied",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Only the assigned arbiter can resolve this dispute.",
+            "buttonLabel": "Resolve the case",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 30744,
+      "evidence": {
+        "ruleSummary": "A dispute is resolved only by its assigned arbiter.",
+        "ifEnforced": "Decisions are impartial.",
+        "ifNotEnforced": "Parties can rule on their own disputes.",
+        "checkerSummary": "No violation in 30,744 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "payout_once",
+      "no": 9,
+      "moduleId": "payouts",
+      "short": "Pay out once",
+      "title": "An escrow is paid out exactly once",
+      "property": "PaidOutOnce",
+      "category": "concurrency",
+      "source": "Payout spec 1.1",
+      "previewTitle": "Payout ledger",
+      "figure": {
+        "boxes": {
+          "src1": "Payout job",
+          "src2": "Payout ledger",
+          "gate": "Ledger check",
+          "pass": "Send the payout",
+          "hold": "Skip, already paid",
+          "bad": "Paid twice"
+        },
+        "arrows": {
+          "a1": "escrow E-3",
+          "a2": "ledger",
+          "a3": "unpaid",
+          "a4": "paid",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Sent",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "E-3 run 1",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "unpaid",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "ledger check",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "sent $900",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The first job run pays out the escrow.",
+          "preview": {
+            "statusBadge": "Sent",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-3",
+                "tone": "normal"
+              },
+              {
+                "k": "Job run",
+                "v": "1",
+                "tone": "normal"
+              },
+              {
+                "k": "Payouts",
+                "v": "1 x $900",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Payout sent.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Paid twice",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "E-3 run 2",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no ledger check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "sent $1,800",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A restarted job pays the same escrow again.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-3",
+                "tone": "normal"
+              },
+              {
+                "k": "Job run",
+                "v": "2 (restart)",
+                "tone": "normal"
+              },
+              {
+                "k": "Payouts",
+                "v": "2 x $900",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The seller received the money twice.",
+            "buttonLabel": "Send the payout (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Skipped",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "E-3 run 2",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "paid",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "ledger check",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "already paid",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The ledger shows the escrow as paid, so the restart skips it.",
+          "preview": {
+            "statusBadge": "Skipped",
+            "rows": [
+              {
+                "k": "Escrow",
+                "v": "E-3",
+                "tone": "normal"
+              },
+              {
+                "k": "Job run",
+                "v": "2 (restart)",
+                "tone": "normal"
+              },
+              {
+                "k": "Payouts",
+                "v": "1 x $900",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Already paid out. Nothing to do.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 88160,
+      "evidence": {
+        "ruleSummary": "Every escrow has at most one successful payout.",
+        "ifEnforced": "Job restarts are harmless.",
+        "ifNotEnforced": "Crashes and restarts pay sellers twice.",
+        "checkerSummary": "No violation in 88,160 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "payout_within_balance",
+      "no": 10,
+      "moduleId": "payouts",
+      "short": "Within balance",
+      "title": "Payouts never exceed the escrow balance",
+      "property": "PayoutWithinBalance",
+      "category": "safety",
+      "source": "Payout spec 1.3",
+      "previewTitle": "Payout ledger",
+      "figure": {
+        "boxes": {
+          "src1": "Payout amount",
+          "src2": "Escrow balance",
+          "gate": "Balance check",
+          "pass": "Send the payout",
+          "hold": "Cap at balance",
+          "bad": "Negative balance"
+        },
+        "arrows": {
+          "a1": "amount",
+          "a2": "balance",
+          "a3": "covered",
+          "a4": "too much",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Sent",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$900",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "balance $900",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "amt <= balance",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "sent",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The payout equals the balance, leaving exactly zero.",
+          "preview": {
+            "statusBadge": "Sent",
+            "rows": [
+              {
+                "k": "Balance",
+                "v": "$900",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "$900",
+                "tone": "normal"
+              },
+              {
+                "k": "After",
+                "v": "$0",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Escrow settled.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Overdrawn",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$950 (incl. fee)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no balance check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "balance -$50",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The fee is added on top, so the payout exceeds the balance by $50.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Balance",
+                "v": "$900",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "$950",
+                "tone": "normal"
+              },
+              {
+                "k": "After",
+                "v": "-$50",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The platform covers the gap from its own funds.",
+            "buttonLabel": "Send the payout (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Capped",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$950 (incl. fee)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "balance $900",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "amt <= balance",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "fee deducted",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The fee is deducted from the payout instead of added to it.",
+          "preview": {
+            "statusBadge": "Capped",
+            "rows": [
+              {
+                "k": "Balance",
+                "v": "$900",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "$900",
+                "tone": "normal"
+              },
+              {
+                "k": "After",
+                "v": "$0",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Fee deducted from the payout.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 51200,
+      "evidence": {
+        "ruleSummary": "An escrow balance never goes below zero.",
+        "ifEnforced": "Payouts are always fully funded.",
+        "ifNotEnforced": "Fees silently overdraw escrows.",
+        "checkerSummary": "No violation in 51,200 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "verified_bank",
+      "no": 11,
+      "moduleId": "payouts",
+      "short": "Verified bank",
+      "title": "Payouts go only to a verified bank account",
+      "property": "PayoutToVerifiedAccount",
+      "category": "security",
+      "source": "Compliance policy 2",
+      "previewTitle": "Payout details",
+      "figure": {
+        "boxes": {
+          "src1": "Payout target",
+          "src2": "Account status",
+          "gate": "KYC check",
+          "pass": "Send the payout",
+          "hold": "Hold for KYC",
+          "bad": "Unverified account"
+        },
+        "arrows": {
+          "a1": "account",
+          "a2": "verified?",
+          "a3": "verified",
+          "a4": "pending KYC",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Sent",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "acct ...4021",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "verified",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "require KYC",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "sent",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The seller’s account passed verification, so the payout is sent.",
+          "preview": {
+            "statusBadge": "Sent",
+            "rows": [
+              {
+                "k": "Seller",
+                "v": "S-12",
+                "tone": "normal"
+              },
+              {
+                "k": "Account",
+                "v": "...4021",
+                "tone": "normal"
+              },
+              {
+                "k": "KYC",
+                "v": "verified",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Payout sent to ...4021.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Unverified",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "acct ...7788",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "just added",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "skips KYC",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "sent",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A bank account added minutes ago receives the payout without verification.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Seller",
+                "v": "S-12",
+                "tone": "normal"
+              },
+              {
+                "k": "Account",
+                "v": "...7788",
+                "tone": "normal"
+              },
+              {
+                "k": "KYC",
+                "v": "pending",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Funds may be going to a fraudster.",
+            "buttonLabel": "Send the payout (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "On hold",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "acct ...7788",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "just added",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "require KYC",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "held for KYC",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "New accounts must pass verification before receiving money.",
+          "preview": {
+            "statusBadge": "Held",
+            "rows": [
+              {
+                "k": "Seller",
+                "v": "S-12",
+                "tone": "normal"
+              },
+              {
+                "k": "Account",
+                "v": "...7788",
+                "tone": "normal"
+              },
+              {
+                "k": "KYC",
+                "v": "pending",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Held until the new account is verified.",
+            "buttonLabel": "Send the payout",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 19500,
+      "evidence": {
+        "ruleSummary": "Every payout targets a bank account that has passed verification.",
+        "ifEnforced": "Account takeovers cannot redirect money.",
+        "ifNotEnforced": "Changing the bank account is enough to steal a payout.",
+        "checkerSummary": "No violation in 19,500 states (sample)",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    },
+    {
+      "id": "payout_after_window",
+      "no": 12,
+      "moduleId": "payouts",
+      "short": "Payout after window",
+      "title": "Payouts wait until the dispute window closes",
+      "property": "PayoutAfterWindow",
+      "category": "liveness",
+      "source": "Payout spec 2.2",
+      "previewTitle": "Payout queue",
+      "figure": {
+        "boxes": {
+          "src1": "Delivery confirmed",
+          "src2": "Dispute window",
+          "gate": "Window gate",
+          "pass": "Pay out on day 15",
+          "hold": "Hold until day 15",
+          "bad": "Paid on day 1"
+        },
+        "arrows": {
+          "a1": "delivered",
+          "a2": "14 days",
+          "a3": "closed",
+          "a4": "open",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Paid",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 15",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "window closed",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "wait for close",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "paid",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The window closed yesterday, so the payout goes out.",
+          "preview": {
+            "statusBadge": "Paid",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Today",
+                "v": "16 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "sent",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Payout sent after the dispute window.",
+            "buttonLabel": "Pay out on day 15",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Too early",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 1",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no window gate",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "paid day 1",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The seller is paid the day after delivery, before the buyer can dispute.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Today",
+                "v": "2 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "sent",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A later dispute has no money left to freeze.",
+            "buttonLabel": "Pay out on day 15 (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Waiting",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "day 1",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "window open",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "wait for close",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "pay on day 15",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Payouts are scheduled for the day after the window closes.",
+          "preview": {
+            "statusBadge": "Scheduled",
+            "rows": [
+              {
+                "k": "Delivered",
+                "v": "1 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Today",
+                "v": "2 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Payout",
+                "v": "15 Nov",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Scheduled for 15 Nov.",
+            "buttonLabel": "Pay out on day 15",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "pending",
+      "evidence": {
+        "ruleSummary": "Every payout happens after its dispute window closes, and eventually does happen.",
+        "ifEnforced": "Disputes always have money to freeze.",
+        "ifNotEnforced": "Early payouts make disputes unenforceable.",
+        "checkerSummary": "Not run yet",
+        "scope": "Model: 2 buyers, 2 sellers, 3 escrows, amounts 0-12k",
+        "method": "Illustrative sample: hand-written to show a TLC-style board; no checker was run"
+      }
+    }
+  ]
+}

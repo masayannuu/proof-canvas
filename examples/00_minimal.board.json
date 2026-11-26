@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "runId": "minimal-sample",
+  "title": "Minimal board: one rule",
+  "subtitle": "The smallest valid board",
+  "generatedAt": "2026-11-27T00:00:00Z",
+  "provenance": "sample",
+  "run": { "tool": "Example checker", "status": "verified" },
+  "rules": [
+    {
+      "id": "stock_never_negative",
+      "no": 1,
+      "short": "Stock never negative",
+      "title": "An order never takes stock below zero",
+      "property": "StockNonNegative",
+      "source": "Inventory spec 1.1",
+      "previewTitle": "Checkout",
+      "status": "verified",
+      "figure": {
+        "boxes": { "src1": "Order", "src2": "Stock level", "gate": "Stock check", "pass": "Place order", "hold": "Show sold out", "bad": "Negative stock" },
+        "arrows": { "a1": "quantity", "a2": "in stock", "a3": "enough", "a4": "too few", "a5": "not checked" }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal", "tone": "normal", "route": ["a1", "a2", "a3"], "here": "pass", "edgeShort": "Placed",
+          "chips": [{ "box": "gate", "text": "2 <= 5", "tone": "good" }],
+          "takeaway": "Two items are ordered and five are in stock, so the order is placed.",
+          "preview": { "statusBadge": "Placed", "rows": [{ "k": "Ordered", "v": "2" }, { "k": "In stock", "v": "5", "tone": "ok" }], "alert": "Order placed.", "buttonLabel": "Place order", "buttonKind": "ok" }
+        },
+        "bug": {
+          "label": "Bug", "tone": "bug", "route": ["a1", "a5"], "here": "bad", "edgeShort": "Oversold",
+          "chips": [{ "box": "bad", "text": "stock -1", "tone": "bad" }],
+          "takeaway": "Without the check, six items are sold from a stock of five.",
+          "preview": { "statusBadge": "Violation", "rows": [{ "k": "Ordered", "v": "6" }, { "k": "In stock", "v": "-1", "tone": "bad" }], "alert": "One customer is promised an item that does not exist.", "buttonLabel": "Place order", "buttonKind": "danger" }
+        },
+        "fixed": {
+          "label": "Fixed", "tone": "safe", "route": ["a1", "a2", "a4"], "here": "hold", "edgeShort": "Sold out",
+          "chips": [{ "box": "gate", "text": "6 > 5", "tone": "good" }],
+          "takeaway": "The stock check stops the order and shows how many are left.",
+          "preview": { "statusBadge": "Blocked", "rows": [{ "k": "Ordered", "v": "6" }, { "k": "In stock", "v": "5", "tone": "warn" }], "alert": "Only 5 left. Lower the quantity.", "buttonLabel": "Place order", "buttonKind": "locked" }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "Stock on hand is never below zero after any order.",
+        "ifEnforced": "Orders larger than the stock are refused.",
+        "ifNotEnforced": "Customers buy items that do not exist.",
+        "checkerSummary": "Sample: no violation",
+        "scope": "1 product, stock 0-5, orders of 1-6",
+        "method": "Illustrative sample; no checker was run"
+      }
+    }
+  ]
+}

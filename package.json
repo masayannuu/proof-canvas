@@ -1,0 +1,14 @@
+{
+  "name": "proof-canvas",
+  "version": "1.0.0",
+  "description": "Render formal-verification results as one offline, single-file HTML board that people who do not read spec code can review.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node scripts/test_validator.mjs",
+    "bench": "node scripts/bench_scale.mjs"
+  }
+}

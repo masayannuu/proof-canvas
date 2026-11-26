@@ -1,0 +1,4329 @@
+{
+  "version": 1,
+  "runId": "room-booking-platform-sample",
+  "title": "Room booking platform: 20 rules in 4 modules",
+  "subtitle": "What each rule protects, what breaks without it, and how it was checked",
+  "generatedAt": "2026-11-27T00:00:00Z",
+  "provenance": "sample",
+  "provenanceNote": "Illustrative sample: statuses and counterexamples were written by hand to show the format; no checker was run.",
+  "run": {
+    "tool": "TLA+ TLC",
+    "toolVersion": "TLC 2.19",
+    "status": "failed"
+  },
+  "modules": [
+    {
+      "id": "booking",
+      "title": "Booking",
+      "summary": "Request, confirm and cancel room bookings."
+    },
+    {
+      "id": "rooms",
+      "title": "Rooms & capacity",
+      "summary": "Match meetings to rooms that fit them."
+    },
+    {
+      "id": "approvals",
+      "title": "Approvals & access",
+      "summary": "Who may book, approve and change what."
+    },
+    {
+      "id": "billing",
+      "title": "Billing & sync",
+      "summary": "Charges, budgets and calendar sync."
+    }
+  ],
+  "rules": [
+    {
+      "id": "no_double_booking",
+      "no": 1,
+      "moduleId": "booking",
+      "short": "No double booking",
+      "title": "A room is never booked twice for the same time",
+      "property": "NoOverlappingBookings",
+      "category": "safety",
+      "source": "Booking requirements 2.1",
+      "previewTitle": "Booking confirmation",
+      "figure": {
+        "boxes": {
+          "src1": "Booking request",
+          "src2": "Existing bookings",
+          "gate": "Overlap check",
+          "pass": "Confirm booking",
+          "hold": "Suggest another slot",
+          "bad": "Double booking"
+        },
+        "arrows": {
+          "a1": "room + time",
+          "a2": "same room",
+          "a3": "free",
+          "a4": "overlaps",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:00-11:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no overlap",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "compare times",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Room A is free from 10:00 to 11:00, so the booking is confirmed.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:00-11:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Existing booking",
+                "v": "none in the morning",
+                "tone": "ok"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:00, 11:00)",
+              "overlap(A, 10:00..11:00) = empty",
+              "state -> confirmed"
+            ],
+            "alert": "The slot is free. You can confirm the booking.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "30 min clash",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:30-11:30",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no overlap check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "2 bookings at 10:30",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Without the overlap check, a 10:30 booking is confirmed on top of the 10:00 meeting.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:30-11:30",
+                "tone": "normal"
+              },
+              {
+                "k": "Existing booking",
+                "v": "10:00-11:00 standup",
+                "tone": "bad"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:30, 11:30)",
+              "overlap check skipped",
+              "NoOverlappingBookings = false"
+            ],
+            "alert": "Confirm is still enabled although the slot overlaps.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:30-11:30",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "standup 10-11",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "compare times",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "suggest 11:00",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The 30-minute overlap is caught at the gate, and 11:00 is offered instead.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A (8 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "10:30-11:30",
+                "tone": "warn"
+              },
+              {
+                "k": "Existing booking",
+                "v": "suggest 11:00-12:00",
+                "tone": "ok"
+              }
+            ],
+            "logLines": [
+              "book(A, 10:30, 11:30)",
+              "overlap = 10:30..11:00 -> blocked",
+              "suggest 11:00..12:00"
+            ],
+            "alert": "This slot overlaps an existing booking, so Confirm is locked.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 18432,
+      "evidence": {
+        "ruleSummary": "Two confirmed bookings of the same room never have intersecting [start, end) intervals.",
+        "ifEnforced": "Any request that overlaps an existing booking by even one minute is rejected, and the nearest free slot is suggested.",
+        "ifNotEnforced": "Two teams arrive at the same room for the same meeting time.",
+        "checkerSummary": "Sample: no violation, 18,432 states",
+        "scope": "1 building, 3 rooms, 4 users, 8 half-hour slots",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run",
+        "sourceQuote": "A room cannot be booked by two meetings at the same time."
+      }
+    },
+    {
+      "id": "opening_hours",
+      "no": 2,
+      "moduleId": "booking",
+      "short": "Opening hours",
+      "title": "Bookings stay inside the building’s opening hours",
+      "property": "WithinOpeningHours",
+      "category": "boundary",
+      "source": "Booking requirements 2.3",
+      "previewTitle": "Booking form",
+      "figure": {
+        "boxes": {
+          "src1": "Booking request",
+          "src2": "Opening hours",
+          "gate": "Hours check",
+          "pass": "Confirm booking",
+          "hold": "Show closed hours",
+          "bad": "Booked after close"
+        },
+        "arrows": {
+          "a1": "end time",
+          "a2": "08:00-20:00",
+          "a3": "inside",
+          "a4": "outside",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "18:00-19:30",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "open to 20:00",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "end <= close",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The meeting ends at 19:30, before the 20:00 close, so it is confirmed.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Building",
+                "v": "North",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "18:00-19:30",
+                "tone": "normal"
+              },
+              {
+                "k": "Opening hours",
+                "v": "08:00-20:00",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The booking fits inside opening hours.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "After close",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "19:30-21:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "start time only",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "checks start only",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "ends at 21:00",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Only the start time is checked, so a meeting runs an hour past closing.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Building",
+                "v": "North",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "19:30-21:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Opening hours",
+                "v": "closes 20:00",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The building is locked before this meeting ends.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Rejected",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "19:30-21:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "closes 20:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "end <= close",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "show hours",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The whole interval must fit inside opening hours, so the request is rejected.",
+          "preview": {
+            "statusBadge": "Rejected",
+            "rows": [
+              {
+                "k": "Building",
+                "v": "North",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "19:30-21:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Opening hours",
+                "v": "ends after 20:00",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Pick a slot that ends by 20:00.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 6120,
+      "evidence": {
+        "ruleSummary": "Every confirmed booking starts at or after opening time and ends at or before closing time.",
+        "ifEnforced": "Requests that run past closing time are rejected with the opening hours shown.",
+        "ifNotEnforced": "Meetings are confirmed in a building that is locked before they end.",
+        "checkerSummary": "Sample: no violation, 6,120 states",
+        "scope": "1 building, opening hours 08:00-20:00, 30-minute grid",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "cancel_frees_slot",
+      "no": 3,
+      "moduleId": "booking",
+      "short": "Cancel frees slot",
+      "title": "Cancelling a booking frees its slot at once",
+      "property": "CancelReleasesSlot",
+      "category": "liveness",
+      "source": "Booking requirements 2.6",
+      "previewTitle": "Room calendar",
+      "figure": {
+        "boxes": {
+          "src1": "Cancel request",
+          "src2": "Slot holder",
+          "gate": "Release step",
+          "pass": "Slot freed",
+          "hold": "Keep pending",
+          "bad": "Slot stays taken"
+        },
+        "arrows": {
+          "a1": "booking id",
+          "a2": "holder",
+          "a3": "released",
+          "a4": "retry",
+          "a5": "skipped"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Freed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "cancel #812",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "holds 14:00",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "release slot",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "slot free",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Cancelling booking #812 releases the 14:00 slot for others.",
+          "preview": {
+            "statusBadge": "Freed",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#812",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "cancelled",
+                "tone": "normal"
+              },
+              {
+                "k": "Slot 14:00",
+                "v": "free",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The slot is available again.",
+            "buttonLabel": "Slot freed",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Ghost hold",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "cancel #812",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "still holds",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "status only",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "nobody can book",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Only the status changes, so the slot stays reserved by a cancelled booking.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#812",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "cancelled",
+                "tone": "normal"
+              },
+              {
+                "k": "Slot 14:00",
+                "v": "still reserved",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The calendar shows the room as busy forever.",
+            "buttonLabel": "Slot freed (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Freed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "cancel #812",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "holds 14:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "release slot",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "slot free",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Status and slot change in one step, so the slot is free as soon as the cancel commits.",
+          "preview": {
+            "statusBadge": "Freed",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#812",
+                "tone": "normal"
+              },
+              {
+                "k": "Status",
+                "v": "cancelled",
+                "tone": "normal"
+              },
+              {
+                "k": "Slot 14:00",
+                "v": "free",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The slot is free in the same step as the cancel.",
+            "buttonLabel": "Slot freed",
+            "buttonKind": "ok"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 9875,
+      "evidence": {
+        "ruleSummary": "After a booking is cancelled, its slot is eventually free, and no cancelled booking holds a slot.",
+        "ifEnforced": "A cancelled meeting gives its room back immediately.",
+        "ifNotEnforced": "Cancelled meetings keep rooms blocked and the calendar fills with ghost reservations.",
+        "checkerSummary": "Sample: no violation, 9,875 states (with fairness)",
+        "scope": "2 rooms, 3 users, up to 4 cancellations",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "verified_account",
+      "no": 4,
+      "moduleId": "booking",
+      "short": "Verified users only",
+      "title": "Only verified accounts can book rooms",
+      "property": "BookerIsVerified",
+      "category": "security",
+      "source": "Access policy 1.2",
+      "previewTitle": "Booking confirmation",
+      "figure": {
+        "boxes": {
+          "src1": "Booking request",
+          "src2": "Account status",
+          "gate": "Account check",
+          "pass": "Confirm booking",
+          "hold": "Ask to verify",
+          "bad": "Unverified booking"
+        },
+        "arrows": {
+          "a1": "user",
+          "a2": "verified?",
+          "a3": "verified",
+          "a4": "not yet",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "dana@corp",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "verified",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check account",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Dana has a verified account, so the booking goes through.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "User",
+                "v": "dana@corp",
+                "tone": "normal"
+              },
+              {
+                "k": "Email verified",
+                "v": "yes",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "confirmed",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Your booking is confirmed.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Unverified",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "new@corp",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "unverified",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "skips check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "room booked",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A freshly created, unverified account books the boardroom.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "User",
+                "v": "new@corp",
+                "tone": "normal"
+              },
+              {
+                "k": "Email verified",
+                "v": "no",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "confirmed",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Anyone with a new account can hold rooms.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Verify first",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "new@corp",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "unverified",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check account",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "verify email",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Unverified accounts are asked to verify their email before booking.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "User",
+                "v": "new@corp",
+                "tone": "normal"
+              },
+              {
+                "k": "Email verified",
+                "v": "no",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "verify email first",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Verify your email address to book rooms.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 2048,
+      "evidence": {
+        "ruleSummary": "Every confirmed booking belongs to an account whose email is verified.",
+        "ifEnforced": "Unverified accounts cannot hold rooms.",
+        "ifNotEnforced": "Throwaway accounts can reserve rooms and block real teams.",
+        "checkerSummary": "Sample: no violation, 2,048 states",
+        "scope": "4 accounts (2 verified), 2 rooms",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "recurring_holidays",
+      "no": 5,
+      "moduleId": "booking",
+      "short": "Holiday skips",
+      "title": "Recurring series skip public holidays",
+      "property": "SeriesSkipsHolidays",
+      "category": "correctness",
+      "source": "Booking requirements 3.1",
+      "previewTitle": "Recurring series",
+      "figure": {
+        "boxes": {
+          "src1": "Weekly series",
+          "src2": "Holiday calendar",
+          "gate": "Date check",
+          "pass": "Create occurrence",
+          "hold": "Skip the date",
+          "bad": "Booked on holiday"
+        },
+        "arrows": {
+          "a1": "next date",
+          "a2": "holidays",
+          "a3": "workday",
+          "a4": "holiday",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Created",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Mondays 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no holiday",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "date check",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "created",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "An ordinary Monday gets its weekly occurrence.",
+          "preview": {
+            "statusBadge": "Created",
+            "rows": [
+              {
+                "k": "Series",
+                "v": "Weekly standup",
+                "tone": "normal"
+              },
+              {
+                "k": "Date",
+                "v": "Mon 3 Nov",
+                "tone": "normal"
+              },
+              {
+                "k": "Holiday",
+                "v": "none",
+                "tone": "ok"
+              }
+            ],
+            "alert": "The occurrence is on the calendar.",
+            "buttonLabel": "Create occurrence",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "On holiday",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Mondays 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not loaded",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no date check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "booked on holiday",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The series ignores the holiday calendar and books the room on a public holiday.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Series",
+                "v": "Weekly standup",
+                "tone": "normal"
+              },
+              {
+                "k": "Date",
+                "v": "Mon 25 Dec",
+                "tone": "normal"
+              },
+              {
+                "k": "Holiday",
+                "v": "public holiday",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Facilities staff open the building for nobody.",
+            "buttonLabel": "Create occurrence (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Skipped",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Mondays 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "holiday 25 Dec",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "date check",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "date skipped",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Holiday dates are skipped and the series continues the following week.",
+          "preview": {
+            "statusBadge": "Skipped",
+            "rows": [
+              {
+                "k": "Series",
+                "v": "Weekly standup",
+                "tone": "normal"
+              },
+              {
+                "k": "Date",
+                "v": "Mon 25 Dec",
+                "tone": "normal"
+              },
+              {
+                "k": "Holiday",
+                "v": "skipped",
+                "tone": "ok"
+              }
+            ],
+            "alert": "This date is a public holiday, so it was skipped.",
+            "buttonLabel": "Create occurrence",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "pending",
+      "evidence": {
+        "ruleSummary": "No occurrence of a recurring series falls on a date in the holiday calendar.",
+        "ifEnforced": "Series silently skip holidays and resume afterwards.",
+        "ifNotEnforced": "Rooms are booked on days the building is closed.",
+        "checkerSummary": "Not run yet",
+        "scope": "Planned: 1 series, 12 weeks, 2 holidays",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "capacity",
+      "no": 6,
+      "moduleId": "rooms",
+      "short": "Capacity",
+      "title": "Attendees never exceed the room’s capacity",
+      "property": "AttendeesWithinCapacity",
+      "category": "boundary",
+      "source": "Room policy 1.1",
+      "previewTitle": "Attendee list",
+      "figure": {
+        "boxes": {
+          "src1": "Add attendees",
+          "src2": "Room capacity",
+          "gate": "Capacity check",
+          "pass": "Update the list",
+          "hold": "Suggest bigger room",
+          "bad": "Room over capacity"
+        },
+        "arrows": {
+          "a1": "attendees",
+          "a2": "seats",
+          "a3": "fits",
+          "a4": "too many",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Fits",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "8 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "8 seats",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "count <= seats",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "list updated",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Eight attendees in an eight-seat room is exactly at capacity, so it is accepted.",
+          "preview": {
+            "statusBadge": "Fits",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "8",
+                "tone": "ok"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 8,
+                "limit": 8,
+                "max": 12,
+                "ok": true
+              }
+            ],
+            "alert": "Everyone fits.",
+            "buttonLabel": "Update the list",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Over by 3",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "11 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no seat count",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "11 in 8 seats",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The invite list grows to eleven in a room with eight seats.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "11",
+                "tone": "bad"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 11,
+                "limit": 8,
+                "max": 12,
+                "ok": false
+              }
+            ],
+            "alert": "Three people will be standing.",
+            "buttonLabel": "Update the list (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Too many",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "11 people",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "8 seats",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "count <= seats",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "Room C, 12 seats",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The capacity check stops the list at eight and suggests a twelve-seat room.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Seats",
+                "v": "8",
+                "tone": "normal"
+              },
+              {
+                "k": "Attendees",
+                "v": "11 (suggest Room C)",
+                "tone": "warn"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Seats used",
+                "value": 8,
+                "limit": 8,
+                "max": 12,
+                "ok": true
+              }
+            ],
+            "alert": "Move to Room C (12 seats) to invite everyone.",
+            "buttonLabel": "Update the list",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 4096,
+      "evidence": {
+        "ruleSummary": "For every confirmed booking, the number of attendees is at most the room’s seat count.",
+        "ifEnforced": "Large meetings are steered to rooms that fit them.",
+        "ifNotEnforced": "Meetings are overbooked and people stand or leave.",
+        "checkerSummary": "Sample: no violation, 4,096 states",
+        "scope": "3 rooms (4, 8, 12 seats), up to 14 attendees",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "equipment",
+      "no": 7,
+      "moduleId": "rooms",
+      "short": "Equipment",
+      "title": "Rooms booked for video calls have a camera",
+      "property": "EquipmentMatches",
+      "category": "correctness",
+      "source": "Room policy 2.2",
+      "previewTitle": "Room picker",
+      "figure": {
+        "boxes": {
+          "src1": "Needs a camera",
+          "src2": "Room equipment",
+          "gate": "Equipment check",
+          "pass": "Offer the room",
+          "hold": "Hide the room",
+          "bad": "No camera"
+        },
+        "arrows": {
+          "a1": "needs",
+          "a2": "has",
+          "a3": "match",
+          "a4": "missing",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Offered",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "video call",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "camera: yes",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "needs <= has",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "offered",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Room B has a camera, so it is offered for the video call.",
+          "preview": {
+            "statusBadge": "Offered",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Client call",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Room B",
+                "tone": "normal"
+              },
+              {
+                "k": "Camera",
+                "v": "yes",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Room B has everything this meeting needs.",
+            "buttonLabel": "Offer the room",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "No camera",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "video call",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not checked",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "ignores needs",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "no camera",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A room without a camera is offered for a video call.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Client call",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Room D",
+                "tone": "normal"
+              },
+              {
+                "k": "Camera",
+                "v": "no",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The call starts in a room that cannot join it.",
+            "buttonLabel": "Offer the room (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Hidden",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "video call",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "camera: no",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "needs <= has",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "hidden",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Rooms that lack required equipment are not offered.",
+          "preview": {
+            "statusBadge": "Hidden",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Client call",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Room D",
+                "tone": "normal"
+              },
+              {
+                "k": "Camera",
+                "v": "no (hidden)",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Only rooms with a camera are shown.",
+            "buttonLabel": "Offer the room",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 1530,
+      "evidence": {
+        "ruleSummary": "Every offered room has all equipment the meeting requires.",
+        "ifEnforced": "People never land in a room that cannot run their meeting.",
+        "ifNotEnforced": "Video calls start in rooms without cameras.",
+        "checkerSummary": "Sample: no violation, 1,530 states",
+        "scope": "4 rooms, 3 equipment types",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "maintenance_block",
+      "no": 8,
+      "moduleId": "rooms",
+      "short": "Maintenance",
+      "title": "Rooms under maintenance cannot be booked",
+      "property": "NoBookingDuringMaintenance",
+      "category": "safety",
+      "source": "Facilities runbook 4",
+      "previewTitle": "Room picker",
+      "figure": {
+        "boxes": {
+          "src1": "Booking request",
+          "src2": "Maintenance plan",
+          "gate": "Availability check",
+          "pass": "Confirm booking",
+          "hold": "Show maintenance",
+          "bad": "Booked during repair"
+        },
+        "arrows": {
+          "a1": "room + time",
+          "a2": "blocked times",
+          "a3": "available",
+          "a4": "blocked",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Tue 14:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "none planned",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check blocks",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "No maintenance is planned on Tuesday, so the booking is confirmed.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room C",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "Tue 14:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Maintenance",
+                "v": "none",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Room C is available.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Under repair",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Wed 10:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not loaded",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "bookings only",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "booked in repair",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Only other bookings are checked, so the room is booked while it is being repaired.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room C",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "Wed 10:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Maintenance",
+                "v": "HVAC repair",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The meeting collides with the repair crew.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Blocked",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Wed 10:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "HVAC repair",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check blocks",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "shows repair",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Maintenance windows block bookings just like other meetings.",
+          "preview": {
+            "statusBadge": "Blocked",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Room C",
+                "tone": "normal"
+              },
+              {
+                "k": "Requested",
+                "v": "Wed 10:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Maintenance",
+                "v": "HVAC repair",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Room C is closed for maintenance at that time.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 3311,
+      "evidence": {
+        "ruleSummary": "No confirmed booking intersects a maintenance window of the same room.",
+        "ifEnforced": "Repair work and meetings never share a room.",
+        "ifNotEnforced": "People arrive to a room full of ladders.",
+        "checkerSummary": "Sample: no violation, 3,311 states",
+        "scope": "3 rooms, 2 maintenance windows, 8 slots",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "accessible_room",
+      "no": 9,
+      "moduleId": "rooms",
+      "short": "Step-free access",
+      "title": "Step-free meetings only get step-free rooms",
+      "property": "AccessibleWhenRequired",
+      "category": "correctness",
+      "source": "Accessibility policy 1",
+      "previewTitle": "Room picker",
+      "figure": {
+        "boxes": {
+          "src1": "Step-free needed",
+          "src2": "Room access",
+          "gate": "Access check",
+          "pass": "Offer the room",
+          "hold": "Hide the room",
+          "bad": "Stairs only"
+        },
+        "arrows": {
+          "a1": "needs",
+          "a2": "access",
+          "a3": "step-free",
+          "a4": "stairs",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Offered",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "step-free",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "lift access",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check access",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "offered",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Room A has lift access, so it is offered.",
+          "preview": {
+            "statusBadge": "Offered",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Design review",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Room A",
+                "tone": "normal"
+              },
+              {
+                "k": "Access",
+                "v": "lift",
+                "tone": "ok"
+              }
+            ],
+            "alert": "This room has step-free access.",
+            "buttonLabel": "Offer the room",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Stairs only",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "step-free",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not checked",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "ignores access",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "stairs only",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A mezzanine room with stairs only is offered to a step-free meeting.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Design review",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Mezzanine",
+                "tone": "normal"
+              },
+              {
+                "k": "Access",
+                "v": "stairs only",
+                "tone": "bad"
+              }
+            ],
+            "alert": "An attendee cannot reach the room.",
+            "buttonLabel": "Offer the room (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Hidden",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "step-free",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "stairs only",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check access",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "hidden",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Rooms without step-free access are hidden for these meetings.",
+          "preview": {
+            "statusBadge": "Hidden",
+            "rows": [
+              {
+                "k": "Meeting",
+                "v": "Design review",
+                "tone": "normal"
+              },
+              {
+                "k": "Room",
+                "v": "Mezzanine",
+                "tone": "normal"
+              },
+              {
+                "k": "Access",
+                "v": "stairs (hidden)",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Only step-free rooms are shown.",
+            "buttonLabel": "Offer the room",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 1210,
+      "evidence": {
+        "ruleSummary": "If a meeting requires step-free access, every room offered for it has step-free access.",
+        "ifEnforced": "Every attendee can reach the room.",
+        "ifNotEnforced": "Attendees who need step-free access are excluded.",
+        "checkerSummary": "Sample: no violation, 1,210 states",
+        "scope": "4 rooms (1 stairs only), 2 meeting types",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "cleaning_buffer",
+      "no": 10,
+      "moduleId": "rooms",
+      "short": "Cleaning buffer",
+      "title": "Large rooms keep a 15-minute cleaning gap",
+      "property": "CleaningGapKept",
+      "category": "boundary",
+      "source": "Facilities runbook 2",
+      "previewTitle": "Room calendar",
+      "figure": {
+        "boxes": {
+          "src1": "Back-to-back slot",
+          "src2": "Previous meeting",
+          "gate": "Gap check",
+          "pass": "Confirm booking",
+          "hold": "Shift by 15 min",
+          "bad": "No time to clean"
+        },
+        "arrows": {
+          "a1": "start 12:00",
+          "a2": "ends 12:00",
+          "a3": ">= 15 min",
+          "a4": "too close",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "starts 12:15",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "ends 12:00",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "gap >= 15",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A 15-minute gap after the previous meeting leaves time to clean.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Hall (40 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Previous ends",
+                "v": "12:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Gap",
+                "v": "15 min",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Cleaning fits between the meetings.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "No gap",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "starts 12:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "ends 12:00",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "only overlap",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "0 min gap",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Back-to-back bookings are allowed in the hall, leaving no time to clean it.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Hall (40 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Previous ends",
+                "v": "12:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Gap",
+                "v": "0 min",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The next meeting starts in an uncleaned hall.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Shifted",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "starts 12:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "ends 12:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "gap >= 15",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "start 12:15",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The booking is shifted to 12:15 to keep the cleaning gap.",
+          "preview": {
+            "statusBadge": "Shifted",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Hall (40 seats)",
+                "tone": "normal"
+              },
+              {
+                "k": "Previous ends",
+                "v": "12:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Gap",
+                "v": "15 min (shifted)",
+                "tone": "ok"
+              }
+            ],
+            "alert": "We moved your start to 12:15 to keep the cleaning gap.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "status": "failed",
+      "evidence": {
+        "ruleSummary": "For rooms with 20 or more seats, consecutive bookings are at least 15 minutes apart.",
+        "ifEnforced": "Large rooms are always cleaned between meetings.",
+        "ifNotEnforced": "Back-to-back events start in a messy room.",
+        "checkerSummary": "Sample: counterexample at depth 4",
+        "scope": "1 hall (40 seats), 2 back-to-back requests",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run",
+        "counterexample": "State 1: book(Hall, 11:00, 12:00) -> confirmed\nState 2: book(Hall, 12:00, 13:00) -> confirmed\nState 3: gap(Hall) = 0 min\nState 4: CleaningGapKept = false"
+      }
+    },
+    {
+      "id": "manager_approval",
+      "no": 11,
+      "moduleId": "approvals",
+      "short": "Manager approval",
+      "title": "The boardroom needs manager approval",
+      "property": "BoardroomApproved",
+      "category": "security",
+      "source": "Access policy 3.1",
+      "previewTitle": "Approval request",
+      "figure": {
+        "boxes": {
+          "src1": "Boardroom request",
+          "src2": "Approval state",
+          "gate": "Approval gate",
+          "pass": "Confirm booking",
+          "hold": "Wait for approval",
+          "bad": "Booked unapproved"
+        },
+        "arrows": {
+          "a1": "request",
+          "a2": "approved?",
+          "a3": "approved",
+          "a4": "waiting",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Approved",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "board meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "approved by Kim",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "require approval",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Kim approved the request, so the boardroom is booked.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Boardroom",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Kim (manager)",
+                "tone": "normal"
+              },
+              {
+                "k": "State",
+                "v": "approved",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Approved and confirmed.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "No approval",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "board meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "pending",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "skips approval",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "booked unapproved",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "The booking is confirmed while the approval is still pending.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Boardroom",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Kim (manager)",
+                "tone": "normal"
+              },
+              {
+                "k": "State",
+                "v": "pending",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Executives find their room taken by an unapproved meeting.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Waiting",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "board meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "pending",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "require approval",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "held for Kim",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The request waits until a manager approves it.",
+          "preview": {
+            "statusBadge": "Waiting",
+            "rows": [
+              {
+                "k": "Room",
+                "v": "Boardroom",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Kim (manager)",
+                "tone": "normal"
+              },
+              {
+                "k": "State",
+                "v": "pending",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Waiting for Kim to approve.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 2775,
+      "evidence": {
+        "ruleSummary": "A boardroom booking is confirmed only after a manager approves it.",
+        "ifEnforced": "The boardroom is used only for approved meetings.",
+        "ifNotEnforced": "Anyone can take the boardroom without asking.",
+        "checkerSummary": "Sample: no violation, 2,775 states",
+        "scope": "1 boardroom, 2 managers, 3 requesters",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "organizer_edits",
+      "no": 12,
+      "moduleId": "approvals",
+      "short": "Organizer edits",
+      "title": "Only the organizer can change a booking",
+      "property": "OnlyOrganizerEdits",
+      "category": "security",
+      "source": "Access policy 2.4",
+      "previewTitle": "Booking details",
+      "figure": {
+        "boxes": {
+          "src1": "Edit request",
+          "src2": "Booking organizer",
+          "gate": "Permission check",
+          "pass": "Apply the edit",
+          "hold": "Show not allowed",
+          "bad": "Edited by other"
+        },
+        "arrows": {
+          "a1": "editor",
+          "a2": "organizer",
+          "a3": "organizer",
+          "a4": "other user",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Saved",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ana edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "editor = owner",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "saved",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Ana organizes the meeting, so her change is saved.",
+          "preview": {
+            "statusBadge": "Saved",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "allowed",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Your changes are saved.",
+            "buttonLabel": "Apply the edit",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Hijacked",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ben edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "any attendee",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "moved by Ben",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Any attendee can move or shorten someone else’s meeting.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ben",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "allowed",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Ana’s meeting was moved without her knowing.",
+            "buttonLabel": "Apply the edit (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Denied",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Ben edits",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Ana organizes",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "editor = owner",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "not allowed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Only the organizer, or an assistant they named, can change the booking.",
+          "preview": {
+            "statusBadge": "Denied",
+            "rows": [
+              {
+                "k": "Editor",
+                "v": "Ben",
+                "tone": "normal"
+              },
+              {
+                "k": "Organizer",
+                "v": "Ana",
+                "tone": "normal"
+              },
+              {
+                "k": "Decision",
+                "v": "denied",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Only Ana can change this booking.",
+            "buttonLabel": "Apply the edit",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 5402,
+      "evidence": {
+        "ruleSummary": "A booking is modified only by its organizer or a delegate the organizer named.",
+        "ifEnforced": "Meetings change only when their owner says so.",
+        "ifNotEnforced": "Attendees silently move each other’s meetings.",
+        "checkerSummary": "Sample: no violation, 5,402 states",
+        "scope": "4 users, 2 bookings, 1 delegate",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "approval_expiry",
+      "no": 13,
+      "moduleId": "approvals",
+      "short": "Approval expiry",
+      "title": "Approvals expire after 24 hours",
+      "property": "StaleApprovalRejected",
+      "category": "boundary",
+      "source": "Access policy 3.3",
+      "previewTitle": "Approval request",
+      "figure": {
+        "boxes": {
+          "src1": "Confirm request",
+          "src2": "Approval time",
+          "gate": "Age check",
+          "pass": "Confirm booking",
+          "hold": "Ask again",
+          "bad": "Stale approval used"
+        },
+        "arrows": {
+          "a1": "now",
+          "a2": "approved at",
+          "a3": "< 24 h",
+          "a4": ">= 24 h",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Tue 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Mon 10:00",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "age < 24 h",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The approval is 23 hours old, so it can still be used.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Approved",
+                "v": "Mon 10:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Confirmed",
+                "v": "Tue 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Age",
+                "v": "23 h",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Approval is still valid.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Stale",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Fri 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Mon 10:00",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "never expires",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "stale approval",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "An approval from Monday is used to confirm a booking on Friday.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Approved",
+                "v": "Mon 10:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Confirmed",
+                "v": "Fri 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Age",
+                "v": "95 h",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The manager approved a different plan days ago.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Re-approve",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Fri 09:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Mon 10:00",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "age < 24 h",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "ask again",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Approvals older than 24 hours must be requested again.",
+          "preview": {
+            "statusBadge": "Expired",
+            "rows": [
+              {
+                "k": "Approved",
+                "v": "Mon 10:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Confirmed",
+                "v": "Fri 09:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Age",
+                "v": "95 h (expired)",
+                "tone": "warn"
+              }
+            ],
+            "alert": "This approval expired. Ask your manager again.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 3967,
+      "evidence": {
+        "ruleSummary": "A booking is confirmed only with an approval younger than 24 hours.",
+        "ifEnforced": "Approvals reflect the current plan.",
+        "ifNotEnforced": "Old approvals are reused for changed plans.",
+        "checkerSummary": "Sample: no violation, 3,967 states",
+        "scope": "Clock 0-120 h, 2 approvals, 2 confirms",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "assistant_delegate",
+      "no": 14,
+      "moduleId": "approvals",
+      "short": "Assistant booking",
+      "title": "Assistants book only for people who named them",
+      "property": "DelegationRespected",
+      "category": "security",
+      "source": "Access policy 2.6",
+      "previewTitle": "Book on behalf",
+      "figure": {
+        "boxes": {
+          "src1": "Book on behalf",
+          "src2": "Delegations",
+          "gate": "Delegation check",
+          "pass": "Confirm booking",
+          "hold": "Show not allowed",
+          "bad": "Booked for stranger"
+        },
+        "arrows": {
+          "a1": "assistant",
+          "a2": "delegates",
+          "a3": "delegated",
+          "a4": "not delegated",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Lee for Kim",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Kim named Lee",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check delegation",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Kim named Lee as an assistant, so Lee books on Kim’s behalf.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Assistant",
+                "v": "Lee",
+                "tone": "normal"
+              },
+              {
+                "k": "On behalf of",
+                "v": "Kim",
+                "tone": "normal"
+              },
+              {
+                "k": "Delegated",
+                "v": "yes",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Booked on behalf of Kim.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Impersonated",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Lee for Raj",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Raj named nobody",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "any assistant",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "booked as Raj",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Lee books rooms in Raj’s name without Raj delegating anything.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Assistant",
+                "v": "Lee",
+                "tone": "normal"
+              },
+              {
+                "k": "On behalf of",
+                "v": "Raj",
+                "tone": "normal"
+              },
+              {
+                "k": "Delegated",
+                "v": "no",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Raj is shown as the organizer of a meeting he never made.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Denied",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Lee for Raj",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "Raj named nobody",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check delegation",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "not allowed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Booking on behalf of someone requires their delegation.",
+          "preview": {
+            "statusBadge": "Denied",
+            "rows": [
+              {
+                "k": "Assistant",
+                "v": "Lee",
+                "tone": "normal"
+              },
+              {
+                "k": "On behalf of",
+                "v": "Raj",
+                "tone": "normal"
+              },
+              {
+                "k": "Delegated",
+                "v": "no",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Raj has not named you as an assistant.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 2560,
+      "evidence": {
+        "ruleSummary": "A booking made on behalf of a user exists only if that user delegated to the booker.",
+        "ifEnforced": "Nobody books in another person’s name without consent.",
+        "ifNotEnforced": "Assistants can impersonate anyone.",
+        "checkerSummary": "Sample: no violation, 2,560 states",
+        "scope": "3 executives, 2 assistants, 1 delegation each",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "guest_badges",
+      "no": 15,
+      "moduleId": "approvals",
+      "short": "Guest badges",
+      "title": "Guest badges are issued only for confirmed bookings",
+      "property": "BadgeNeedsBooking",
+      "category": "security",
+      "source": "Reception procedure 1",
+      "previewTitle": "Reception desk",
+      "figure": {
+        "boxes": {
+          "src1": "Badge request",
+          "src2": "Booking state",
+          "gate": "Booking check",
+          "pass": "Print badge",
+          "hold": "Ask the host",
+          "bad": "Badge without booking"
+        },
+        "arrows": {
+          "a1": "guest",
+          "a2": "host booking",
+          "a3": "confirmed",
+          "a4": "not yet",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Printed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Sam (guest)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "confirmed",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "check booking",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "badge printed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Sam’s host has a confirmed booking, so the badge is printed.",
+          "preview": {
+            "statusBadge": "Printed",
+            "rows": [
+              {
+                "k": "Guest",
+                "v": "Sam",
+                "tone": "normal"
+              },
+              {
+                "k": "Host booking",
+                "v": "Room B 15:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Badge",
+                "v": "printed",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Badge printed for Sam.",
+            "buttonLabel": "Print badge",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "No booking",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Sam (guest)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "cancelled",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no booking check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "badge printed",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Badges are printed even after the host cancelled the booking.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Guest",
+                "v": "Sam",
+                "tone": "normal"
+              },
+              {
+                "k": "Host booking",
+                "v": "cancelled",
+                "tone": "warn"
+              },
+              {
+                "k": "Badge",
+                "v": "printed",
+                "tone": "bad"
+              }
+            ],
+            "alert": "A guest walks in with no meeting to attend.",
+            "buttonLabel": "Print badge (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Ask host",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "Sam (guest)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "cancelled",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "check booking",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "call the host",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Reception calls the host when there is no confirmed booking.",
+          "preview": {
+            "statusBadge": "Held",
+            "rows": [
+              {
+                "k": "Guest",
+                "v": "Sam",
+                "tone": "normal"
+              },
+              {
+                "k": "Host booking",
+                "v": "cancelled",
+                "tone": "warn"
+              },
+              {
+                "k": "Badge",
+                "v": "not printed",
+                "tone": "warn"
+              }
+            ],
+            "alert": "No confirmed booking. Please call the host.",
+            "buttonLabel": "Print badge",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "pending",
+      "evidence": {
+        "ruleSummary": "A guest badge is issued only while its host booking is confirmed.",
+        "ifEnforced": "Guests are admitted only for real meetings.",
+        "ifNotEnforced": "Badges are handed out for cancelled meetings.",
+        "checkerSummary": "Not run yet",
+        "scope": "Planned: 2 hosts, 3 guests, cancellations",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "charge_once",
+      "no": 16,
+      "moduleId": "billing",
+      "short": "Charge once",
+      "title": "Each paid booking is charged exactly once",
+      "property": "ChargedOnce",
+      "category": "concurrency",
+      "source": "Billing spec 1.2",
+      "previewTitle": "Invoice",
+      "figure": {
+        "boxes": {
+          "src1": "Charge request",
+          "src2": "Payment log",
+          "gate": "Idempotency check",
+          "pass": "Charge the card",
+          "hold": "Return prior charge",
+          "bad": "Charged twice"
+        },
+        "arrows": {
+          "a1": "booking id",
+          "a2": "charges",
+          "a3": "first",
+          "a4": "repeat",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Charged",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "#4410 first",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no charge yet",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "idempotency key",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "charged $40",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The first charge for booking #4410 goes through.",
+          "preview": {
+            "statusBadge": "Charged",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#4410",
+                "tone": "normal"
+              },
+              {
+                "k": "Attempt",
+                "v": "1",
+                "tone": "normal"
+              },
+              {
+                "k": "Charges",
+                "v": "1 x $40",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Paid: $40.",
+            "buttonLabel": "Charge the card",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Twice",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "#4410 retry",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no key",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "charged $80",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A network retry charges the card a second time.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#4410",
+                "tone": "normal"
+              },
+              {
+                "k": "Attempt",
+                "v": "2 (retry)",
+                "tone": "normal"
+              },
+              {
+                "k": "Charges",
+                "v": "2 x $40",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The customer was charged twice.",
+            "buttonLabel": "Charge the card (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Same charge",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "#4410 retry",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "1 charge",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "idempotency key",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "prior charge",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The retry carries the same key and returns the original charge.",
+          "preview": {
+            "statusBadge": "Charged",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "#4410",
+                "tone": "normal"
+              },
+              {
+                "k": "Attempt",
+                "v": "2 (retry)",
+                "tone": "normal"
+              },
+              {
+                "k": "Charges",
+                "v": "1 x $40",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Already paid. No second charge.",
+            "buttonLabel": "Charge the card",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 12288,
+      "evidence": {
+        "ruleSummary": "For every booking, the number of successful charges is at most one.",
+        "ifEnforced": "Retries and double clicks never cost the customer twice.",
+        "ifNotEnforced": "Flaky networks turn into duplicate charges and refunds.",
+        "checkerSummary": "Sample: no violation, 12,288 states",
+        "scope": "2 bookings, up to 3 retries, 1 network drop",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "budget_cap",
+      "no": 17,
+      "moduleId": "billing",
+      "short": "Budget cap",
+      "title": "Team bookings stay within the monthly budget",
+      "property": "WithinTeamBudget",
+      "category": "boundary",
+      "source": "Billing spec 2.1",
+      "previewTitle": "Team budget",
+      "figure": {
+        "boxes": {
+          "src1": "Paid booking",
+          "src2": "Team budget",
+          "gate": "Budget check",
+          "pass": "Confirm booking",
+          "hold": "Ask for approval",
+          "bad": "Over budget"
+        },
+        "arrows": {
+          "a1": "cost",
+          "a2": "remaining",
+          "a3": "within",
+          "a4": "over",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Confirmed",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$120",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "$300 left",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "spent <= budget",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "confirmed",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The booking costs $120 and the team has $300 left this month.",
+          "preview": {
+            "statusBadge": "Confirmed",
+            "rows": [
+              {
+                "k": "Team",
+                "v": "Design",
+                "tone": "normal"
+              },
+              {
+                "k": "Budget",
+                "v": "$2,000 / month",
+                "tone": "normal"
+              },
+              {
+                "k": "After booking",
+                "v": "$1,820 spent",
+                "tone": "ok"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Spent this month",
+                "value": 1820,
+                "limit": 2000,
+                "max": 2400,
+                "unit": "USD",
+                "ok": true
+              }
+            ],
+            "alert": "Within budget.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Over budget",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$450",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "not consulted",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no budget check",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "$2,150 spent",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A $450 event is confirmed and pushes the team over its monthly budget.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Team",
+                "v": "Design",
+                "tone": "normal"
+              },
+              {
+                "k": "Budget",
+                "v": "$2,000 / month",
+                "tone": "normal"
+              },
+              {
+                "k": "After booking",
+                "v": "$2,150 spent",
+                "tone": "bad"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Spent this month",
+                "value": 2150,
+                "limit": 2000,
+                "max": 2400,
+                "unit": "USD",
+                "ok": false
+              }
+            ],
+            "alert": "Finance sees an overspend at month end.",
+            "buttonLabel": "Confirm booking (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Approval",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$450",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "$300 left",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "spent <= budget",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "needs approval",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Bookings that would exceed the budget wait for a finance approval.",
+          "preview": {
+            "statusBadge": "Held",
+            "rows": [
+              {
+                "k": "Team",
+                "v": "Design",
+                "tone": "normal"
+              },
+              {
+                "k": "Budget",
+                "v": "$2,000 / month",
+                "tone": "normal"
+              },
+              {
+                "k": "After booking",
+                "v": "$1,700 spent",
+                "tone": "ok"
+              }
+            ],
+            "bars": [
+              {
+                "label": "Spent this month",
+                "value": 1700,
+                "limit": 2000,
+                "max": 2400,
+                "unit": "USD",
+                "ok": true
+              }
+            ],
+            "alert": "This booking needs finance approval.",
+            "buttonLabel": "Confirm booking",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 7020,
+      "evidence": {
+        "ruleSummary": "The sum of a team’s confirmed paid bookings in a month never exceeds its budget without approval.",
+        "ifEnforced": "Overspending needs an explicit approval.",
+        "ifNotEnforced": "Budgets are discovered to be blown only at month end.",
+        "checkerSummary": "Sample: no violation, 7,020 states",
+        "scope": "2 teams, 1 month, 5 paid bookings",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "calendar_sync",
+      "no": 18,
+      "moduleId": "billing",
+      "short": "Calendar sync",
+      "title": "Calendar sync never overwrites a newer change",
+      "property": "NoLostUpdate",
+      "category": "concurrency",
+      "source": "Integration spec 1.4",
+      "previewTitle": "Calendar sync",
+      "figure": {
+        "boxes": {
+          "src1": "Sync from calendar",
+          "src2": "Current version",
+          "gate": "Version compare",
+          "pass": "Apply the update",
+          "hold": "Return HTTP 409 Conflict",
+          "bad": "Newer edit lost"
+        },
+        "arrows": {
+          "a1": "version v1",
+          "a2": "latest v2",
+          "a3": "same",
+          "a4": "older",
+          "a5": "not compared"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Applied",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "v2 from Google",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "stored v2",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "compare versions",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "applied",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The incoming change is based on the stored version, so it is applied.",
+          "preview": {
+            "statusBadge": "Applied",
+            "rows": [
+              {
+                "k": "Incoming",
+                "v": "v2",
+                "tone": "normal"
+              },
+              {
+                "k": "Stored",
+                "v": "v2",
+                "tone": "normal"
+              },
+              {
+                "k": "Result",
+                "v": "applied",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Calendars are in sync.",
+            "buttonLabel": "Apply the update",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Overwritten",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "v1 (stale)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "stored v2",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "last write wins",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "edit lost",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A stale sync silently overwrites a newer change made in the app.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Incoming",
+                "v": "v1 (stale)",
+                "tone": "normal"
+              },
+              {
+                "k": "Stored",
+                "v": "v2",
+                "tone": "normal"
+              },
+              {
+                "k": "Result",
+                "v": "overwritten",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The organizer’s new time is silently reverted.",
+            "buttonLabel": "Apply the update (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "409",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "v1 (stale)",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "stored v2",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "compare versions",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "409, resync",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Stale updates get 409 Conflict and the sync fetches the latest version first.",
+          "preview": {
+            "statusBadge": "Conflict",
+            "rows": [
+              {
+                "k": "Incoming",
+                "v": "v1 (stale)",
+                "tone": "normal"
+              },
+              {
+                "k": "Stored",
+                "v": "v2",
+                "tone": "normal"
+              },
+              {
+                "k": "Result",
+                "v": "409, resync",
+                "tone": "warn"
+              }
+            ],
+            "alert": "Conflict detected. Fetching the latest version.",
+            "buttonLabel": "Apply the update",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 15360,
+      "evidence": {
+        "ruleSummary": "An update is applied only if it was based on the latest stored version.",
+        "ifEnforced": "Two-way sync never loses an edit.",
+        "ifNotEnforced": "Edits made in one place vanish when the other syncs.",
+        "checkerSummary": "Sample: no violation, 15,360 states",
+        "scope": "1 booking, 2 writers (app and calendar), 3 versions",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "no_show_release",
+      "no": 19,
+      "moduleId": "billing",
+      "short": "No-show release",
+      "title": "Unclaimed rooms are released after 15 minutes",
+      "property": "NoShowReleased",
+      "category": "liveness",
+      "source": "Room policy 3.2",
+      "previewTitle": "Room panel",
+      "figure": {
+        "boxes": {
+          "src1": "Meeting starts",
+          "src2": "Check-in state",
+          "gate": "No-show timer",
+          "pass": "Keep the room",
+          "hold": "Release the room",
+          "bad": "Room sits empty"
+        },
+        "arrows": {
+          "a1": "start time",
+          "a2": "checked in?",
+          "a3": "checked in",
+          "a4": "15 min idle",
+          "a5": "no timer"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Kept",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:00 meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "checked in 10:03",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "timer 15 min",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "room kept",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The organizer checks in within 15 minutes, so the room is kept.",
+          "preview": {
+            "statusBadge": "In use",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "10:00-11:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Check-in",
+                "v": "10:03",
+                "tone": "normal"
+              },
+              {
+                "k": "Room state",
+                "v": "in use",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Checked in.",
+            "buttonLabel": "Keep the room",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Idle room",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:00 meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no check-in",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "no timer",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "empty until 11",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "Nobody shows up and the room stays reserved and empty for an hour.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "10:00-11:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Check-in",
+                "v": "none",
+                "tone": "normal"
+              },
+              {
+                "k": "Room state",
+                "v": "reserved, empty",
+                "tone": "bad"
+              }
+            ],
+            "alert": "Others cannot use a room that nobody is in.",
+            "buttonLabel": "Keep the room (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Released",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "10:00 meeting",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "no check-in",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "timer 15 min",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "free at 10:15",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "Without a check-in by 10:15 the room is released for others.",
+          "preview": {
+            "statusBadge": "Released",
+            "rows": [
+              {
+                "k": "Booking",
+                "v": "10:00-11:00",
+                "tone": "normal"
+              },
+              {
+                "k": "Check-in",
+                "v": "none",
+                "tone": "normal"
+              },
+              {
+                "k": "Room state",
+                "v": "free from 10:15",
+                "tone": "ok"
+              }
+            ],
+            "alert": "No check-in, so the room was released at 10:15.",
+            "buttonLabel": "Keep the room",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 8800,
+      "evidence": {
+        "ruleSummary": "A booking without check-in is eventually released, at most 15 minutes after its start.",
+        "ifEnforced": "No-shows do not waste rooms.",
+        "ifNotEnforced": "Rooms sit empty while others search for space.",
+        "checkerSummary": "Sample: no violation, 8,800 states (with fairness)",
+        "scope": "2 rooms, clock 0-60 min, 1-minute steps",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    },
+    {
+      "id": "refund_limit",
+      "no": 20,
+      "moduleId": "billing",
+      "short": "Refund limit",
+      "title": "Refunds never exceed what was charged",
+      "property": "RefundWithinCharge",
+      "category": "safety",
+      "source": "Billing spec 3.1",
+      "previewTitle": "Refund",
+      "figure": {
+        "boxes": {
+          "src1": "Refund request",
+          "src2": "Charged amount",
+          "gate": "Refund check",
+          "pass": "Issue refund",
+          "hold": "Cap the refund",
+          "bad": "Refund too large"
+        },
+        "arrows": {
+          "a1": "amount",
+          "a2": "charged",
+          "a3": "within",
+          "a4": "too much",
+          "a5": "not checked"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "Normal",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "edgeShort": "Refunded",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$40",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "charged $40",
+              "tone": "good"
+            },
+            {
+              "box": "gate",
+              "text": "total <= charge",
+              "tone": "good"
+            },
+            {
+              "box": "pass",
+              "text": "refunded",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "A full refund of the $40 charge is allowed.",
+          "preview": {
+            "statusBadge": "Refunded",
+            "rows": [
+              {
+                "k": "Charged",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "Refunded before",
+                "v": "$0",
+                "tone": "normal"
+              },
+              {
+                "k": "This refund",
+                "v": "$40",
+                "tone": "ok"
+              }
+            ],
+            "alert": "Refund issued.",
+            "buttonLabel": "Issue refund",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "Bug",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "edgeShort": "Over-refund",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$40 again",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "already $40",
+              "tone": "bad"
+            },
+            {
+              "box": "gate",
+              "text": "per request only",
+              "tone": "bad"
+            },
+            {
+              "box": "bad",
+              "text": "$80 refunded",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "A second full refund is issued for the same charge.",
+          "preview": {
+            "statusBadge": "Violation",
+            "rows": [
+              {
+                "k": "Charged",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "Refunded before",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "This refund",
+                "v": "$40 (total $80)",
+                "tone": "bad"
+              }
+            ],
+            "alert": "The company pays the customer twice.",
+            "buttonLabel": "Issue refund (unsafe)",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "Fixed",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "edgeShort": "Capped",
+          "chips": [
+            {
+              "box": "src1",
+              "text": "$40 again",
+              "tone": "neutral"
+            },
+            {
+              "box": "src2",
+              "text": "already $40",
+              "tone": "neutral"
+            },
+            {
+              "box": "gate",
+              "text": "total <= charge",
+              "tone": "good"
+            },
+            {
+              "box": "hold",
+              "text": "$0 left",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "The refund total is capped at the original charge.",
+          "preview": {
+            "statusBadge": "Capped",
+            "rows": [
+              {
+                "k": "Charged",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "Refunded before",
+                "v": "$40",
+                "tone": "normal"
+              },
+              {
+                "k": "This refund",
+                "v": "$0 (nothing left)",
+                "tone": "warn"
+              }
+            ],
+            "alert": "This charge is already fully refunded.",
+            "buttonLabel": "Issue refund",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "status": "verified",
+      "stepsChecked": 6400,
+      "evidence": {
+        "ruleSummary": "For every charge, the total refunded is at most the amount charged.",
+        "ifEnforced": "Refunds can never create money.",
+        "ifNotEnforced": "Duplicate refunds drain revenue.",
+        "checkerSummary": "Sample: no violation, 6,400 states",
+        "scope": "2 charges, up to 3 refund requests",
+        "method": "Illustrative sample: written by hand to show the board format; no checker was run"
+      }
+    }
+  ]
+}
