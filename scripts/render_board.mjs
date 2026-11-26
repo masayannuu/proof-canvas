@@ -435,20 +435,24 @@ const CSS = `
 .kv code { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-2); word-break: break-all; }
 
 /*@compact*/
-/* Compact overview (small boards): scaled live boards */
+/* Compact overview (small boards): clean header, unobstructed scaled preview, opaque takeaway */
 .ov-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 .ov-hint { font-size: 12.5px; color: var(--pc-ink-3); }
-.ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .ov-grid.is-single { grid-template-columns: minmax(0, 1fr); max-width: 820px; margin: 0 auto; }
 @container (max-width: 860px) { .ov-grid { grid-template-columns: minmax(0, 1fr); } }
-.ov-cell { position: relative; min-width: 0; overflow: hidden; border-radius: 12px; border: 1px solid var(--pc-bd); background: var(--pc-surface); box-shadow: var(--pc-shadow-1); }
-.ov-scale { transform-origin: top left; pointer-events: none; padding: 10px; }
-.ov-plate { position: absolute; inset: 0; z-index: 5; border: 1.5px solid transparent; border-radius: 12px; background: rgb(255 255 255 / 0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px; text-align: center; transition: background 0.16s, border-color 0.16s; }
-.ov-plate:hover { background: rgb(255 255 255 / 0.78); border-color: var(--pc-control); }
-.ov-plate .no { width: 38px; height: 38px; font-size: 16px; border-radius: 10px; border-color: var(--pc-bd-strong); }
-.ov-plate-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
-.ov-plate-sub { font-size: 12.5px; font-weight: 500; color: var(--pc-ink-3); }
-.ov-plate-take { font-size: 12.5px; font-weight: 600; max-width: 440px; }
+.ov-cell { position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden; border-radius: 12px; border: 1px solid var(--pc-bd); background: var(--pc-surface); box-shadow: var(--pc-shadow-1); transition: border-color 0.16s ease, box-shadow 0.16s ease; }
+.ov-cell:hover, .ov-cell:has(.ov-open:hover) { border-color: var(--pc-control); box-shadow: 0 4px 14px rgb(9 9 11 / 0.08); }
+.ov-cell:has(.ov-open:focus-visible) { outline: 2px solid var(--pc-control); outline-offset: 2px; }
+.ov-head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: var(--pc-surface); border-bottom: 1px solid var(--pc-bd); min-width: 0; }
+.ov-open { border: 0; background: transparent; padding: 0; text-align: left; font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.3; color: var(--pc-ink); text-wrap: balance; min-width: 0; }
+.ov-open::after { content: ""; position: absolute; inset: 0; z-index: 4; }
+.ov-open:focus-visible { outline: none; }
+.ov-badge { margin-left: auto; margin-bottom: 0; font-size: 11.5px; flex: none; white-space: nowrap; }
+.ov-stage { position: relative; flex: 0 0 auto; overflow: hidden; background: var(--pc-bg); }
+.ov-scale { transform-origin: top left; pointer-events: none; padding: 12px; }
+.ov-scale .take, .ov-scale .src { display: none; }
+.ov-take { flex: 1; display: flex; align-items: center; padding: 11px 14px; background: var(--pc-surface); border-top: 1px solid var(--pc-bd); font-size: 13px; font-weight: 600; line-height: 1.5; text-wrap: pretty; line-break: strict; }
 /*@end*/
 
 /*@index*/
@@ -760,10 +764,11 @@ ${SHARED_FNS}
       }).join('') + '</div><span class="ov-hint">' + esc(T.ovHint) + '</span></div>';
     const cells = RULES.map((r) => {
       const st = r.states[S.ovFocus];
-      return '<div class="ov-cell"><div class="ov-scale" data-ov>' + boardMarkup(r, S.ovFocus, 'ov-' + r.id, { noPills: true }) + '</div>' +
-        '<button type="button" class="ov-plate" data-act="rule-open" data-v="' + esc(r.id) + '"><span class="no">' + esc(r.no) + '</span>' +
-        '<span class="ov-plate-title">' + esc(r.short) + '</span><span class="ov-plate-sub">' + esc(st.label) + ' · ' + esc(st.preview.statusBadge) + '</span>' +
-        '<span class="ov-plate-take take-' + st.tone + '">' + esc(st.takeaway) + '</span></button></div>';
+      return '<article class="ov-cell"><header class="ov-head"><span class="no">' + esc(r.no) + '</span>' +
+        '<button type="button" class="ov-open" data-act="rule-open" data-v="' + esc(r.id) + '">' + esc(r.short) + '</button>' +
+        '<span class="ov-badge pv-badge pv-badge-' + st.tone + '">' + esc(st.label) + ' · ' + esc(st.preview.statusBadge) + '</span></header>' +
+        '<div class="ov-stage" aria-hidden="true"><div class="ov-scale" data-ov>' + boardMarkup(r, S.ovFocus, 'ov-' + r.id, { noPills: true }) + '</div></div>' +
+        '<p class="ov-take take-' + st.tone + '">' + esc(st.takeaway) + '</p></article>';
     }).join('');
     return fBar + '<div class="ov-grid ' + (RULES.length === 1 ? 'is-single' : '') + '">' + cells + '</div>';
   }
@@ -966,12 +971,12 @@ ${SHARED_FNS}
 
   function layout() {
     root.querySelectorAll('[data-ov]').forEach((el) => {
-      const cell = el.parentElement;
+      const stage = el.parentElement;
       const natural = 1120;
-      const k = Math.min(1, cell.clientWidth / natural);
+      const k = Math.min(1, stage.clientWidth / natural);
       el.style.width = natural + 'px';
       el.style.transform = 'scale(' + k + ')';
-      cell.style.height = Math.max(240, Math.ceil(el.scrollHeight * k)) + 'px';
+      stage.style.height = Math.max(160, Math.ceil(el.scrollHeight * k)) + 'px';
     });
     const nav = root.querySelector('#pc-index');
     if (nav) nav.style.maxHeight = getComputedStyle(nav).position === 'sticky' ? Math.min(720, Math.max(320, window.innerHeight - 84)) + 'px' : '';
