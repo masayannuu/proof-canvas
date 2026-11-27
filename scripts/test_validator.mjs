@@ -1618,6 +1618,18 @@ test('flow: boards without a flow ship no flow code, styles or copy', () => {
   for (const needle of ['function flowView', 'fl-stage', 'Inspect this rule', 'openFromFlow']) assert.ok(html.includes(needle), needle);
 });
 
+test('css: the minifier keeps every selector space and drops only bytes that carry no meaning', () => {
+  for (const [name, b, ev] of [['05', EX5, ex5Evidence()], ['01', EX1, undefined]]) {
+    const css = [...renderBoardHtml(b, ev).matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('');
+    assert.ok(css.includes('.pc-root :focus-visible{'), `${name}: the descendant space before :focus-visible was lost`);
+    assert.ok(css.includes('@media (max-width: 640px){'), `${name}: a media condition lost its space`);
+    assert.equal(/;}/.test(css), false, `${name}: a rule keeps its last ";"`);
+    assert.equal(/[{;][\w-]+: /.test(css), false, `${name}: a declaration keeps the space after ":"`);
+    assert.equal(/[\s:(,/-]0\.\d/.test(css), false, `${name}: a number keeps its leading 0`);
+    assert.equal(/\s,|,\s/.test(css), false, `${name}: a comma keeps a space`);
+  }
+});
+
 test('lang: Japanese boards get <html lang="ja"> and Japanese chrome; English boards stay CJK-free', () => {
   const ja = renderBoardHtml(EX6, ex5Evidence());
   assert.match(ja, /<html lang="ja">/);

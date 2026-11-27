@@ -313,7 +313,7 @@ move the figure, the connector and the preview together, and Failed filters to t
 
 In a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.html>` shows every
 rule in every state, and **Proof & log** on the bug state, in headless Chromium; `flow` real-clicks
-the flow map. They fail on overlaps, text outside its box, clipped text, page overflow, or
+the flow map; `mobile` taps through both on 390 and 375px phones. They fail on overlaps, text outside its box, clipped text, page overflow, or
 console errors; `sweep` also on a trace that disagrees with the binding.
 
 ## 5. Honesty rules

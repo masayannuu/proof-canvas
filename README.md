@@ -283,7 +283,7 @@ scripts/
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
-  sweep_figures.py    headless Chromium layout sweep, flow click sweep and screenshots (development only)
+  sweep_figures.py    headless Chromium layout sweep, flow click sweep, phone sweep and screenshots (development only)
 examples/
   00-03               sample boards
   04_refund_guard/    Quint spec and log

@@ -4,6 +4,8 @@
       [--viewport 1440x900] [--viewport 900x700] [--shots DIR]
   uv run --with playwright==1.65.2 python scripts/sweep_figures.py flow out/board.html [more.html ...]
       [--viewport 1440x900] [--viewport 900x700] [--shots DIR]
+  uv run --with playwright==1.65.2 python scripts/sweep_figures.py mobile out/board.html [more.html ...]
+      [--viewport 390x844] [--viewport 375x812] [--shots DIR]
   uv run --with playwright==1.65.2 python scripts/sweep_figures.py shot out/board.html out.png
       [--viewport 1440x900] [--state '{"ruleId": "...", "focusByRule": {...}, "evOpen": true}'] [--full]
 
@@ -24,7 +26,17 @@ label overlap, text outside or clipped in a stage, horizontal overflow, or any c
 without a flow must show no flow controls and its overview button must still toggle. No board may
 show a search box or a select. With `outOfScope`, the note must sit below the main view in every view
 checked, list exactly the JSON entries, fit its box, and keep its open/closed state across re-renders;
-without it there must be no note.
+without it there must be no note. Above a 760px main column the map must be drawn in 2D; at or below
+it the stages must stack, with stage titles of 12px or more and chips 34px or taller.
+`mobile` opens each board as a touch phone (default 390x844 and 375x812) and runs `flow` and `sweep`
+there, then taps through it: the last chip of the stacked map must open its rule with the heading on
+screen; every scenario button and the "Proof & log" drawer must respond, the three scenario buttons must share
+one row, the rule number must sit beside its title, and a figure scrolled sideways must keep its place
+across scenarios and never scroll vertically; on index layouts the index,
+opened from the bottom of the page, must show on screen and close when a rule is picked, showing the
+rule. On every screen the page must not overflow, the bar must scroll with the page and keep its buttons
+inside its border, and no header, main-column, scenario or footer element may leave the screen or clip.
+A 1440x900 control checks that the sticky index stays open after a pick.
 `shot` saves one 2x screenshot of a board after applying a state.
 """
 
@@ -119,8 +131,16 @@ DRAWER_PROBE_JS = """(rid) => {
 FLOW_PROBE_JS = """() => {
   const de = document.documentElement;
   const fl = document.querySelector('#proof-canvas-root [data-flow]');
-  const out = { overflowX: de.scrollWidth - de.clientWidth, stageHits: 0, pillHits: 0, outside: 0, clipped: 0, offCard: 0 };
+  const out = { overflowX: de.scrollWidth - de.clientWidth, stageHits: 0, pillHits: 0, outside: 0, clipped: 0, offCard: 0, wrongLayout: 0, small: 0 };
   if (!fl) return null;
+  // The map is drawn in 2D above a 760px main column and reflowed into stacked stages at or below it,
+  // where stage titles are at least 12px and chips finger-sized (34px or taller).
+  const stacked = getComputedStyle(fl.querySelector('.fl-svg')).display === 'none';
+  if (stacked !== (document.querySelector('#proof-canvas-root .pc-main').clientWidth <= 760)) out.wrongLayout = 1;
+  if (stacked) {
+    for (const t of fl.querySelectorAll('.fl-st-t')) if (parseFloat(getComputedStyle(t).fontSize) < 12) out.small += 1;
+    for (const c of fl.querySelectorAll('.fl-chip')) if (c.getBoundingClientRect().height < 34) out.small += 1;
+  }
   const R = (el) => el.getBoundingClientRect();
   const meets = (a, b) => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) > 0.5 && Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) > 0.5;
   const outside = (t, r) => Math.max(0, r.left - t.left, t.right - r.right, r.top - t.top, t.bottom - r.bottom);
@@ -134,7 +154,7 @@ FLOW_PROBE_JS = """() => {
     if (s.scrollHeight > s.clientHeight + 1) out.clipped += 1;
   });
   const canvas = R(fl.querySelector('.fl-canvas'));
-  const pills = [...fl.querySelectorAll('.fl-edge')].map((g) => {
+  const pills = stacked ? [] : [...fl.querySelectorAll('.fl-edge')].map((g) => {
     const p = R(g.querySelector('.fl-pill'));
     out.outside = Math.max(out.outside, outside(R(g.querySelector('.fl-elabel')), p), outside(p, canvas));
     return p;
@@ -203,7 +223,7 @@ def checkpoint_focus(j):
     return j.get("checkpointFocus") or {"bug": "bug", "safe": "fixed"}.get(j["tone"], "normal")
 
 
-def flow_sweep(browser, html, viewports, shots):
+def flow_sweep(browser, html, viewports, shots, phone=False):
     """Real-click every flow control of one board at each viewport. Returns (clicks, failures)."""
     name = Path(html).name
     failures, clicks = [], 0
@@ -213,7 +233,7 @@ def flow_sweep(browser, html, viewports, shots):
 
     for w, h in viewports:
         at = f"{w}x{h}"
-        page, log = open_board(browser, html, w, h)
+        page, log = open_board(browser, html, w, h, phone)
         board = page.evaluate("window.__proofCanvas.getBoard()")
         layout = page.evaluate("window.__proofCanvas.layout")
         hub_sel = '.pc-float-bar [data-act="view"][data-v="flow"]'
@@ -387,14 +407,151 @@ def flow_sweep(browser, html, viewports, shots):
         page.close()
     return clicks, failures
 
+# A phone screen: no page overflow, the bar scrolls away with the page and keeps every button inside
+# its border, nothing in the header, main column or footer leaves the screen, and no control is clipped.
+PHONE_PROBE_JS = """() => {
+  const de = document.documentElement;
+  const root = document.getElementById('proof-canvas-root');
+  const R = (el) => el.getBoundingClientRect();
+  const out = { overflowX: de.scrollWidth - de.clientWidth, sticky: 0, spill: 0, offScreen: 0, clipped: 0, segRows: 0, badgeApart: 0, vScroll: 0 };
+  // A figure may scroll sideways, never vertically (that would catch the page's vertical swipe).
+  for (const w of root.querySelectorAll('.fg-wrap')) if (w.scrollHeight > w.clientHeight + 1) out.vScroll += 1;
+  // The three scenario buttons share one row, and the rule number sits beside its title.
+  const seg = [...root.querySelectorAll('.fig .fx-seg button')].map((b) => R(b).top);
+  if (seg.some((t) => Math.abs(t - seg[0]) > 4)) out.segRows = 1;
+  const no = root.querySelector('.fig-head .no');
+  if (no && Math.abs(R(no).top - R(root.querySelector('.fig-title')).top) > 6) out.badgeApart = 1;
+  if (getComputedStyle(root.querySelector('.pc-float-wrap')).position !== 'static') out.sticky = 1;
+  const bar = R(root.querySelector('.pc-float-bar'));
+  for (const el of root.querySelectorAll('.pc-float-bar button')) {
+    const r = R(el);
+    if (r.left < bar.left - 0.5 || r.right > bar.right + 0.5 || r.top < bar.top - 0.5 || r.bottom > bar.bottom + 0.5) out.spill += 1;
+  }
+  for (const el of root.querySelectorAll('.pc-head > *, .pc-float-bar, .pc-main > *, .fx > *, .pc-foot > *')) {
+    const r = R(el);
+    if (r.width && (r.left < -0.5 || r.right > de.clientWidth + 0.5)) out.offScreen += 1;
+  }
+  for (const el of root.querySelectorAll('.pc-float-bar button, .fx button, .fl-jbar button, .crumb-pos')) if (el.scrollWidth > el.clientWidth + 1) out.clipped += 1;
+  return out;
+}"""
+
+# Top of an element relative to the viewport, or null when it is not on the page.
+TOP_JS = "(sel) => { const el = document.querySelector('#proof-canvas-root ' + sel); return el ? el.getBoundingClientRect().top : null; }"
+
+
+def phone_sweep(browser, html, viewports, shots):
+    """Real taps on a phone: the flow map's last chip, every scenario button, the evidence drawer, and
+    on index layouts the index opened from the bottom of the page and closed by a rule pick. A desktop
+    control keeps the index open after a pick. Returns (taps, failures)."""
+    name = Path(html).name
+    failures, taps = [], 0
+
+    def fail(where, msg):
+        failures.append(f"{name} {where}: {msg}")
+
+    for w, h in viewports:
+        at = f"{w}x{h}"
+        page, log = open_board(browser, html, w, h, phone=True)
+        board = page.evaluate("window.__proofCanvas.getBoard()")
+        layout = page.evaluate("window.__proofCanvas.layout")
+        state = lambda: page.evaluate("window.__proofCanvas.getState()")
+
+        def tap(loc, label):
+            nonlocal taps
+            if not loc.count():
+                raise MissingControl(label)
+            loc.tap()
+            taps += 1
+            settle(page)
+
+        def probe(label):
+            p = page.evaluate(PHONE_PROBE_JS)
+            bad = [f"{k}={v}" for k, v in p.items() if v > 0]
+            if bad:
+                fail(f"{at} {label}", ", ".join(bad))
+            if shots:
+                Path(shots).mkdir(parents=True, exist_ok=True)
+                page.screenshot(path=str(Path(shots) / f"{Path(html).stem}-{w}-{label}.png"))
+
+        def on_screen(sel, label):
+            top = page.evaluate(TOP_JS, sel)
+            if top is None or not 0 <= top < h:
+                fail(f"{at} {label}", f"{sel} top={top} is off screen")
+
+        try:
+            if page.evaluate("innerWidth") != w:
+                fail(at, f"the page lays out at {page.evaluate('innerWidth')}px, not the {w}px screen")
+            probe("start")
+            if board.get("flow"):
+                if state()["view"] != "flow":
+                    tap(page.locator('.pc-float-bar [data-act="view"][data-v="flow"]'), "flow button")
+                probe("flow")
+                # The last chip sits at the end of the stacked map; its rule must open at its heading.
+                last = page.locator("[data-flow] .fl-chip").last
+                rid = last.get_attribute("data-v")
+                tap(last, "last flow chip")
+                if (state()["view"], state()["ruleId"]) != ("focus", rid):
+                    fail(f"{at} last chip", f"landed on {state()['view']}/{state()['ruleId']}, want focus/{rid}")
+                on_screen(".fig-title", "last chip")
+            elif state()["view"] != "focus":
+                page.evaluate("(s) => window.__proofCanvas.setState(s)", {"view": "focus"})
+            # The figure, scrolled sideways, keeps its place while each scenario is tapped.
+            x0 = page.evaluate("() => { const w = document.querySelector('#proof-canvas-root .fg-wrap'); w.scrollLeft = 80; return w.scrollLeft; }")
+            for k in ["normal", "bug", "fixed"]:
+                tap(page.locator(f'.fx [data-act="focus"][data-v="{k}"]'), f"scenario {k}")
+                if page.locator(f'.fx [data-act="focus"][data-v="{k}"][aria-pressed="true"]').count() != 1:
+                    fail(f"{at} scenario {k}", "the tapped scenario is not pressed")
+                x = page.evaluate("() => document.querySelector('#proof-canvas-root .fg-wrap').scrollLeft")
+                if x != x0:
+                    fail(f"{at} scenario {k}", f"the figure scrolled from {x0}px to {x}px")
+                probe(f"scenario-{k}")
+            tap(page.locator('[data-act="ev"]'), "evidence toggle")
+            if page.locator('[data-act="ev"][aria-expanded="true"]').count() != 1:
+                fail(f"{at} evidence", "the drawer did not open")
+            probe("evidence")
+            if layout == "index":
+                # Opened from the bottom of the page, the index shows on screen; a pick closes it and
+                # shows the rule.
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+                tap(page.locator('[data-act="index"]'), "index toggle")
+                if not state()["indexOpen"]:
+                    fail(f"{at} index", "the index did not open")
+                on_screen(".pc-index", "index open")
+                probe("index")
+                row = page.locator(".ix-row").nth(1)
+                rid = row.get_attribute("data-v")
+                tap(row, "index row")
+                s = state()
+                if (s["indexOpen"], s["view"], s["ruleId"]) != (False, "focus", rid):
+                    fail(f"{at} index pick", f"indexOpen={s['indexOpen']} view={s['view']} rule={s['ruleId']}, want closed on {rid}")
+                on_screen(".fig-title", "index pick")
+                probe("index-pick")
+        except MissingControl as e:
+            fail(at, f"no tappable {e} (the previous step left the wrong screen)")
+        for kind in ["console", "pageErrors", "external"]:
+            if log[kind]:
+                fail(at, f"{kind}: {log[kind][:3]}")
+        page.close()
+    if layout == "index":
+        # Control: beside a wide main view the index is sticky and stays open after a pick.
+        page, log = open_board(browser, html, 1440, 900)
+        if not page.evaluate("window.__proofCanvas.getState().indexOpen"):
+            page.locator('[data-act="index"]').click()
+        page.locator(".ix-row").nth(1).click()
+        settle(page)
+        if not page.evaluate("window.__proofCanvas.getState().indexOpen"):
+            fail("1440x900", "a rule pick closed the sticky index")
+        page.close()
+    return taps, failures
+
 
 def parse_viewports(args, default):
     vps = [tuple(int(x) for x in a.split("x")) for a in args] or [default]
     return vps
 
 
-def open_board(browser, html, w, h):
-    page = browser.new_page(viewport={"width": w, "height": h}, device_scale_factor=2)
+def open_board(browser, html, w, h, phone=False):
+    page = browser.new_page(viewport={"width": w, "height": h}, device_scale_factor=2, is_mobile=phone, has_touch=phone)
     log = {"console": [], "pageErrors": [], "external": []}
     page.on("console", lambda m: log["console"].append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: log["pageErrors"].append(str(e)))
@@ -408,11 +565,11 @@ def settle(page):
     page.evaluate("() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))")
 
 
-def sweep(browser, html, viewports, shots):
+def sweep(browser, html, viewports, shots, phone=False):
     failures = []
     views = 0
     for w, h in viewports:
-        page, log = open_board(browser, html, w, h)
+        page, log = open_board(browser, html, w, h, phone)
         rules = page.evaluate("window.__proofCanvas.getBoard().rules.map((r) => r.id)")
         for rid in rules:
             for k in ["normal", "bug", "fixed"]:
@@ -450,7 +607,7 @@ def sweep(browser, html, viewports, shots):
 
 def main():
     args = sys.argv[1:]
-    if not args or args[0] not in ("sweep", "flow", "shot"):
+    if not args or args[0] not in ("sweep", "flow", "mobile", "shot"):
         raise SystemExit(__doc__)
     cmd, rest = args[0], args[1:]
     files, vps, opts = [], [], {}
@@ -482,6 +639,20 @@ def main():
             for f in failures:
                 print("FAIL " + f)
             print(f"sweep: {total} views, {len(failures)} failure(s)")
+            sys.exit(1 if failures else 0)
+        if cmd == "mobile":
+            phones = parse_viewports(vps, (390, 844)) if vps else [(390, 844), (375, 812)]
+            totals, failures = [0, 0, 0], []
+            for html in files:
+                for i, run in enumerate([phone_sweep, flow_sweep, sweep]):
+                    n, f = run(browser, html, phones, opts.get("--shots")) if run is phone_sweep else run(browser, html, phones, opts.get("--shots"), phone=True)
+                    totals[i] += n
+                    failures += f
+                print(f"{html}: {len(failures)} failure(s) so far")
+            browser.close()
+            for f in failures:
+                print("FAIL " + f)
+            print(f"mobile: {len(files)} board(s) at {phones}, {totals[0]} taps, {totals[1]} flow clicks, {totals[2]} views, {len(failures)} failure(s)")
             sys.exit(1 if failures else 0)
         if cmd == "flow":
             total, failures = 0, []

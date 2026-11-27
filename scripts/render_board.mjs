@@ -305,7 +305,13 @@ const CSS = `
 .pc-canvas { background-color: var(--pc-bg); background-image: radial-gradient(rgba(9, 9, 11, 0.12) 1.25px, transparent 1.25px); background-size: 20px 20px; padding: 16px 24px 28px; }
 .pc-root[data-mode="embed"] .pc-canvas { padding: 12px 14px 16px; }
 .pc-wrap { max-width: 1260px; margin: 0 auto; }
-.pc-main { container-type: inline-size; min-width: 0; }
+.pc-main { container: pcm / inline-size; min-width: 0; scroll-margin-top: 60px; }
+/* Phones: the bar scrolls away with the page, the canvas gutter shrinks, footer codes wrap left. */
+@media (max-width: 640px) {
+  .pc-root[data-mode] .pc-canvas { padding-inline: 12px; }
+  .pc-float-wrap { position: static; }
+  .pc-float-sep, .pc-foot .pc-spacer { display: none; }
+}
 
 /*@index*/
 /* Index layout: rule index + main */
@@ -317,6 +323,10 @@ const CSS = `
 @media (max-width: 860px) {
   .pc-split { grid-template-columns: minmax(0, 1fr); }
   .pc-index { position: static; max-height: 300px; }
+}
+@media (max-width: 640px) {
+  .pc-seg { order: 1; flex: 1 1 100%; flex-wrap: wrap; justify-content: center; }
+  .pc-float-bar .pc-seg button { padding: 3px 5px; }
 }
 .ix-head { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 6px; font-size: 11.5px; font-weight: 600; color: var(--pc-ink-3); letter-spacing: 0.01em; }
 .ix-head .ix-count { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 500; }
@@ -376,6 +386,20 @@ const CSS = `
 .tp-bound { color: #166534; background: #f1f5f4; border-color: #a7c4b5; }
 .fx-prop { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fg-wrap { position: relative; margin: 8px auto 0; width: 100%; max-width: 740px; }
+/* Narrow: the rule number stays beside its title with the category under it; three equal scenario
+   buttons on one row; the trust pill and property on the next line and the scope, uncut, under them.
+   The figure keeps a legible 560px and scrolls sideways instead of shrinking its text to 5px. */
+@container pcm (max-width: 640px) {
+  .fig-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .fig-sub { grid-column: 2; margin: 0; }
+  .fx-seg { flex: 1 1 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-radius: 12px; }
+  .fx-seg button { padding: 5px 6px; font-size: 11.5px; line-height: 1.25; border-radius: 10px; word-break: keep-all; overflow-wrap: anywhere; }
+  .fx-meta { margin-left: 0; flex-wrap: wrap; }
+  .fx-scope { order: 1; max-width: none; }
+  .fx-prop { white-space: normal; overflow-wrap: anywhere; }
+  .fg-wrap { overflow-x: auto; }
+  .fg-svg { min-width: 560px; }
+}
 .fg-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pc-font); }
 .fg-svg .fg-box, .fg-svg .fg-arrow { transition: opacity 0.22s ease; }
 .fg-svg .is-dim { opacity: 0.20; }
@@ -514,7 +538,7 @@ const CSS = `
 .ev-facts li.warn::before { background: var(--pc-warn); }
 .ev-facts li.bad { color: var(--pc-bad); }
 .ev-facts li.bad::before { background: var(--pc-bad); }
-.ev-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pc-bd); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 20px; font-size: 12.5px; color: var(--pc-ink-2); }
+.ev-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pc-bd); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 20px; font-size: 12.5px; color: var(--pc-ink-2); overflow-wrap: anywhere; }
 @container (max-width: 760px) { .ev-body { grid-template-columns: minmax(0, 1fr); } }
 .ev-sec { font-weight: 600; color: var(--pc-ink-3); margin-bottom: 5px; font-size: 11.5px; letter-spacing: 0.01em; }
 .ev-rule { color: var(--pc-ink); line-height: 1.55; }
@@ -650,6 +674,14 @@ const CSS = `
 .fl-hint { font-size: 12.5px; color: var(--pc-ink-3); }
 .fl-foot .fl-cta { margin-left: auto; font-size: 13px; font-weight: 600; padding: 7px 14px; min-height: 34px; border-radius: 8px; border: 0; background: var(--pc-control); color: #fff; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .fl-run { animation: none; } }
+/* Narrow: the scaled map would shrink chip text below 10px (below 5px on a phone), so the stages
+   reflow in step order at full size, one column on a phone, two or three on a tablet. */
+@container pcm (max-width: 760px) {
+  .fl-canvas { --u: 1.04px; aspect-ratio: auto !important; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+  .fl-svg { display: none; }
+  .fl-stage { position: static; width: auto !important; height: auto !important; }
+  .fl-stage .fl-chip { height: 38px; }
+}
 /*@end*/
 
 /* Footer */
@@ -1168,9 +1200,18 @@ ${SHARED_FNS}
     if (!el || !root.contains(el) || el.disabled) return;
     const act = el.dataset.act;
     const v = el.dataset.v;
+    const view0 = S.view;
+    // Where the index sits above the main view (not sticky beside it), a pick closes it to show the rule.
+    const ix = el.closest('.pc-index');
+    if (ix && getComputedStyle(ix).position !== 'sticky') S.indexOpen = false;
     if (act === 'rule') { S.ruleId = v; S.view = 'focus'; }
     else if (act === 'rule-open') { S.ruleId = v; if (LAYOUT === 'compact') S.focusByRule[v] = S.ovFocus; S.view = 'focus'; }
-    else if (act === 'focus') { S.focusByRule[activeRule().id] = v; render(); root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return; }
+    else if (act === 'focus') {
+      // A figure scrolled sideways on a phone keeps its place while the scenarios are compared.
+      const x = root.querySelector('.fg-wrap').scrollLeft;
+      S.focusByRule[activeRule().id] = v; render(); root.querySelector('.fg-wrap').scrollLeft = x;
+      root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return;
+    }
     else if (act === 'ov-focus') { S.ovFocus = v; }
     else if (act === 'view') { S.view = S.view === v ? 'focus' : v; }
     else if (act === 'ev') { S.evOpen = !S.evOpen; }
@@ -1185,6 +1226,10 @@ ${SHARED_FNS}
     /*@end*/
     else return;
     render();
+    // A new view starts at its top: on a phone the stacked flow map is long, so a chip near its end
+    // would otherwise open the rule scrolled past its heading.
+    const main = root.querySelector('.pc-main');
+    if (S.view !== view0 && main.getBoundingClientRect().top < 0) main.scrollIntoView();
   });
 
   // Standalone pages take shortcuts page-wide; an embedded board only while focus is inside it.
@@ -1229,9 +1274,12 @@ export function pickBlocks(src, keep) {
   }
   return out;
 }
-// Whitespace-only minification that cannot change meaning: CSS comments and indentation,
-// spaces around { } ; and never around ":" (selectors such as ".a :focus-visible" depend on it).
-const minCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*\n\s*/g, ' ').replace(/\s*([{};])\s*/g, '$1').trim();
+// Minification that cannot change meaning: CSS comments and indentation, spaces around { } ; , > and /
+// (the CSS has no quoted comma or slash; calc() keeps the spaces its + and - need) and before
+// !important, the 0 of "0.5", the space after a property name's ":" (only right after "{" or ";", so
+// a selector such as ".a :focus-visible" keeps its space), and a rule's last ";".
+const minCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*\n\s*/g, ' ').replace(/\s*([{};,>/])\s*/g, '$1')
+  .replace(/\s+!important/g, '!important').replace(/([{;][\w-]+):\s+/g, '$1:').replace(/([\s:(,/-])0\.(\d)/g, '$1.$2').replace(/;}/g, '}').trim();
 
 // Index of the "}" that closes the "{" at `open`.
 function closingBrace(css, open) {
@@ -1338,7 +1386,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
 
   const keep = [layout, ...new Set(board.rules.map(figKind)), ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : []), ...(board.run.bounds ? ['bounds'] : []),
     ...(binding.counterexamples ? ['trace'] : [])];
-  const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
+  const css = (mode === 'standalone' ? minCss(STANDALONE_CSS) : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
   const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board, binding) + (board.flow ? '\n' + flowRuntime() : '') +
     (board.outOfScope ? '\n' + oosMarkup.toString() : '') + (board.run.bounds ? '\n' + boundsMarkup.toString() : '');
   return `<!doctype html>
