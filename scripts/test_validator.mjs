@@ -1627,6 +1627,7 @@ test('css: the minifier keeps every selector space and drops only bytes that car
     assert.equal(/[{;][\w-]+: /.test(css), false, `${name}: a declaration keeps the space after ":"`);
     assert.equal(/[\s:(,/-]0\.\d/.test(css), false, `${name}: a number keeps its leading 0`);
     assert.equal(/\s,|,\s/.test(css), false, `${name}: a comma keeps a space`);
+    assert.equal(/#([\da-f])\1([\da-f])\2([\da-f])\3\b/i.test(css), false, `${name}: a colour keeps its doubled digits`);
   }
 });
 

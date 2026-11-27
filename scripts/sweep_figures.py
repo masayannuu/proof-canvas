@@ -27,14 +27,15 @@ without a flow must show no flow controls and its overview button must still tog
 show a search box or a select. With `outOfScope`, the note must sit below the main view in every view
 checked, list exactly the JSON entries, fit its box, and keep its open/closed state across re-renders;
 without it there must be no note. Above a 760px main column the map must be drawn in 2D; at or below
-it the stages must stack, with stage titles of 12px or more and chips 34px or taller.
+it the stages must stack, with stage titles of 12px or more and chips 34px or taller. On index layouts
+the index, opened from the bottom of the page, must show on screen.
 `mobile` opens each board as a touch phone (default 390x844 and 375x812) and runs `flow` and `sweep`
 there, then taps through it: the last chip of the stacked map must open its rule with the heading on
 screen; every scenario button and the "Proof & log" drawer must respond, the three scenario buttons must share
 one row, the rule number must sit beside its title, and every figure must fit whole in its card with
 nothing to scroll; on index layouts the index,
-opened from the bottom of the page, must show on screen and close when a rule is picked, showing the
-rule. On every screen the page must not overflow, the bar must scroll with the page and keep its buttons
+opened from the bottom of the page, must show on screen and close when a rule is picked (also the last
+rule, after scrolling the index), showing the rule's heading. On every screen the page must not overflow, the bar must scroll with the page and keep its buttons
 inside its border, and no header, main-column, scenario or footer element may leave the screen or clip.
 A 1440x900 control checks that the sticky index stays open after a pick.
 `shot` saves one 2x screenshot of a board after applying a state.
@@ -164,7 +165,7 @@ FLOW_PROBE_JS = """() => {
     for (const s of sr) if (meets(p, s)) out.pillHits += 1;
   });
   const card = R(fl);
-  for (const el of fl.querySelectorAll('.fl-canvas, .fl-jbar button, .fl-foot > *, .fl-cap, .fl-head > *')) out.offCard = Math.max(out.offCard, outside(R(el), card));
+  for (const el of fl.querySelectorAll('.fl-canvas, .fl-jbar button, .fl-foot > *, .fl-cap, .fl-head > *')) if (R(el).width) out.offCard = Math.max(out.offCard, outside(R(el), card));
   out.outside = Math.round(out.outside * 10) / 10;
   out.offCard = Math.round(out.offCard * 10) / 10;
   return out;
@@ -399,6 +400,17 @@ def flow_sweep(browser, html, viewports, shots, phone=False):
                         s = click('[data-act="status"][data-v="all"]', f"status-{st}-clear")
                         if s["status"] != "all" or any(v[1] for v in s["chips"].values()) or any(s["stageOff"].values()):
                             fail(f"{at} status all", f"chips={s['chips']} stageOff={s['stageOff']}")
+            if layout == "index":
+                # Opened from the bottom of the page, the index shows on screen (sticky beside the main
+                # view, or scrolled into sight above it).
+                if page.evaluate("window.__proofCanvas.getState().indexOpen"):
+                    click('[data-act="index"]', "index-close")
+                page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+                click('[data-act="index"]', "index-open")
+                r = page.evaluate("() => { const n = document.querySelector('#pc-index'), b = n.getBoundingClientRect(); return [b.top, b.bottom, getComputedStyle(n).position]; }")
+                # A sticky index is pushed up by the end of its column, so only overlap is required.
+                if not (r[0] < h and r[1] > 0 and (r[2] == "sticky" or r[0] >= 0)):
+                    fail(f"{at} index open", f"{r[2]} #pc-index spans {r[0]:.0f}..{r[1]:.0f}px, off screen")
         except MissingControl as e:
             fail(at, f"no clickable control {e} (the previous step left the wrong screen)")
         for kind in ["console", "pageErrors", "external"]:
@@ -434,7 +446,7 @@ PHONE_PROBE_JS = """() => {
     const r = R(el);
     if (r.width && (r.left < -0.5 || r.right > de.clientWidth + 0.5)) out.offScreen += 1;
   }
-  for (const el of root.querySelectorAll('.pc-float-bar button, .fx button, .fl-jbar button, .crumb-pos')) if (el.scrollWidth > el.clientWidth + 1) out.clipped += 1;
+  for (const el of root.querySelectorAll('.pc-float-bar button, .fx button, .fx-scope, .fl-jbar button, .crumb-pos')) if (el.scrollWidth > el.clientWidth + 1) out.clipped += 1;
   return out;
 }"""
 
@@ -524,6 +536,18 @@ def phone_sweep(browser, html, viewports, shots):
                     fail(f"{at} index pick", f"indexOpen={s['indexOpen']} view={s['view']} rule={s['ruleId']}, want closed on {rid}")
                 on_screen(".fig-title", "index pick")
                 probe("index-pick")
+                # The last rule, reached by scrolling the index and then the page until only the end
+                # of the index shows, opens at its heading too (the closing index moves it up).
+                if not state()["indexOpen"]:
+                    tap(page.locator('[data-act="index"]'), "index toggle again")
+                page.evaluate("() => { const n = document.querySelector('#pc-index'); n.scrollTop = n.scrollHeight; window.scrollBy(0, n.getBoundingClientRect().bottom - 120); }")
+                row = page.locator(".ix-row").last
+                rid = row.get_attribute("data-v")
+                tap(row, "last index row")
+                s = state()
+                if (s["indexOpen"], s["view"], s["ruleId"]) != (False, "focus", rid):
+                    fail(f"{at} last index row", f"indexOpen={s['indexOpen']} view={s['view']} rule={s['ruleId']}, want closed on {rid}")
+                on_screen(".fig-title", "last index row")
         except MissingControl as e:
             fail(at, f"no tappable {e} (the previous step left the wrong screen)")
         for kind in ["console", "pageErrors", "external"]:

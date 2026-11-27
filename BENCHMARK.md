@@ -185,37 +185,43 @@ real mutant logs with `--mutant-log`: two `quint run` outputs and one TLC 2.19 o
 ## Phones and narrow columns
 
 At a main column of 760px or less the flow map reflows its stages in step order at full size (one
-column on a phone, two or three on a tablet) and hides the edge drawing; at 640px or less the bar
+column on a phone, one or two on a tablet) and hides the edge drawing and its legend; at 640px or less the bar
 scrolls with the page in two rows, the rule number sits beside its title, the scenario buttons
 share one row, and every figure fits whole in its card.
-On a narrow screen, picking a rule from the index closes the index.
+On a narrow screen the index opens above the main view and scrolls into sight, and picking a rule
+from it closes the index and brings the rule's heading on screen.
 
 | Board | Standalone before (`fe0e51b`) | Standalone after | Budget |
 |---|---|---|---|
-| 00 minimal | 68,611 B | 68,537 B | 128 KB |
-| 05 multi-verifier (index, flow) | 129,494 B | 129,313 B | 128 KB |
-| 07 state and timeline | 96,914 B | 96,735 B | 128 KB |
+| 00 minimal | 68,611 B | 68,685 B | 128 KB |
+| 05 multi-verifier (index, flow) | 129,494 B | 129,516 B | 128 KB |
+| 07 state and timeline | 96,914 B | 96,883 B | 128 KB |
 
-- **Cost.** The phone rules add about 1.7 KB of CSS and JS to a flow board. The CSS minifier now
-  also drops spaces after "," ">" "/" and a property's ":", before "!important", the 0 of "0.5"
-  and each rule's last ";", which more than pays for it: against `fe0e51b` every example shrinks,
-  by 74 B (00, 01, 04, 06) to 217 B (02, 03). Example 05 with one bound mutant log, as the
-  mutant-log validation test renders it, is 130,833 B: 239 B under budget.
+- **Cost.** The CSS minifier now also drops spaces after "," ">" "/" and a property's ":", before
+  "!important", the 0 of "0.5", each rule's last ";" and the doubled digits of a colour such as
+  "#ffffff", which nearly pays for the phone rules: against `fe0e51b` the examples change by
+  -52 B (02, 03) to +112 B (06); the index and scroll handling adds about 150 B of JS to every
+  board. Example 05 with one bound mutant log, as the mutant-log validation test renders it, is
+  131,036 B: 36 B under budget.
 - **Phone sweep.** `scripts/sweep_figures.py mobile` over the 16 example files and both modes of a
   16-rule, 6-stage Japanese OAuth board, at 390x844 and 375x812 as touch phones: 1,056 views,
-  580 flow clicks and 188 taps, 0 failures. Stacked stage titles are 15.1px and chips 13px and
+  596 flow clicks and 220 taps, 0 failures. Stacked stage titles are 15.1px and chips 13px and
   38px tall (they were 4.7px and 4.0px / 8px at 390px).
-- **Desktop and tablet.** `sweep` (800 views) at 1440x900 and 900x700, `flow` (492 clicks) at
-  1440x900, 1100x800 and 900x700, and `flow` at 768x1024 (164 clicks): 0 failures. The flow probe
+- **Desktop and tablet.** `sweep` (800 views) at 1440x900 and 900x700, `flow` (516 clicks) at
+  1440x900, 1100x800 and 900x700, and `flow` at 768x1024 (170 clicks): 0 failures. On index
+  layouts `flow` also opens the index from the bottom of the page and requires it on screen. The flow probe
   now also fails when the map is stacked above a 760px main column or drawn in 2D at or below it;
   at 1100x800 the open index leaves the main column 780px wide and the map stays 2D. Full-page
   screenshots of examples 01, 03, 05 and 07, standalone and embed, at 1440x900, 1100x800 and
   900x700, on the first view, a rule in its bug state and the open drawer (72 screens, reduced
   motion), are pixel-identical to `fe0e51b`.
 - **Negative control.** The same `mobile` sweep over examples 03 and 06 rendered by `fe0e51b`
-  reports 84 failures (sticky bar, buttons outside the bar, a 2D map on a phone, scenario buttons
+  reports 88 failures (sticky bar, buttons outside the bar, a 2D map on a phone, scenario buttons
   on two rows, the rule number above its title, clipped labels, and an index that stays open off
-  screen).
+  screen). Example 03 rendered by `28b5253`, before the index scrolling and the wrapping scope
+  label, fails the newer checks: at 768x1024 the opened index spans -103..197px, the scope label
+  clips at 390x844 and 375x812, and the last rule picked from a scrolled index opens with its
+  heading 119px above the screen.
 
 ## Analysis
 

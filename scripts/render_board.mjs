@@ -322,7 +322,7 @@ const CSS = `
 .pc-root[data-mode="embed"] .pc-index { top: 56px; }
 @media (max-width: 860px) {
   .pc-split { grid-template-columns: minmax(0, 1fr); }
-  .pc-index { position: static; max-height: 300px; }
+  .pc-index { position: static; max-height: 300px; scroll-margin-top: 64px; }
 }
 @media (max-width: 640px) {
   .pc-seg { order: 1; flex: 1 1 100%; flex-wrap: wrap; justify-content: center; }
@@ -395,7 +395,7 @@ const CSS = `
   .fx-seg button { padding: 5px 6px; font-size: 11.5px; line-height: 1.25; border-radius: 10px; word-break: keep-all; overflow-wrap: anywhere; }
   .fx-meta { margin-left: 0; flex-wrap: wrap; }
   .fx-scope { order: 1; max-width: none; }
-  .fx-prop { white-space: normal; overflow-wrap: anywhere; }
+  .fx-scope, .fx-prop { white-space: normal; overflow-wrap: anywhere; }
 }
 .fg-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pc-font); }
 .fg-svg .fg-box, .fg-svg .fg-arrow { transition: opacity 0.22s ease; }
@@ -672,10 +672,10 @@ const CSS = `
 .fl-foot .fl-cta { margin-left: auto; font-size: 13px; font-weight: 600; padding: 7px 14px; min-height: 34px; border-radius: 8px; border: 0; background: var(--pc-control); color: #fff; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .fl-run { animation: none; } }
 /* Narrow: the scaled map would shrink chip text below 10px (below 5px on a phone), so the stages
-   reflow in step order at full size, one column on a phone, two or three on a tablet. */
+   reflow in step order at full size, one column on a phone, one or two on a tablet. */
 @container pcm (max-width: 760px) {
-  .fl-canvas { --u: 1.04px; aspect-ratio: auto !important; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-  .fl-svg { display: none; }
+  .fl-canvas { --u: 1.04px; aspect-ratio: auto !important; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); gap: 10px; }
+  .fl-svg, .fl-legend { display: none; }
   .fl-stage { position: static; width: auto !important; height: auto !important; }
   .fl-stage .fl-chip { height: 38px; }
 }
@@ -1199,8 +1199,10 @@ ${SHARED_FNS}
     const v = el.dataset.v;
     const view0 = S.view;
     // Where the index sits above the main view (not sticky beside it), a pick closes it to show the rule.
-    const ix = el.closest('.pc-index');
-    if (ix && getComputedStyle(ix).position !== 'sticky') S.indexOpen = false;
+    const nav = root.querySelector('#pc-index');
+    const loose = nav && getComputedStyle(nav).position !== 'sticky';
+    const closed = loose && el.closest('#pc-index');
+    if (closed) S.indexOpen = false;
     if (act === 'rule') { S.ruleId = v; S.view = 'focus'; }
     else if (act === 'rule-open') { S.ruleId = v; if (LAYOUT === 'compact') S.focusByRule[v] = S.ovFocus; S.view = 'focus'; }
     else if (act === 'focus') { S.focusByRule[activeRule().id] = v; render(); root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return; }
@@ -1218,10 +1220,11 @@ ${SHARED_FNS}
     /*@end*/
     else return;
     render();
-    // A new view starts at its top: on a phone the stacked flow map is long, so a chip near its end
-    // would otherwise open the rule scrolled past its heading.
-    const main = root.querySelector('.pc-main');
-    if (S.view !== view0 && main.getBoundingClientRect().top < 0) main.scrollIntoView();
+    // An index opened above the main view (not sticky beside it) scrolls into sight. A new view, or a
+    // rule picked from that index as it closes, starts at its top: on a phone the stacked flow map is
+    // long, and the closing index moves the rule up past the top of the screen.
+    const to = act === 'index' ? loose && S.indexOpen && nav : (closed || S.view !== view0) && root.querySelector('.pc-main');
+    if (to && to.getBoundingClientRect().top < 0) to.scrollIntoView();
   });
 
   // Standalone pages take shortcuts page-wide; an embedded board only while focus is inside it.
@@ -1269,9 +1272,10 @@ export function pickBlocks(src, keep) {
 // Minification that cannot change meaning: CSS comments and indentation, spaces around { } ; , > and /
 // (the CSS has no quoted comma or slash; calc() keeps the spaces its + and - need) and before
 // !important, the 0 of "0.5", the space after a property name's ":" (only right after "{" or ";", so
-// a selector such as ".a :focus-visible" keeps its space), and a rule's last ";".
+// a selector such as ".a :focus-visible" keeps its space), a rule's last ";", and the doubled digits
+// of a colour such as "#ffffff" (an 8-digit colour with alpha is left whole).
 const minCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*\n\s*/g, ' ').replace(/\s*([{};,>/])\s*/g, '$1')
-  .replace(/\s+!important/g, '!important').replace(/([{;][\w-]+):\s+/g, '$1:').replace(/([\s:(,/-])0\.(\d)/g, '$1.$2').replace(/;}/g, '}').trim();
+  .replace(/\s+!important/g, '!important').replace(/([{;][\w-]+):\s+/g, '$1:').replace(/([\s:(,/-])0\.(\d)/g, '$1.$2').replace(/;}/g, '}').replace(/#([\da-f])\1([\da-f])\2([\da-f])\3\b/gi, '#$1$2$3').trim();
 
 // Index of the "}" that closes the "{" at `open`.
 function closingBrace(css, open) {
