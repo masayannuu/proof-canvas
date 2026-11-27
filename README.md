@@ -6,7 +6,7 @@ You (or your agent) describe the checked rules in one JSON file. `proof-canvas` 
 **one offline HTML file** that product owners, domain experts and reviewers can read without
 knowing the spec language, and a validator proves the file is safe to share.
 
-Each rule is drawn as one of three figures, picked to match what the checker proved, with three
+Each rule is drawn as one of five figures, picked to match what the checker proved, with three
 switchable states: **normal**, **bug** (what happens without the rule) and **fixed**. A linked
 screen preview shows what a user would see, and a **Proof & log** panel says what was checked, how,
 and within which bounds. An optional flow map shows how the checked parts of a system connect.
@@ -16,6 +16,8 @@ and within which bounds. An optional flow map shows how the checked parts of a s
 | `gate` (default) | Two inputs, one check, then pass / hold / reject | Value limits and guards: Quint or TLC invariants on amounts, budgets, statuses |
 | `sequence` | 2-3 actors with lifelines and 2-5 numbered steps | Races and check-then-act bugs: TLA+ / TLC, Quint, Apalache interleavings |
 | `relation` | 3-5 entities and 2-7 directed relations, forbidden ones dashed | Structure: Alloy delegation, RBAC, ownership and cycle checks |
+| `state` | 2-5 states and 1-8 transitions: start dot, terminal border, forbidden and loop transitions | Lifecycles and revocation: token families, order or account status machines |
+| `timeline` | 2-5 time points, 1-3 windows and 1-4 events, with boundary lines | Expiry and deadlines: TTL, off-by-one boundaries, grace periods |
 
 ## At a glance
 
@@ -36,6 +38,12 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
 - **Deterministic.** The same board and evidence files render to the same bytes.
 - **Evidence binding.** Supply spec files and checker logs to check rule names, file hashes,
   and reported verdicts. The badge and Proof & log panel show which files were checked.
+- **Trace-bound mutant kills.** `--mutant-log <ruleId>=<path>` binds the log of a killed mutant
+  to a rule. Logs that report no violation, or a different property, are refused; the board
+  shows the extracted steps and **Trace-bound mutant kill**. Without one, a bug state says
+  **Illustrative only (no trace bound)**.
+- **Bounds in view.** `run.bounds` is a line above every view, and each figure carries its
+  `evidence.scope` as a chip next to the property.
 - **Visualization.** You run the checker. proof-canvas renders its results and can compare
   those results with the board JSON.
 - **Scales from 1 to 100+ rules.** Up to 6 rules in at most one module get a compact pill bar;
@@ -74,6 +82,7 @@ in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
 | `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures and a flow map |
 | `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy, Japanese UI and a flow map |
+| `examples/07_state_timeline/` | 3 / none | `state` and `timeline` figures, `run.bounds`, and three real Quint and TLC mutant logs bound with `--mutant-log` |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`.
 
@@ -108,7 +117,7 @@ A board whose rules all pass uses the following labels.
 Use `--spec` for Quint, TLA+, Alloy, Lean, and Dafny sources. Include the TLC `.cfg`
 with `--spec` to bind a passing TLC log to the properties the config lists.
 Use `--log` for native Quint, Alloy 6, TLC, and Apalache logs or
-[`proof-canvas-log-1` JSON receipts](skills/proof-canvas/SKILL.md#checker-logs). Every passing verdict
+[`proof-canvas-log-1` JSON receipts](skills/proof-canvas/references/evidence.md#checker-logs). Every passing verdict
 needs a named property. For Quint verification, include the command with its
 invariant or temporal options.
 
@@ -145,6 +154,33 @@ states and evidence text come from the board JSON, and `"lang": "ja"` renders th
 renderer's own labels in Japanese too. Pass the same flags with
 `--in examples/06_japanese_board/multi_verifier_ja.board.json` to get
 **実ログ検証済み (3/3)** (Spec & log verified).
+
+### Bind killed mutants
+
+A verified rule says the property holds. The mutant run, with the rule switched off, says the
+property can fail, and its trace is what the bug state draws. Bind that trace with
+`--mutant-log <ruleId>=<path>` on both commands:
+
+```bash
+example=examples/07_state_timeline
+flags=(
+  --mutant-log refresh_reuse="$example/mutant_reuse_rotated_accepted.log"
+  --mutant-log code_ttl="$example/mutant_off_by_one_ttl.log"
+  --mutant-log replay_revoke="$example/mutant_tlc_replay_compromised_no_revoke.log"
+)
+node scripts/render_board.mjs --in "$example/state_timeline_ja.board.json" "${flags[@]}" \
+  --out out/07_state_timeline.html
+node scripts/validate_board.mjs --in "$example/state_timeline_ja.board.json" "${flags[@]}" \
+  out/07_state_timeline.html
+```
+
+Quint stdout and ITF (`.itf.json`), TLC stdout, and Alloy stdout or receipt JSON are read. A log
+is refused when it reports no violation (`[ok]`, `No error has been found`, `UNSAT`), names a
+violated property other than the rule's `property`, or names several. ITF traces do not name a
+property and are shown as unnamed. The board keeps each log's name, SHA-256, checker, property
+and up to 12 extracted steps (long traces keep the first 6 and the last 5); the validator
+extracts them again and fails when anything differs. The three logs in example 07 are real
+`quint run` and TLC 2.19 output, with host paths removed from the TLC log.
 
 ## Install
 
@@ -184,12 +220,12 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 73.9 KB | JSON | 2.3 ms | 31 ms* | 200 | 2.6 ms | 0 | 0 |
-| 12 / 3 | index | 113.1 KB | JSON | 1.8 ms | 32-36 ms | 297 | 2.1 ms | 0 | 0 |
-| 20 / 4 | index | 139.2 KB | JSON | 2.3 ms | 33-38 ms | 348 | 2.3 ms | 0 | 0 |
-| 50 / 10 | index | 246.2 KB | JSON | 4.1 ms | 36-40 ms | 526 | 5.1 ms | 0 | 0 |
-| 100 / 20 | index | 119.5 KB | gzip | 19.6 ms | 37-40 ms | 825 | 7.7 ms | 0 | 0 |
-| 20 / 4, embed at 900x700 | index | 139.1 KB | JSON | 3.3 ms | 36 ms | 341 | 1.5 ms | 0 | 0 |
+| 3 / none | compact | 75.5 KB | JSON | 1.0 ms | 24 ms* | 203 | 4.3 ms | 0 | 0 |
+| 12 / 3 | index | 114.7 KB | JSON | 1.4 ms | 28-36 ms | 300 | 2.0 ms | 0 | 0 |
+| 20 / 4 | index | 140.8 KB | JSON | 1.9 ms | 29-30 ms | 351 | 2.2 ms | 0 | 0 |
+| 50 / 10 | index | 247.8 KB | JSON | 3.2 ms | 23-26 ms | 529 | 2.8 ms | 0 | 0 |
+| 100 / 20 | index | 121.1 KB | gzip | 9.2 ms | 25-38 ms | 828 | 4.6 ms | 0 | 0 |
+| 20 / 4, embed at 900x700 | index | 140.8 KB | JSON | 1.7 ms | 21 ms | 344 | 1.9 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
 connector pills overlapping a card, clipped labels and horizontal page overflow.
@@ -227,14 +263,16 @@ assets/
   plugin.json         Cursor plugin manifest
 skills/proof-canvas/
   SKILL.md            agent instructions, board schema, and commands
+  references/
+    evidence.md       spec hashing, per-checker log rules, and the JSON receipt format
 scripts/
   render_board.mjs    board JSON -> single-file HTML
   validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync, binding
-  evidence.mjs        spec hashes, source excerpts, and checker log verdicts
+  evidence.mjs        spec hashes, source excerpts, checker log verdicts, and mutant traces
   schema.mjs          board schema, layout and provenance rules
   flow.mjs            flow map geometry and markup (shared with the browser)
   i18n.mjs            English and Japanese UI text
-  figure.mjs          gate / sequence / relation geometry, text fitting and SVG builders (shared with the browser)
+  figure.mjs          gate / sequence / relation / state / timeline geometry, text fitting and SVG builders (shared with the browser)
   payload.mjs         JSON / gzip + base64 payload codec
   synth_board.mjs     deterministic synthetic boards for stress tests
   test_validator.mjs  self-tests
@@ -246,6 +284,7 @@ examples/
   04_refund_guard/    Quint spec and log
   05_multi_verifier/  Quint, Alloy, and TLC specs and logs
   06_japanese_board/  Japanese board bound to the 05 specs and logs
+  07_state_timeline/  state and timeline figures with three mutant logs
 ```
 
 ## Acknowledgements

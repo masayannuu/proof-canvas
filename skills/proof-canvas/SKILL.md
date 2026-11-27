@@ -38,6 +38,7 @@ Start from an example:
 | `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
 | `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board; `gate`, `relation` and `sequence` figures; a three-stage flow map that opens first |
 | `examples/06_japanese_board/` | 3 | none | The 05 specs and logs with `"lang": "ja"`: Japanese board copy and UI, one rule per figure kind, a flow map built from `ruleIds` |
+| `examples/07_state_timeline/` | 3 | none | `state` and `timeline` figures, `run.bounds`, and three real mutant logs bound with `--mutant-log` |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`: their statuses and
 counterexamples were written by hand, and no checker was run.
@@ -134,6 +135,7 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `toolVersion` | optional string | Shown after the tool; a repeated tool name is removed (`"TLA+ TLC"` + `"TLC 2.19"` shows `TLA+ TLC 2.19`). |
 | `specHash` | optional string | Spec fingerprint. With `--spec`, omit it for a derived hash or supply the full SHA-256. Without `--spec`, a hash needs 7–128 hex digits and can use a `sha1:`, `sha256:`, or `sha512:` prefix. |
 | `status` | `verified \| failed \| pending` | Outcome of the run as a whole. |
+| `bounds` | optional string | The search bounds of the whole run (`"Quint: 2000 runs x 16 steps; TLC: 3 clients"`), always shown above the board; warns above 120 characters. |
 
 **`rules[]`**
 
@@ -148,7 +150,7 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `category` | optional string | For example `safety`, `liveness`, `security`. |
 | `source` | string | Where the rule comes from (requirement, policy, section). |
 | `previewTitle` | string | Title of the linked screen preview. |
-| `figure` | object | The diagram: one of three kinds, below. |
+| `figure` | object | The diagram: one of five kinds, below. |
 | `states.normal`, `states.bug`, `states.fixed` | object | The three switchable states (below). |
 | `defaultFocus` | `normal \| bug \| fixed` | State shown first. |
 | `status` | optional `verified \| failed \| pending` | Checker result for this rule. Missing means `pending` (shown as "Not checked yet"). |
@@ -160,7 +162,8 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 Pick the kind that shows what the checker proved. `figure.kind` is optional and defaults to
 `gate`. Every kind draws into the same canvas. The validator warns when figure text cannot fit:
 a box, lane or node label, a chip, or a line label too long for its free length. `gate` and
-`sequence` use fixed slots, so only fit is checked. `relation` also warns when a line label
+`sequence` use fixed slots, so only fit is checked. `timeline` also warns on an event that needs a
+fourth row and a pin that crosses another event. `relation` also warns when a line label
 overlaps another label or a node, when a line crosses a node it does not connect, or when a line
 crosses another line's label. Line-on-line crossings are not checked.
 
@@ -169,8 +172,10 @@ crosses another line's label. Line-on-line crossings are not checked.
 | `gate` (default) | A value or status check: limits, budgets, guards | `boxes`: `src1`, `src2` (inputs), `gate` (the check), `pass`, `hold`, `bad` (outcomes). `arrows`: `a1` src1 to gate, `a2` src2 to gate, `a3` gate to pass, `a4` gate to hold, `a5` gate to bad. Box labels wrap to two lines; keep arrow labels to about 12 characters. |
 | `sequence` | Races, check-then-act, ordering between actors (TLA+ / TLC, Quint, Apalache) | `lanes`: 2 or 3 `{ id, label }` actors. `steps`: 2 to 5 `{ id, from, to, label }` in time order, top to bottom; `from` and `to` are lane ids, and `from` equal to `to` draws a step on one lane. |
 | `relation` | Structure: delegation, roles, ownership, cycles (Alloy) | `nodes`: 3 to 5 `{ id, label, role? }`, placed in fixed slots in array order (3: triangle, 4: 2 x 2, 5: corners and center); `role` is a caption above the label. `edges`: 2 to 7 `{ id, from, to, label, forbidden? }`; `from` equal to `to` draws a loop, an edge and its reverse bow apart, and `forbidden: true` draws the edge dashed. At most one edge per direction between two nodes. |
+| `state` | State machines: lifecycles, revocation, forbidden transitions | `states`: 2 to 5 `{ id, label, role? }` in fixed slots in array order; `role` `initial` (start dot), `normal`, `terminal` (double border) or `bad` (red while active). `transitions`: 1 to 8 `{ id, from, to, label, kind? }`; `kind` `allowed` (default), `forbidden` (dashed, a circled x) or `loop` (bowed); a self-transition must be `loop` or `forbidden`. One transition per direction. |
+| `timeline` | Expiry, TTL, deadlines, off-by-one boundaries | `ticks`: 2 to 5 `{ id, label, boundary? }` left to right; `boundary: true` draws a vertical limit line. `bars`: 1 to 3 `{ id, from, to, label, tone? }` spans that run forward between ticks. `events`: 1 to 4 `{ id, tick, label, tone? }` pills pinned to a tick, stacked upward. `tone`: bars `neutral \| good \| bad`, events `normal \| good \| bad`. |
 
-Ids in `lanes`, `steps`, `nodes`, and `edges` are unique `[a-zA-Z0-9_-]` strings. If a
+Ids in `lanes`, `steps`, `nodes`, `edges`, `states`, `transitions`, `ticks`, `bars` and `events` are unique `[a-zA-Z0-9_-]` strings. If a
 relation label collides with another element, shorten it or reorder `nodes`.
 
 **`states.<normal | bug | fixed>`**
@@ -208,6 +213,12 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 | `relation` | `activeEdges` | non-empty array of edge ids | Edges drawn as active. An active forbidden edge is red; in a `safe` state it ends in a stop bar instead of an arrowhead. |
 | `relation` | `focusNodes` | optional array of node ids | Nodes outlined in the state color. |
 | `relation` | `chips` | optional array | `{ node, text, tone }`, at most one per node, shown inside the node. With a chip, a node with a `role` keeps its label on one line. |
+| `state` | `activeStates`, `activeTransitions` | array of ids | Drawn as active; the rest are dimmed (`activeStates` non-empty). |
+| `state` | `focusTransition` | transition id | Emphasized; its target state, when active, is outlined as the outcome. |
+| `state` | `chips` | optional array | `{ state, text, tone }`, at most one per state. |
+| `timeline` | `activeBars`, `activeEvents` | array of ids | Drawn as active; the rest are dimmed (`activeEvents` non-empty). |
+| `timeline` | `focusEvent` | event id | The outcome event, emphasized. |
+| `timeline` | `chips` | optional array | `{ tick, text, tone }`, at most one per tick, under the axis. |
 
 **`evidence`**
 
@@ -216,8 +227,9 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 | `ruleSummary` | string | The rule in plain words. |
 | `ifEnforced`, `ifNotEnforced` | string | What the rule protects; what breaks without it. |
 | `checkerSummary` | string | One-line checker result, for example `"No violation in 41,280 states"`. |
-| `scope` | string | Bounds of the check (model size, ranges, number of runs). |
+| `scope` | string | Bounds of the check (model size, ranges, number of runs); also a chip next to the property on the figure. |
 | `method` | string | How it was checked (exhaustive model checking, bounded simulation, property-based testing with N runs, and so on). |
+| `witness` | optional string | Reachability evidence: how often the checker reached the interesting states (`"reuse -> revoke in 1128/2000 runs"`). |
 | `sourceQuote` | optional string | Verbatim text of the source the rule comes from. |
 | `counterexample` | optional string | Checker trace. On a failed or not-checked rule it shows under **Counterexample** ("No counterexample recorded" when absent). On a verified rule, use it for the trace of the rule switched off (for example a killed mutant); it shows under **Counterexample without this rule**. When a verified rule has none, the section is left out. |
 
@@ -251,7 +263,8 @@ node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
   rule chips colored by status.
   A board with `flow` replaces the index toolbar's Overview button with **Flow** and puts a
   **Flow** pill first in the compact bar.
-- **Proof & log.** Repeat `--spec <path>` and `--log <path>` to bind files. See section 5.
+- **Proof & log.** Repeat `--spec <path>` and `--log <path>` to bind files, and
+  `--mutant-log <ruleId>=<path>` to bind a killed mutant's trace to a rule. See section 5.
 - **Payload.** `auto` embeds readable JSON up to 192 KB and gzip + base64 above that, decoded
   by the browser's built-in `DecompressionStream`. The decoded board may not exceed 4 MiB.
 - **Embedding.** `--mode embed` drops page-level CSS (`html`, `body`) so the board can sit inside
@@ -287,6 +300,7 @@ Each gate reports a distinct error prefix.
 8. `binding:` with `--spec` or `--log`, recompute evidence from the files and compare it with
    the embedded binding. Use the same set of files you passed to the renderer. Validating
    a bound HTML file without the source files or logs warns that the evidence was not re-checked.
+   With `--mutant-log`, re-extract each trace and compare file, SHA-256, property and steps.
 
 Regenerate older HTML boards to add the evidence metadata required by this validator.
 
@@ -295,16 +309,12 @@ Regenerate older HTML boards to add the evidence metadata required by this valid
 ## 4. Look at it
 
 Open the HTML in a browser and check: no console errors, no horizontal scroll, the state buttons
-move the route, the connector and the preview together, and Failed filters down to the broken
-rules in one click.
+move the figure, the connector and the preview together, and Failed filters to the broken rules.
 
-For a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.html>` shows every
-rule in every state in headless Chromium and fails on figure text outside its box, colliding
-labels, clipped text, page overflow, console errors, or external requests.
-`scripts/sweep_figures.py flow <board.html>` real-clicks a flow map: every journey, its
-checkpoint button (it must open `checkpointRuleId` in `checkpointFocus`), every
-rule chip, the way back to Flow, each status filter on the map, and the `outOfScope` note. It
-fails on overlapping stages or labels, text outside a stage, page overflow, or console errors.
+In a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.html>` shows every
+rule in every state, and **Proof & log** on the bug state, in headless Chromium; `flow` real-clicks
+the flow map. They fail on overlaps, text outside its box, clipped text, page overflow, or
+console errors; `sweep` also on a trace that disagrees with the binding.
 
 ## 5. Honesty rules
 
@@ -327,72 +337,27 @@ The badge also depends on which files you supply.
 | Log only | **Log checked · self-reported spec** in amber |
 | Neither | **Self-reported** in amber |
 
-### Spec files
+### Spec files and checker logs
 
-Repeat `--spec` for Quint (`.qnt`), TLA+ (`.tla`), Alloy (`.als`), Lean (`.lean`),
-and Dafny (`.dfy`) files. Include any TLC `.cfg` files used to scope passing logs.
-Configs contribute to the spec hash. Each rule's `property` must match exactly one declaration.
-Evidence includes the source basename, line range, and up to 10 lines or 600 characters.
-Keep absolute paths out of source excerpts before publishing the board.
+Repeat `--spec` for Quint (`.qnt`), TLA+ (`.tla`, with any TLC `.cfg`), Alloy (`.als`), Lean
+(`.lean`) and Dafny (`.dfy`) sources; each rule's `property` must match exactly one declaration.
+Repeat `--log` for native Quint, Alloy 6, TLC and Apalache logs or `proof-canvas-log-1` JSON
+receipts. Every file needs a recognized verdict, and only named passes can substantiate a
+verified rule (a `quint run` simulation cannot). Hashes, per-checker rules and the receipt
+format: [`references/evidence.md`](references/evidence.md).
 
-For one file, the hash is `sha256:` followed by the digest of the raw bytes. For several
-files, hash the manifest. Sort by basename, encode each entry as the basename, a
-newline, and the lowercase hex digest. Join entries with one newline. Use distinct
-basenames. Apply the same convention to log hashes. If `run.specHash` is present, it
-must match the full spec digest, with or without the `sha256:` prefix. If omitted, the
-derived hash is saved in the evidence and the input board stays in sync.
+### Mutant logs
 
-### Checker logs
-
-Repeat `--log` for native logs or `proof-canvas-log-1` JSON receipts from your actual
-checker runs. Every supplied file must contain a recognized verdict.
-
-- **Quint.** Include the `quint verify` command and its named invariant or temporal
-  options. A passing `quint run` simulation cannot substantiate a verified rule.
-- **Alloy 6.** Include the `exec` output. A `check` row ending in `UNSAT` confirms
-  the assertion within its scope. A row ending in `SAT` reports a violation.
-- **TLC.** A passing log covers the invariants and properties in its supplied `.cfg`.
-  If you supply multiple configs, prefix each passing log with its TLC command
-  and `-config` argument. With multiple TLA+ specs, keep the log line that names
-  the parsed spec file.
-- **Apalache.** A passing log covers the named invariants reported by the checker
-  or recorded in the command's `--inv=` argument.
-
-Log names are matched to rule properties. With `--spec`, the checker family must
-match the bound source. Quint uses `.qnt`, Alloy uses `.als`, and TLC and Apalache
-use `.tla`. Only named passes can substantiate a verified rule.
-
-A JSON receipt uses a checker name and an array with one result per property.
-
-```json
-{
-  "schemaVersion": "proof-canvas-log-1",
-  "checker": "Dafny",
-  "results": [{ "property": "RefundCap", "status": "verified", "stepsChecked": 5 }]
-}
-```
-
-Use `verified` or `failed` in the receipt. The schema version, `specHash`, and
-`stepsChecked` are optional. If present, `specHash` must match the full manifest
-or the spec file bound to the reported rule. If the board and receipt both include
-a step count, the counts must match.
-
-The log producer supplies the record of what the checker ran. In the
-[`examples/04_refund_guard/`](../../examples/04_refund_guard/) example,
-`refund_guard.quint.log` records the Quint command followed by its verbatim output.
-See the [README](../../README.md#check-a-spec-and-checker-log) for the commands and the
-combined native-log example.
+`--mutant-log <ruleId>=<path>` binds the log of a mutant run (the rule switched off) to one
+rule. It reads Quint stdout and ITF `.itf.json`, TLC stdout, and Alloy stdout or a receipt JSON.
+The log must report a violation: `[ok]`, `No error has been found` and `UNSAT` are refused. A
+named violated property must equal the rule's `property`; a log naming another invariant or
+several is refused. ITF traces name no property and are shown as unnamed. The board keeps the
+file name, SHA-256, checker, property and up to 12 extracted steps, and shows **Trace-bound
+mutant kill** with those steps under **Proof & log**. A bug state without one says
+**Illustrative only (no trace bound)**.
 
 ## 6. Scale benchmark
 
-```bash
-node "$PLUGIN_ROOT/scripts/bench_scale.mjs"              # Node + headless Chromium (needs uv)
-node "$PLUGIN_ROOT/scripts/bench_scale.mjs" --no-browser # Node-only metrics
-```
-
-Renders 3 / 12 / 20 / 50 / 100-rule boards and an embed-mode board, validates them, checks
-byte-identical re-renders, then measures load, DOM size, heap, layout (every rule in every
-state) and interaction latency in headless Chromium, and writes `out/bench/`. Results:
-[`BENCHMARK.md`](../../BENCHMARK.md). Make stress boards with
-`node "$PLUGIN_ROOT/scripts/synth_board.mjs" --rules 100 --modules 20 --failed 5 --unverified 20 --out x.json`
-(`--unverified` sets how many rules are `pending`).
+`node "$PLUGIN_ROOT/scripts/bench_scale.mjs"` (add `--no-browser` without `uv`) renders and measures
+3 to 100-rule boards; results and stress-board commands are in [`BENCHMARK.md`](../../BENCHMARK.md).
