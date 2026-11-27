@@ -2,7 +2,28 @@
   "name": "proof-canvas",
   "version": "1.0.0",
   "description": "Render formal-verification results as one offline, single-file HTML board that people who do not read spec code can review.",
+  "author": "masayannuu",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masayannuu/proof-canvas.git"
+  },
+  "homepage": "https://github.com/masayannuu/proof-canvas#readme",
+  "bugs": {
+    "url": "https://github.com/masayannuu/proof-canvas/issues"
+  },
+  "keywords": [
+    "formal-verification",
+    "tla-plus",
+    "quint",
+    "alloy",
+    "lean",
+    "dafny",
+    "property-based-testing",
+    "visualization",
+    "single-file-html",
+    "agent-skill"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22"

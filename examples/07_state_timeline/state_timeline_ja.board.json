@@ -6,7 +6,7 @@
   "subtitle": "状態遷移図と時間軸で読む OAuth の 3 つのルール（変異体の実反例ログつき）",
   "generatedAt": "2026-11-27T18:00:00+09:00",
   "provenance": "unverified",
-  "provenanceNote": "変異体ログは oauth-full-feature-fv の実行ログ（TLC はパスのみ除去）。本体の検証ログはこの例に同梱していません。",
+  "provenanceNote": "変異体ログは OAuth 2.0 認可サーバー検証モデル（Quint / TLC 2.19）の実出力（ホストパスのみ除去）。本体の検証ログはこの例に同梱していません。",
   "run": {
     "tool": "Quint / TLA+ TLC",
     "status": "verified",

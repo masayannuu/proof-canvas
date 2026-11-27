@@ -1,6 +1,6 @@
 ---
 name: proof-canvas
-description: Render formal-verification or property-testing results as one offline HTML board. Use for TLA+, Quint, Alloy, Lean, or other checker results that need reviewable rule diagrams, counterexamples, and evidence.
+description: Render formal-verification or property-based testing results as one offline HTML spec review board with rule diagrams, counterexamples, mutant kills, and verified spec/log evidence. Use for TLA+/TLC, Quint, Alloy, Apalache, Lean, Dafny, PropEr, fast-check, or Hypothesis outputs, or Japanese requests like 形式検証の可視化・仕様マップ. Not for general architecture diagrams, UI wireframes, or running checkers itself.
 ---
 
 # proof-canvas

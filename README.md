@@ -22,17 +22,20 @@ and within which bounds. An optional flow map shows how the checked parts of a s
 ## At a glance
 
 Every screenshot is rendered from the bundled [`examples/`](examples/): examples 05 and 06 with
-their spec files and checker logs, examples 02 and 03 as illustrative sample boards.
+their spec files and checker logs, example 07 with its three real Quint and TLC mutant logs, and
+examples 02 and 03 as illustrative sample boards.
 
-| **Alloy `relation`: delegation cycle (Spec & log verified 6/6)** | **TLA+ `sequence`: period-close race (Spec & log verified 6/6)** |
+| **Alloy `relation`: delegation cycle (`Spec & log verified`, highlighted `.als`)** | **TLA+ `sequence`: period-close race (`Spec & log verified`, highlighted `.tla`)** |
 |---|---|
-| ![Alloy NoCyclicDelegation rule as a relation graph in the bug state, with the delegation_rbac.als excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![TLC ClosedPeriodImmutable rule as a three-lane sequence diagram in the bug state, with the period_lock.tla excerpt](docs/images/02-sequence-race.png) |
-| **Failed rule with a TLA+ counterexample (12 rules, sample)** | **Japanese board and UI (`"lang": "ja"`, Spec & log verified 3/3)** |
-| ![Failed escrow payout rule in the bug state with the full TLA+ counterexample trace and Proof & log panel](docs/images/03-failed-counterexample.png) | ![Japanese board with the period-close sequence rule in the bug state and the Japanese Proof & log panel, bound to the example 05 specs and logs](docs/images/04-japanese-board.png) |
-| **Module overview with the status filter (20 rules)** | **Embed mode (`--mode embed`, 900×700)** |
-| ![20-rule multi-module overview with the status filter and the rule index grouped by module](docs/images/05-overview-20rules.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
-| **Flow map: one journey highlighted, with its checkpoint rule** | **Flow map with Japanese UI** |
-| ![Flow map of three stages with the self-approved release journey highlighted, the other stage dimmed, and an Inspect this rule button](docs/images/07-flow-map.png) | ![Japanese flow map with the posting-after-close journey highlighted and a button that opens the checkpoint rule](docs/images/08-flow-map-ja.png) |
+| ![Alloy NoCyclicDelegation rule as a relation graph in the bug state, with syntax-highlighted delegation_rbac.als source and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![TLC ClosedPeriodImmutable rule as a three-lane sequence diagram in the bug state, with syntax-highlighted period_lock.tla source](docs/images/02-sequence-race.png) |
+| **Flow map: journey highlighted with checkpoint CTA** | **Module overview with status filter (20 rules)** |
+| ![Flow map of three stages with the self-approved release journey highlighted, out-of-scope note, and Inspect this rule button](docs/images/07-flow-map.png) | ![20-rule multi-module overview with the status filter and rule index grouped by module](docs/images/05-overview-20rules.png) |
+| **Failed `gate` rule with a TLA+ counterexample (12 rules, sample)** | **Embed mode (`--mode embed`, 900×700)** |
+| ![Failed escrow payout gate rule in the bug state with the TLA+ counterexample trace and Proof & log panel](docs/images/03-failed-counterexample.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
+| **Mobile phones (`390×844`): stacked Flow map & full-fit rule figure** | **Flow map with Japanese UI (`"lang": "ja"`, `実ログ検証済み 3/3`)** |
+| ![Mobile 390x844 phone views showing the stacked flow map on the left and the full-fit delegation cycle rule diagram on the right](docs/images/10-mobile-390.png) | ![Japanese flow map with the posting-after-close journey highlighted, out-of-scope note, and checkpoint button](docs/images/08-flow-map-ja.png) |
+| **`state` figure + TLC mutant trace (Japanese UI, `--mutant-log`)** | **`timeline` figure + Quint mutant trace (Japanese UI, `--mutant-log`)** |
+| ![Japanese state diagram for InvRevokeOnReplay with run bounds, trace-bound mutant kill badge, and syntax-highlighted TLC mutant trace](docs/images/04-state-mutant-ja.png) | ![Japanese timeline diagram for inv_no_expired_code_redeem with boundary line, run bounds, trace-bound mutant kill badge, and syntax-highlighted Quint mutant trace](docs/images/09-timeline-mutant-ja.png) |
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same board and evidence files render to the same bytes.
@@ -216,7 +219,14 @@ The repository includes a [Cursor plugin manifest](.cursor-plugin/plugin.json).
 [`skills/proof-canvas/SKILL.md`](skills/proof-canvas/SKILL.md) in a complete checkout,
 or run the [quickstart commands](#quickstart) from the repository root.
 
-After installing, ask your agent to "Render our TLC results as a proof-canvas board and validate it."
+After installing, try one of these prompts with your agent:
+
+- **Basic board (TLC / Quint / Alloy):**
+  > "Use proof-canvas to render our TLC / Quint / Alloy verification results as a single offline HTML review board and validate it."
+- **Full verified board with flow map, mutant kills & bounds:**
+  > "Build a proof-canvas board bound to our specs and checker logs (`--spec`, `--log`), attach our killed-mutant logs (`--mutant-log`), include a system flow map with journeys and `outOfScope`, and run `validate_board.mjs`."
+- **Japanese board or property-based testing (PropEr / fast-check / Hypothesis):**
+  > "PropEr / fast-check の検証結果（または形式検証の結果）を proof-canvas で日本語 UI（`"lang": "ja"`）の仕様レビューボードにして検証して。"
 
 ## Scale benchmark
 

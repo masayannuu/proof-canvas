@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Run self-tests
+        run: npm test
+      - name: Render and validate bundled examples (standalone & embed)
+        run: |
+          set -euo pipefail
+          out=$(mktemp -d)
+          trap 'rm -rf "$out"' EXIT
+
+          check_board() {
+            local name=$1
+            local board=$2
+            shift 2
+            for mode in standalone embed; do
+              local html="$out/${name}_${mode}.html"
+              node scripts/render_board.mjs --in "$board" --mode "$mode" "$@" --out "$html"
+              node scripts/validate_board.mjs --in "$board" "$@" "$html"
+            done
+          }
+
+          check_board 00 examples/00_minimal.board.json
+          check_board 01 examples/01_room_booking.board.json
+          check_board 02 examples/02_escrow_payout.board.json
+          check_board 03 examples/03_multi_module_20rules.board.json
+
+          ex4=examples/04_refund_guard/refund_guard
+          check_board 04 "$ex4.board.json" --spec "$ex4.qnt" --log "$ex4.quint.log"
+
+          ex5=examples/05_multi_verifier
+          flags5=(
+            --spec "$ex5/escrow_ledger.qnt"
+            --spec "$ex5/delegation_rbac.als"
+            --spec "$ex5/period_lock.tla"
+            --spec "$ex5/period_lock.cfg"
+            --log "$ex5/quint_escrow.log"
+            --log "$ex5/alloy_rbac.log"
+            --log "$ex5/tlc_pass.log"
+          )
+          check_board 05 "$ex5/multi_verifier.board.json" "${flags5[@]}"
+          check_board 06 examples/06_japanese_board/multi_verifier_ja.board.json "${flags5[@]}"
+
+          ex7=examples/07_state_timeline
+          check_board 07 "$ex7/state_timeline_ja.board.json" \
+            --mutant-log "refresh_reuse=$ex7/mutant_reuse_rotated_accepted.log" \
+            --mutant-log "code_ttl=$ex7/mutant_off_by_one_ttl.log" \
+            --mutant-log "replay_revoke=$ex7/mutant_tlc_replay_compromised_no_revoke.log"
