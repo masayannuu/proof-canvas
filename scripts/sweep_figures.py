@@ -31,8 +31,8 @@ it the stages must stack, with stage titles of 12px or more and chips 34px or ta
 `mobile` opens each board as a touch phone (default 390x844 and 375x812) and runs `flow` and `sweep`
 there, then taps through it: the last chip of the stacked map must open its rule with the heading on
 screen; every scenario button and the "Proof & log" drawer must respond, the three scenario buttons must share
-one row, the rule number must sit beside its title, and a figure scrolled sideways must keep its place
-across scenarios and never scroll vertically; on index layouts the index,
+one row, the rule number must sit beside its title, and every figure must fit whole in its card with
+nothing to scroll; on index layouts the index,
 opened from the bottom of the page, must show on screen and close when a rule is picked, showing the
 rule. On every screen the page must not overflow, the bar must scroll with the page and keep its buttons
 inside its border, and no header, main-column, scenario or footer element may leave the screen or clip.
@@ -413,9 +413,12 @@ PHONE_PROBE_JS = """() => {
   const de = document.documentElement;
   const root = document.getElementById('proof-canvas-root');
   const R = (el) => el.getBoundingClientRect();
-  const out = { overflowX: de.scrollWidth - de.clientWidth, sticky: 0, spill: 0, offScreen: 0, clipped: 0, segRows: 0, badgeApart: 0, vScroll: 0 };
-  // A figure may scroll sideways, never vertically (that would catch the page's vertical swipe).
-  for (const w of root.querySelectorAll('.fg-wrap')) if (w.scrollHeight > w.clientHeight + 1) out.vScroll += 1;
+  const out = { overflowX: de.scrollWidth - de.clientWidth, sticky: 0, spill: 0, offScreen: 0, clipped: 0, segRows: 0, badgeApart: 0, figCut: 0 };
+  // Every figure fits whole in its card: the drawing inside its wrapper, and nothing to scroll.
+  for (const w of root.querySelectorAll('.fg-wrap')) {
+    const a = R(w), s = R(w.querySelector('.fg-svg'));
+    if (s.left < a.left - 0.5 || s.right > a.right + 0.5 || w.scrollWidth > w.clientWidth + 1) out.figCut += 1;
+  }
   // The three scenario buttons share one row, and the rule number sits beside its title.
   const seg = [...root.querySelectorAll('.fig .fx-seg button')].map((b) => R(b).top);
   if (seg.some((t) => Math.abs(t - seg[0]) > 4)) out.segRows = 1;
@@ -495,15 +498,10 @@ def phone_sweep(browser, html, viewports, shots):
                 on_screen(".fig-title", "last chip")
             elif state()["view"] != "focus":
                 page.evaluate("(s) => window.__proofCanvas.setState(s)", {"view": "focus"})
-            # The figure, scrolled sideways, keeps its place while each scenario is tapped.
-            x0 = page.evaluate("() => { const w = document.querySelector('#proof-canvas-root .fg-wrap'); w.scrollLeft = 80; return w.scrollLeft; }")
             for k in ["normal", "bug", "fixed"]:
                 tap(page.locator(f'.fx [data-act="focus"][data-v="{k}"]'), f"scenario {k}")
                 if page.locator(f'.fx [data-act="focus"][data-v="{k}"][aria-pressed="true"]').count() != 1:
                     fail(f"{at} scenario {k}", "the tapped scenario is not pressed")
-                x = page.evaluate("() => document.querySelector('#proof-canvas-root .fg-wrap').scrollLeft")
-                if x != x0:
-                    fail(f"{at} scenario {k}", f"the figure scrolled from {x0}px to {x}px")
                 probe(f"scenario-{k}")
             tap(page.locator('[data-act="ev"]'), "evidence toggle")
             if page.locator('[data-act="ev"][aria-expanded="true"]').count() != 1:

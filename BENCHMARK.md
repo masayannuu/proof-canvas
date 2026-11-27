@@ -187,20 +187,20 @@ real mutant logs with `--mutant-log`: two `quint run` outputs and one TLC 2.19 o
 At a main column of 760px or less the flow map reflows its stages in step order at full size (one
 column on a phone, two or three on a tablet) and hides the edge drawing; at 640px or less the bar
 scrolls with the page in two rows, the rule number sits beside its title, the scenario buttons
-share one row, and figures keep 560px and scroll sideways (keeping their place across scenarios).
+share one row, and every figure fits whole in its card.
 On a narrow screen, picking a rule from the index closes the index.
 
 | Board | Standalone before (`fe0e51b`) | Standalone after | Budget |
 |---|---|---|---|
-| 00 minimal | 68,611 B | 68,720 B | 128 KB |
-| 05 multi-verifier (index, flow) | 129,494 B | 129,496 B | 128 KB |
-| 07 state and timeline | 96,914 B | 96,918 B | 128 KB |
+| 00 minimal | 68,611 B | 68,537 B | 128 KB |
+| 05 multi-verifier (index, flow) | 129,494 B | 129,313 B | 128 KB |
+| 07 state and timeline | 96,914 B | 96,735 B | 128 KB |
 
-- **Cost.** The phone rules add about 1.9 KB of CSS and JS to a flow board. The CSS minifier now
+- **Cost.** The phone rules add about 1.7 KB of CSS and JS to a flow board. The CSS minifier now
   also drops spaces after "," ">" "/" and a property's ":", before "!important", the 0 of "0.5"
-  and each rule's last ";", which pays for it: against `fe0e51b` the examples change by -34 B
-  (02, 03) to +109 B (00, 01, 04, 06). Example 05 with one bound mutant log, as the mutant-log
-  validation test renders it, is 131,016 B: 56 B under budget, as before this change.
+  and each rule's last ";", which more than pays for it: against `fe0e51b` every example shrinks,
+  by 74 B (00, 01, 04, 06) to 217 B (02, 03). Example 05 with one bound mutant log, as the
+  mutant-log validation test renders it, is 130,833 B: 239 B under budget.
 - **Phone sweep.** `scripts/sweep_figures.py mobile` over the 16 example files and both modes of a
   16-rule, 6-stage Japanese OAuth board, at 390x844 and 375x812 as touch phones: 1,056 views,
   580 flow clicks and 188 taps, 0 failures. Stacked stage titles are 15.1px and chips 13px and

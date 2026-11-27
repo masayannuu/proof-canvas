@@ -387,8 +387,7 @@ const CSS = `
 .fx-prop { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fg-wrap { position: relative; margin: 8px auto 0; width: 100%; max-width: 740px; }
 /* Narrow: the rule number stays beside its title with the category under it; three equal scenario
-   buttons on one row; the trust pill and property on the next line and the scope, uncut, under them.
-   The figure keeps a legible 560px and scrolls sideways instead of shrinking its text to 5px. */
+   buttons on one row; the trust pill and property on the next line and the scope, uncut, under them. */
 @container pcm (max-width: 640px) {
   .fig-head { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
   .fig-sub { grid-column: 2; margin: 0; }
@@ -397,8 +396,6 @@ const CSS = `
   .fx-meta { margin-left: 0; flex-wrap: wrap; }
   .fx-scope { order: 1; max-width: none; }
   .fx-prop { white-space: normal; overflow-wrap: anywhere; }
-  .fg-wrap { overflow-x: auto; }
-  .fg-svg { min-width: 560px; }
 }
 .fg-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pc-font); }
 .fg-svg .fg-box, .fg-svg .fg-arrow { transition: opacity 0.22s ease; }
@@ -1206,12 +1203,7 @@ ${SHARED_FNS}
     if (ix && getComputedStyle(ix).position !== 'sticky') S.indexOpen = false;
     if (act === 'rule') { S.ruleId = v; S.view = 'focus'; }
     else if (act === 'rule-open') { S.ruleId = v; if (LAYOUT === 'compact') S.focusByRule[v] = S.ovFocus; S.view = 'focus'; }
-    else if (act === 'focus') {
-      // A figure scrolled sideways on a phone keeps its place while the scenarios are compared.
-      const x = root.querySelector('.fg-wrap').scrollLeft;
-      S.focusByRule[activeRule().id] = v; render(); root.querySelector('.fg-wrap').scrollLeft = x;
-      root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return;
-    }
+    else if (act === 'focus') { S.focusByRule[activeRule().id] = v; render(); root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return; }
     else if (act === 'ov-focus') { S.ovFocus = v; }
     else if (act === 'view') { S.view = S.view === v ? 'focus' : v; }
     else if (act === 'ev') { S.evOpen = !S.evOpen; }
