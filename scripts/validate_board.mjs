@@ -11,13 +11,13 @@
 //                                         no page-level CSS in embed mode
 //   6. provenance       (provenance:)    badge and footer match the statuses and evidence
 //   7. sync             (sync:)          --in checks the embedded board against the input JSON
-//   8. evidence binding (binding:)       --spec / --log check evidence against the supplied files
+//   8. evidence binding (binding:)       --spec / --log / --mutant-log check evidence against the supplied files
 
 import { readFileSync, realpathSync } from 'node:fs';
 import { extname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
-import { bindEvidence, validateBinding } from './evidence.mjs';
+import { bindEvidence, parseMutantFlag, validateBinding } from './evidence.mjs';
 import { esc } from './figure.mjs';
 import { uiFor } from './i18n.mjs';
 import { provenanceBadge, provNote } from './render_board.mjs';
@@ -26,11 +26,11 @@ import { MAX_BYTES, RESERVED_HOST_TOKENS, layoutFor, resolveProvenance, sizeBudg
 
 const USAGE = `Usage:
   node scripts/validate_board.mjs <board.html | board.json> [--in <board.json>] [--json]
-       [--spec <path>]... [--log <path>]...
+       [--spec <path>]... [--log <path>]... [--mutant-log <ruleId>=<path>]...
 `;
 
 function parseArgs(argv) {
-  const opts = { target: '', jsonPath: '', asJson: false, specPaths: [], logPaths: [] };
+  const opts = { target: '', jsonPath: '', asJson: false, specPaths: [], logPaths: [], mutantLogs: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '-h' || a === '--help') {
@@ -40,6 +40,8 @@ function parseArgs(argv) {
       opts.jsonPath = argv[++i];
     } else if ((a === '--spec' || a === '--log') && argv[i + 1] && !argv[i + 1].startsWith('-')) {
       opts[a === '--spec' ? 'specPaths' : 'logPaths'].push(argv[++i]);
+    } else if (a === '--mutant-log' && argv[i + 1]) {
+      opts.mutantLogs.push(parseMutantFlag(argv[++i]));
     } else if (a === '--json') {
       opts.asJson = true;
     } else if (!a.startsWith('-') && !opts.target) {
@@ -53,6 +55,7 @@ function parseArgs(argv) {
 }
 
 const kb = (n) => (n / 1024).toFixed(1);
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const SCRIPT_RE = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
 const STYLE_RE = /<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi;
 
@@ -123,7 +126,7 @@ function offlineErrors(html) {
   return out;
 }
 
-export function validateHtmlContent(html, label = '<html>', { specPaths = [], logPaths = [] } = {}) {
+export function validateHtmlContent(html, label = '<html>', { specPaths = [], logPaths = [], mutantLogs = [] } = {}) {
   const errors = [];
   const warnings = [];
   const bytes = Buffer.byteLength(html, 'utf8');
@@ -220,16 +223,25 @@ export function validateHtmlContent(html, label = '<html>', { specPaths = [], lo
         if (!isDeepStrictEqual(meta.__provenance, expected)) errors.push('provenance: cached __provenance in the payload does not match the embedded statuses and evidence');
       }
 
-      // 8. Re-read the files even when the HTML evidence passes the structural checks.
-      if (specPaths.length || logPaths.length) {
+      // 8. Re-read the files even when the HTML evidence passes the structural checks. Spec/log
+      // evidence and mutant counterexamples are compared separately: each is checked only when its
+      // own files are supplied, and an unchecked part is a warning.
+      const files = specPaths.length || logPaths.length;
+      if (files || mutantLogs.length) {
         try {
-          const actual = bindEvidence(board, { specPaths, logPaths });
-          if (!isDeepStrictEqual(binding, actual)) errors.push('binding: embedded evidence does not match supplied files');
+          const { counterexamples: actualTraces, ...actual } = bindEvidence(board, { specPaths, logPaths, mutantLogs });
+          const { counterexamples: embeddedTraces, ...embedded } = isPlainObject(binding) ? binding : {};
+          if (files && !isDeepStrictEqual(embedded, actual)) errors.push('binding: embedded evidence does not match supplied files');
+          if (mutantLogs.length && !isDeepStrictEqual(embeddedTraces, actualTraces)) errors.push('binding: embedded mutant counterexamples do not match the supplied --mutant-log files');
         } catch (err) {
           errors.push(err.message);
         }
-      } else if (bindingOk && binding.level !== 'self-reported') {
+      }
+      if (!files && bindingOk && binding.level !== 'self-reported') {
         warnings.push('binding: embedded evidence was not re-checked against --spec/--log files');
+      }
+      if (!mutantLogs.length && bindingOk && binding.counterexamples) {
+        warnings.push('binding: embedded mutant counterexamples were not re-checked against --mutant-log files');
       }
       if (meta.__layout !== layoutFor(board)) errors.push(`data: cached __layout "${meta.__layout}" does not match "${layoutFor(board)}"`);
       if (meta.__titleOverride !== undefined && (typeof meta.__titleOverride !== 'string' || !meta.__titleOverride.trim())) {
@@ -285,11 +297,11 @@ export function syncErrors(inputBoard, htmlBoard) {
   return d ? [`sync: the HTML embeds a different board than the input JSON (first difference at ${d})`] : [];
 }
 
-function jsonCheck(parsed, label, { specPaths = [], logPaths = [] } = {}, binding) {
+function jsonCheck(parsed, label, { specPaths = [], logPaths = [], mutantLogs = [] } = {}, binding) {
   const res = validateBoardData(parsed, { checkHash: !binding?.specHash && specPaths.length === 0 });
-  if (res.ok && (specPaths.length || logPaths.length)) {
+  if (res.ok && (specPaths.length || logPaths.length || mutantLogs.length)) {
     try {
-      binding = bindEvidence(parsed, { specPaths, logPaths });
+      binding = bindEvidence(parsed, { specPaths, logPaths, mutantLogs });
     } catch (err) {
       res.errors.push(err.message);
       res.ok = false;

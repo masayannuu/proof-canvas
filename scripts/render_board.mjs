@@ -7,7 +7,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { bindEvidence } from './evidence.mjs';
+import { bindEvidence, parseMutantFlag } from './evidence.mjs';
 import { esc, figKind, figSvg, figureRuntime } from './figure.mjs';
 import { flowRuntime, flowView } from './flow.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
@@ -23,11 +23,11 @@ export const ALL_JOURNEYS = '*';
 const USAGE = `Usage:
   node scripts/render_board.mjs --in <board.json> --out <board.html>
        [--title "..."] [--mode standalone|embed] [--payload auto|json|gzip]
-       [--spec <path>]... [--log <path>]...
+       [--spec <path>]... [--log <path>]... [--mutant-log <ruleId>=<path>]...
 `;
 
 function parseArgs(argv) {
-  const opts = { inPath: '', outPath: '', title: undefined, mode: 'standalone', payload: 'auto', specPaths: [], logPaths: [] };
+  const opts = { inPath: '', outPath: '', title: undefined, mode: 'standalone', payload: 'auto', specPaths: [], logPaths: [], mutantLogs: [] };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '-h' || a === '--help') {
@@ -37,6 +37,8 @@ function parseArgs(argv) {
       opts.inPath = argv[++i];
     } else if ((a === '--spec' || a === '--log') && argv[i + 1] && !argv[i + 1].startsWith('-')) {
       opts[a === '--spec' ? 'specPaths' : 'logPaths'].push(argv[++i]);
+    } else if (a === '--mutant-log' && argv[i + 1]) {
+      opts.mutantLogs.push(parseMutantFlag(argv[++i]));
     } else if (a === '--out' && argv[i + 1]) {
       opts.outPath = argv[++i];
     } else if (a === '--title' && argv[i + 1]) {
@@ -96,6 +98,11 @@ export function footerMarkup(p, board, binding, L, specHash = binding.specHash |
   return '<footer class="pc-foot" data-provenance-note="' + p.kind + '"><span>' + esc(provNote(p, board, binding, L)) + '</span><span class="pc-spacer"></span>' +
     '<code>run: ' + esc(board.runId) + '</code>' + (specHash ? '<code>spec: ' + esc(String(specHash).slice(0, 19)) + '</code>' : '') +
     '<code>tool: ' + esc(tool) + '</code></footer>';
+}
+
+// The exploration bounds of the whole run (board.run.bounds), always shown above the main view.
+export function boundsMarkup(board, L) {
+  return '<p class="pc-bounds"><b>' + esc(L.bounds) + '</b>' + esc(board.run.bounds) + '</p>';
 }
 
 // What the models behind this board do not cover (board.outOfScope), shown under the main view.
@@ -240,6 +247,14 @@ const CSS = `
 .st-pill.st-pending { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-bd); border-style: dashed; }
 /*@end*/
 
+/*@bounds*/
+.pc-bounds { margin: 0 0 12px; font-size: 12px; color: var(--pc-ink-2); }
+.pc-bounds b { font-weight: 600; color: var(--pc-ink-3); margin-right: 8px; }
+/*@end*/
+/*@trace*/
+.tr-steps { list-style: none; margin: 8px 0 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--pc-bd-strong); font: 11.5px/1.6 var(--pc-mono); color: var(--pc-ink-2); }
+.tr-steps li { overflow-wrap: anywhere; }
+/*@end*/
 /*@oos*/
 /* Out of scope: a calm note under the main view */
 .pc-oos { margin-top: 14px; padding: 10px 14px; border: 1px dashed var(--pc-bd-strong); border-radius: 12px; background: var(--pc-surface); font-size: 12.5px; line-height: 1.5; color: var(--pc-ink-2); overflow-wrap: anywhere; }
@@ -324,7 +339,13 @@ const CSS = `
 .fx .fx-normal.is-on { background: var(--pc-info); }
 .fx .fx-bug.is-on { background: var(--pc-bad); }
 .fx .fx-safe.is-on { background: var(--pc-good); }
-.fx-prop { margin-left: auto; font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.fx-scope { font-size: 11.5px; color: var(--pc-ink-2); border: 1px dashed var(--pc-bd-strong); border-radius: 6px; padding: 1px 7px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-scope b { font-weight: 600; color: var(--pc-ink-3); margin-right: 5px; }
+.tp { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--pc-bd); white-space: nowrap; color: var(--pc-ink-3); background: var(--pc-bg); }
+.tp-illus { border-style: dashed; font-weight: 500; }
+.tp-bound { color: #166534; background: #f1f5f4; border-color: #a7c4b5; }
+.fx-prop { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fg-wrap { position: relative; margin: 8px auto 0; width: 100%; max-width: 740px; }
 .fg-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pc-font); }
 .fg-svg .fg-box, .fg-svg .fg-arrow { transition: opacity 0.22s ease; }
@@ -733,6 +754,26 @@ ${SHARED_FNS}
   }
   /*@end*/
   const focusOf = (r) => S.focusByRule[r.id] || r.defaultFocus;
+  const hasTrace = (r) => !!BINDING.counterexamples && Object.hasOwn(BINDING.counterexamples, r.id);
+  const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
+  // Honest label for a bug story: bound to a real mutant counterexample, or a drawing only.
+  const tracePill = (r) => '<span class="tp tp-' + (hasTrace(r) ? 'bound">' + esc(L.traceBound) : 'illus">' + esc(L.traceIllus)) + '</span>';
+  let traceHtml = () => '';
+  /*@trace*/
+  // Read-only machine evidence from __binding.counterexamples, never from board prose.
+  traceHtml = (r) => {
+    if (!hasTrace(r)) return '';
+    const c = BINDING.counterexamples[r.id];
+    return '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.trTitle) + '</div><div class="kv">' + kv(L.trFile, c.file, true) +
+      kv(L.trProp, c.violatedProperty === null ? L.trUnnamed : c.violatedProperty, c.violatedProperty !== null) + kv(L.tool, c.checker) +
+      kv('SHA-256', c.sha256.slice(0, 19) + '…', true) + kv(L.trLen, L.num(c.stepCount) + (c.steps.length < c.stepCount ? L.trShown(c.steps.length) : '')) +
+      '</div><ol class="tr-steps">' + c.steps.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ol></div>';
+  };
+  /*@end*/
+  let boundsHtml = () => '';
+  /*@bounds*/
+  boundsHtml = () => boundsMarkup(BOARD, L);
+  /*@end*/
   let oosHtml = () => '';
   /*@oos*/
   // Keep the out-of-scope note open or closed across re-renders.
@@ -760,7 +801,10 @@ ${SHARED_FNS}
   }
   function figCard(r, focusKey, uid, opt) {
     const st = r.states[focusKey];
-    const pills = opt && opt.noPills ? '' : scenarioBar((k) => r.states[k], focusKey, 'focus', '<span class="fx-prop" title="' + esc(r.property) + '">' + esc(r.property) + '</span>');
+    const meta = '<span class="fx-meta">' + (focusKey === 'bug' ? tracePill(r) : '') +
+      '<span class="fx-scope" title="' + esc(r.evidence.scope) + '"><b>' + esc(L.scopeChip) + '</b>' + esc(r.evidence.scope) + '</span>' +
+      '<span class="fx-prop" title="' + esc(r.property) + '">' + esc(r.property) + '</span></span>';
+    const pills = opt && opt.noPills ? '' : scenarioBar((k) => r.states[k], focusKey, 'focus', meta);
     return '<section class="card fig" data-fig><div class="fig-head"><span class="no">' + esc(r.no) + '</span><h2 class="fig-title">' + esc(r.title) + '</h2>' +
       (r.category ? '<span class="fig-sub">' + esc(r.category) + '</span>' : '') + '</div>' +
       pills + '<div class="fg-wrap">' + figSvg(r, st, uid, true) + '</div>' +
@@ -809,20 +853,19 @@ ${SHARED_FNS}
     // with the rule switched off (a mutant), so it gets its own heading and is omitted when absent.
     const cex = STATUS[r.id] !== 'verified' ? { title: L.cexTitle, text: e.counterexample || L.noCex }
       : e.counterexample ? { title: L.cexOff, text: e.counterexample } : null;
-    const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
       '<div><div class="ev-sec">' + esc(L.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
       '<div class="ev-impacts"><div class="ev-imp"><b class="t-ok">' + esc(L.ifOn) + '</b>' + esc(e.ifEnforced) + '</div>' +
       '<div class="ev-imp"><b class="t-bad">' + esc(L.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
       '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(L.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
       '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(L.meta) + '</div>' +
-      '<div class="kv">' + kv(L.scope, e.scope) + kv(L.method, e.method) + kv(L.tool, tool) +
+      '<div class="kv">' + kv(L.scope, e.scope) + kv(L.method, e.method) + (e.witness ? kv(L.witness, e.witness) : '') + kv(L.tool, tool) +
       kv(L.binding, bindingLabel(BINDING.level, L)) +
       (SPEC_HASH ? kv(L.specHash, SPEC_HASH, true) : '') +
       logFiles.map((file) => kv(L.logHash, file.hash, true)).join('') +
       (Number.isInteger(r.stepsChecked) ? kv(L.steps, L.num(r.stepsChecked)) : '') + '</div></div>' +
       (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.specSource) + ' (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
-      (cex ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(cex.title) + '</div><pre class="term">' + esc(cex.text) + '</pre></div>' : '') +
+      traceHtml(r) + (cex ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(cex.title) + '</div><pre class="term">' + esc(cex.text) + '</pre></div>' : '') +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
       '<button class="ev-tg" type="button" data-act="ev" aria-expanded="' + S.evOpen + '">' +
@@ -830,7 +873,8 @@ ${SHARED_FNS}
       '<span class="ev-shield" aria-hidden="true">' + ICON.shield + '</span>' +
       '<span>' + esc(L.evTitle) + '</span>' +
       '<span class="ev-cue">' + esc(S.evOpen ? L.evClose : L.evOpen) + '</span></button></h3>' +
-      '<ul class="ev-facts" role="list"><li>' + esc(r.source) + '</li><li>' + esc(e.checkerSummary) + '</li>' + liveStatusItem(r) + '</ul>' + body + '</section>';
+      '<ul class="ev-facts" role="list"><li>' + esc(r.source) + '</li><li>' + esc(e.checkerSummary) + '</li>' + liveStatusItem(r) +
+      (hasTrace(r) || e.counterexample ? '<li>' + tracePill(r) + '</li>' : '') + '</ul>' + body + '</section>';
   }
 
   function boardMarkup(r, focusKey, uid, opt) {
@@ -891,7 +935,7 @@ ${SHARED_FNS}
     /*@flow*/
     if (S.view === 'flow') main = flowView(BOARD, L, S.journey);
     /*@end*/
-    root.innerHTML = headerHtml() + '<main class="pc-canvas">' + compactBar() + '<div class="pc-wrap pc-main">' + main + oosHtml() + '</div></main>' + footerHtml();
+    root.innerHTML = headerHtml() + '<main class="pc-canvas">' + compactBar() + '<div class="pc-wrap pc-main">' + boundsHtml() + main + oosHtml() + '</div></main>' + footerHtml();
   }
   /*@end*/
 
@@ -989,7 +1033,7 @@ ${SHARED_FNS}
   }
 
   function renderMain(vis) {
-    const put = (h) => { root.querySelector('#pc-main').innerHTML = h + oosHtml(); };
+    const put = (h) => { root.querySelector('#pc-main').innerHTML = boundsHtml() + h + oosHtml(); };
     if (S.view === 'overview') return put(hubOverview(vis));
     /*@flow*/
     if (S.view === 'flow') return put(flowView(BOARD, L, S.journey, S.status));
@@ -1211,13 +1255,16 @@ function checkOptions(opts) {
   if (!RENDER_MODES.includes(mode)) throw new Error(`Invalid mode "${mode}" (expected ${RENDER_MODES.join(' or ')})`);
   if (!PAYLOAD_MODES.includes(payload)) throw new Error(`Invalid payload "${payload}" (expected ${PAYLOAD_MODES.join(', ')})`);
   if (opts.title !== undefined && (typeof opts.title !== 'string' || !opts.title.trim())) throw new Error('title must be a non-empty string when given');
-  const { specPaths = [], logPaths = [] } = opts;
+  const { specPaths = [], logPaths = [], mutantLogs = [] } = opts;
   for (const paths of [specPaths, logPaths]) {
     if (!Array.isArray(paths) || paths.some((p) => typeof p !== 'string' || !p)) {
       throw new Error('specPaths and logPaths must be arrays of file paths');
     }
   }
-  return { mode, payload, title: opts.title, specPaths, logPaths };
+  if (!Array.isArray(mutantLogs) || mutantLogs.some((m) => !m || typeof m.ruleId !== 'string' || typeof m.path !== 'string' || !m.path)) {
+    throw new Error('mutantLogs must be an array of { ruleId, path }');
+  }
+  return { mode, payload, title: opts.title, specPaths, logPaths, mutantLogs };
 }
 
 // Public entry point. Throws on an invalid board or invalid options; never renders a partial page.
@@ -1235,7 +1282,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
   const layout = layoutFor(board);
   const payload = encodePayload({ ...board, __provenance: prov, __layout: layout, __binding: binding, ...(title !== undefined ? { __titleOverride: title } : {}) }, payloadMode);
 
-  const L = uiFor(board);
+  const L = uiFor(board, binding);
   const first = board.rules[0];
   const firstSt = first.states[first.defaultFocus];
   const flowFirst = board.defaultView === 'flow';
@@ -1251,15 +1298,16 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
   const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="${flowFirst ? 'flow' : 'focus'}" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}"${board.flow ? ` data-journey="${ALL_JOURNEYS}"` : ''}>` +
     `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
     `<div class="pc-head-right">${provenanceBadge(prov, L)}</div></header>` +
-    `<main class="pc-canvas"><div class="pc-wrap pc-main">${firstView}${board.outOfScope ? oosMarkup(board, L, true) : ''}</div></main>` +
+    `<main class="pc-canvas"><div class="pc-wrap pc-main">${board.run.bounds ? boundsMarkup(board, L) : ''}${firstView}${board.outOfScope ? oosMarkup(board, L, true) : ''}</div></main>` +
     `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding, L))}</span></footer>` +
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
     `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
-  const keep = [layout, ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : [])];
+  const keep = [layout, ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : []), ...(board.run.bounds ? ['bounds'] : []),
+    ...(binding.counterexamples ? ['trace'] : [])];
   const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
-  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board) + (board.flow ? '\n' + flowRuntime() : '') +
-    (board.outOfScope ? '\n' + oosMarkup.toString() : '');
+  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board, binding) + (board.flow ? '\n' + flowRuntime() : '') +
+    (board.outOfScope ? '\n' + oosMarkup.toString() : '') + (board.run.bounds ? '\n' + boundsMarkup.toString() : '');
   return `<!doctype html>
 <html lang="${L.lang}">
 <head>

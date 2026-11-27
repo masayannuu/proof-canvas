@@ -15,6 +15,7 @@ import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
 import { checkpointFocus, flowLayout, flowOverflows, flowRuntime, flowView } from './flow.mjs';
+import { bindEvidence, parseMutantFlag, validateBinding } from './evidence.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
 import { ALL_JOURNEYS, footerMarkup, oosMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, ruleStatus, splitRendererKeys, validateBoardData } from './schema.mjs';
@@ -1753,6 +1754,178 @@ test('outOfScope: escaped, rendered under the main view in English and Japanese,
     const html = renderBoardHtml(b);
     assert.equal(/pc-oos|oosMarkup|oosOpen/.test(html), false, `${b.runId} carries out-of-scope code without outOfScope`);
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// Mutant counterexamples (--mutant-log), run.bounds, evidence.witness and the trust pill
+// ---------------------------------------------------------------------------------------------
+const MUT = (name, text) => { const f = join(TMP, name); writeFileSync(f, text); return f; };
+const quintStates = (n) => Array.from({ length: n }, (_, i) => `[State ${i}]\n{\n  booked:\n    Set(${i}),\n  path: "/Users/alice/secret/model.qnt"\n}\n`).join('\n');
+const QUINT_KILL = MUT('quint_kill.log', `$ quint run /Users/alice/models/mutant.qnt --max-steps=6 --invariant=NoOverlappingBookings\nAn example execution:\n\n${quintStates(3)}\n[violation] Found an issue (12ms).\nerror: Invariant violated\n`);
+const QUINT_LONG = MUT('quint_long.log', `$ quint run mutant.qnt --invariant=NoOverlappingBookings\n${quintStates(20)}\n[violation] Found an issue (12ms).\n`);
+const QUINT_OK = MUT('quint_ok.log', '$ quint run mutant.qnt --invariant=NoOverlappingBookings\n[ok] No violation found (2000 traces).\n');
+const QUINT_TWO = MUT('quint_two.log', `$ quint run mutant.qnt --invariants NoOverlappingBookings AttendeesWithinCapacity\n${quintStates(2)}\n[violation] Found an issue.\n`);
+const tlc = (inv) => `$ java tlc2.TLC -config M.cfg M.tla\nParsing file /Users/alice/models/M.tla\nError: Invariant ${inv} is violated.\nError: The behavior up to this point is:\nState 1: <Initial predicate>\n/\\ bookings = {}\n/\\ log = "C:\\\\work\\\\run.txt"\n\nState 2: <ConfirmNoCheck line 3, col 1 to line 4, col 2 of module M>\n/\\ bookings = {"a", "b"}\n/\\ log = "C:\\\\work\\\\run.txt"\n\n9 states generated, 5 distinct states found.\n`;
+const TLC_KILL = MUT('tlc_kill.log', tlc('NoOverlappingBookings'));
+const TLC_OTHER = MUT('tlc_other.log', tlc('AttendeesWithinCapacity'));
+const TLC_PASS = MUT('tlc_pass.log', 'Model checking completed. No error has been found.\n9 states generated, 5 distinct states found.\n');
+const ALLOY_KILL = MUT('alloy_kill.log', '$ java -jar alloy.jar exec m.als\n00. run   Witness   0    1/1     SAT\n01. check NoOverlappingBookings   0    1/1     SAT\n02. check AttendeesWithinCapacity   0       UNSAT\n');
+const ALLOY_UNSAT = MUT('alloy_unsat.log', '00. check NoOverlappingBookings   0       UNSAT\n');
+const receipt = (sat) => JSON.stringify({ commands: {
+  Witness: { name: 'Witness', type: 'run', source: 'run Witness', solution: [{ instances: [{ values: {} }] }] },
+  NoOverlappingBookings: { name: 'NoOverlappingBookings', type: 'check', source: 'check NoOverlappingBookings for 4',
+    ...(sat ? { solution: [{ instances: [{ skolems: { $clash: { data: [['Booking$0'], ['Booking$1']] } }, values: { Booking$0: { room: [['Room$0']], slot: [] } } }] }] } : {}) },
+} });
+const RECEIPT_KILL = MUT('receipt.json', receipt(true));
+const RECEIPT_UNSAT = MUT('receipt_unsat.json', receipt(false));
+const itf = (status) => JSON.stringify({ '#meta': { format: 'ITF', status, description: 'Created by Quint' }, vars: ['s'],
+  states: [0, 1, 2].map((i) => ({ '#meta': { index: i }, s: { held: { '#set': i ? [{ '#bigint': String(i) }] : [] }, stage: i === 2 ? 'double' : 'open' } })) });
+const ITF_KILL = MUT('mutant.itf.json', itf('violation'));
+const ITF_OK = MUT('ok.itf.json', itf('ok'));
+const bindOne = (path, board = EX1, ruleId = 'no_double_booking') => bindEvidence(board, { mutantLogs: [{ ruleId, path }] });
+const traceOf = (path, board, ruleId = 'no_double_booking') => bindOne(path, board, ruleId).counterexamples[ruleId];
+const bindErr = (fn, re) => assert.throws(fn, (e) => re.test(e.message), re.source);
+
+test('mutant-log: Quint, TLC, Alloy stdout, Alloy receipt and ITF counterexamples bind with machine-extracted steps', () => {
+  const q = traceOf(QUINT_KILL);
+  assert.deepEqual({ ...q, sha256: undefined }, { file: 'quint_kill.log', sha256: undefined, checker: 'Quint', violatedProperty: 'NoOverlappingBookings', stepCount: 3,
+    steps: ['State 0: booked = Set(0); path = "…/model.qnt"', 'State 1: booked = Set(1)', 'State 2: booked = Set(2)'] });
+  assert.equal(q.sha256, 'sha256:' + createHash('sha256').update(readFileSync(QUINT_KILL)).digest('hex'));
+  const t = traceOf(TLC_KILL);
+  assert.equal(t.checker, 'TLC');
+  assert.deepEqual(t.steps, ['State 1 · Initial predicate: bookings = {}; log = "…/run.txt"', 'State 2 · ConfirmNoCheck: bookings = {"a", "b"}']);
+  const a = traceOf(ALLOY_KILL);
+  assert.deepEqual([a.checker, a.violatedProperty, a.steps], ['Alloy', 'NoOverlappingBookings', ['01. check NoOverlappingBookings 0 1/1 SAT']]);
+  const r = traceOf(RECEIPT_KILL);
+  assert.deepEqual(r.steps, ['check NoOverlappingBookings for 4: counterexample found', '$clash = {Booking$0, Booking$1}', 'Booking$0.room = {Room$0}']);
+  const i = traceOf(ITF_KILL);
+  assert.deepEqual([i.checker, i.violatedProperty, i.stepCount], ['Quint', null, 3]);
+  assert.deepEqual(i.steps, ['State 0: s.held = Set(); s.stage = "open"', 'State 1: s.held = Set(1)', 'State 2: s.held = Set(2); s.stage = "double"']);
+});
+
+test('mutant-log: a long trace keeps 12 lines, the first six and the violating last states, with the true step count', () => {
+  const c = traceOf(QUINT_LONG);
+  assert.equal(c.stepCount, 20);
+  assert.equal(c.steps.length, 12);
+  assert.equal(c.steps[6], '… 9 more states …');
+  assert.ok(c.steps[11].startsWith('State 19: '), c.steps[11]);
+  for (const step of c.steps) assert.equal(/\/Users|C:\\/.test(step), false, step);
+});
+
+test('mutant-log anti-slop: a log without a kill, of another property or of several properties never binds', () => {
+  for (const f of [QUINT_OK, TLC_PASS, ALLOY_UNSAT, RECEIPT_UNSAT, ITF_OK]) bindErr(() => bindOne(f), /binding: .*the mutant was not killed/);
+  bindErr(() => bindOne(TLC_OTHER), /killed "AttendeesWithinCapacity", not the rule's property "NoOverlappingBookings"/);
+  bindErr(() => bindOne(QUINT_TWO), /does not name the violated property/);
+  bindErr(() => bindOne(MUT('noise.log', 'hello world\n')), /not a recognized/);
+  bindErr(() => bindOne(MUT('bad.json', '{"x": 1}')), /unrecognized --mutant-log JSON/);
+  bindErr(() => bindEvidence(EX1, { mutantLogs: [{ ruleId: 'ghost', path: QUINT_KILL }] }), /unknown rule "ghost"/);
+  bindErr(() => bindEvidence(EX1, { mutantLogs: [{ ruleId: 'no_double_booking', path: QUINT_KILL }, { ruleId: 'no_double_booking', path: TLC_KILL }] }), /twice/);
+  bindErr(() => parseMutantFlag('no-equals-sign'), /expects <ruleId>=<path>/);
+  assert.deepEqual(parseMutantFlag('a=b=c.log'), { ruleId: 'a', path: 'b=c.log' });
+});
+
+test('mutant-log CLI: render and validate accept repeated flags and reject unknown or duplicate rules', () => {
+  const input = join(ROOT, 'examples', '01_room_booking.board.json');
+  const out = join(TMP, 'mutant-cli.html');
+  const cap = MUT('cap.log', tlc('AttendeesWithinCapacity'));
+  const flags = ['--mutant-log', 'no_double_booking=' + TLC_KILL, '--mutant-log', 'capacity=' + cap];
+  const r = node('render_board.mjs', ['--in', input, ...flags, '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  const v = node('validate_board.mjs', ['--in', input, ...flags, out]);
+  assert.equal(v.status, 0, v.stdout + v.stderr);
+  assert.equal(/WARN|ERR/.test(v.stdout), false, v.stdout);
+  const ghost = node('render_board.mjs', ['--in', input, '--mutant-log', 'ghost=' + TLC_KILL, '--out', out]);
+  assert.match(ghost.stderr, /unknown rule "ghost"/);
+  const twice = node('validate_board.mjs', [input, '--mutant-log', 'capacity=' + cap, '--mutant-log', 'capacity=' + cap]);
+  assert.match(twice.stdout + twice.stderr, /twice/);
+  const json = node('validate_board.mjs', [input, '--mutant-log', 'capacity=' + TLC_KILL]);
+  assert.match(json.stdout, /killed "NoOverlappingBookings", not the rule's property "AttendeesWithinCapacity"/);
+});
+
+test('mutant-log validation: re-checked against the files, tampering and forged trace metadata are caught', () => {
+  const mutantLogs = [{ ruleId: 'no_double_booking', path: TLC_KILL }];
+  const html = renderBoardHtml(EX1, { mutantLogs });
+  const ok = validateHtmlContent(html, 'x', { mutantLogs });
+  assert.deepEqual([ok.errors, ok.warnings], [[], []]);
+  assert.ok(hasWarning(validateHtmlContent(html), 'binding: embedded mutant counterexamples were not re-checked'));
+  const edit = (f) => tamper(html, (d) => { f(d.__binding.counterexamples.no_double_booking, d); });
+  const forgedStep = edit((c) => { c.steps[1] = 'State 2 · Confirm: bookings = {} (hand-written)'; });
+  assert.equal(validateHtmlContent(forgedStep).ok, true, 'structurally valid, so only the file re-check can catch it');
+  const caught = validateHtmlContent(forgedStep, 'x', { mutantLogs });
+  assert.ok(caught.errors.some((e) => e.startsWith('binding: embedded mutant counterexamples do not match')), caught.errors.join('\n'));
+  for (const [what, f] of [
+    ['other property', (c) => { c.violatedProperty = 'AttendeesWithinCapacity'; }],
+    ['null property on a text log', (c) => { c.violatedProperty = null; }],
+    ['absolute path', (c) => { c.steps[0] = 'State 1: path = /Users/alice/x.tla'; }],
+    ['step count', (c) => { c.stepCount = 5; }],
+    ['checker', (c) => { c.checker = 'Hand'; }],
+    ['extra key', (c) => { c.traceBound = true; }],
+    ['unknown rule', (c, d) => { d.__binding.counterexamples.toString = c; }],
+    ['empty map', (c, d) => { d.__binding.counterexamples = {}; }],
+  ]) {
+    const r = validateHtmlContent(edit(f));
+    assert.ok(r.errors.some((e) => e.startsWith('provenance: binding: invalid embedded mutant counterexample metadata') || e.startsWith('provenance: binding: invalid embedded evidence')), `${what}: ${r.errors.join('; ')}`);
+  }
+  const missing = validateHtmlContent(renderBoardHtml(EX1), 'x', { mutantLogs });
+  assert.ok(missing.errors.some((e) => e.startsWith('binding: embedded mutant counterexamples do not match')), missing.errors.join('\n'));
+});
+
+test('mutant-log validation: spec/log evidence and mutant traces are re-checked independently', () => {
+  const { specPaths, logPaths } = ex5Evidence();
+  const kill = MUT('refund_mutant.log', `$ quint run m.qnt --invariant=refundsWithinEscrow\n${quintStates(2)}\n[violation] Found an issue.\n`);
+  const mutantLogs = [{ ruleId: 'refund_cap', path: kill }];
+  const html = renderBoardHtml(EX5, { specPaths, logPaths, mutantLogs });
+  const specOnly = validateHtmlContent(html, 'x', { specPaths, logPaths });
+  assert.deepEqual(specOnly.errors, []);
+  assert.deepEqual(specOnly.warnings, ['binding: embedded mutant counterexamples were not re-checked against --mutant-log files']);
+  const mutantOnly = validateHtmlContent(html, 'x', { mutantLogs });
+  assert.deepEqual(mutantOnly.errors, []);
+  assert.deepEqual(mutantOnly.warnings, ['binding: embedded evidence was not re-checked against --spec/--log files']);
+  assert.deepEqual(validateHtmlContent(html, 'x', { specPaths, logPaths, mutantLogs }).warnings, []);
+  assert.equal(resolveProvenance(EX5, bindEvidence(EX5, { specPaths, logPaths, mutantLogs })).kind, 'verified');
+});
+
+test('mutant-log: rule ids such as __proto__ and constructor bind as own keys', () => {
+  const b = clone(EX1);
+  b.rules[0].id = '__proto__';
+  b.rules[1].id = 'constructor';
+  const binding = bindEvidence(b, { mutantLogs: [{ ruleId: '__proto__', path: TLC_KILL }] });
+  assert.ok(Object.hasOwn(binding.counterexamples, '__proto__'));
+  assert.equal(Object.hasOwn(binding.counterexamples, 'constructor'), false);
+  const html = renderBoardHtml(b, { mutantLogs: [{ ruleId: '__proto__', path: TLC_KILL }] });
+  assert.deepEqual(validateHtmlContent(html, 'x', { mutantLogs: [{ ruleId: '__proto__', path: TLC_KILL }] }).errors, []);
+  assert.ok(html.includes('Object.hasOwn(BINDING.counterexamples, r.id)'), 'the runtime reads traces as own keys only');
+  validateBinding(b, JSON.parse(JSON.stringify(binding)));
+});
+
+test('trace UI: trace copy and styles ship only with bound mutant logs; the honest pill ships everywhere', () => {
+  const plain = renderBoardHtml(EX1);
+  for (const s of ['trTitle', 'tr-steps', 'Machine-extracted']) assert.equal(plain.includes(s), false, `unbound board carries ${s}`);
+  assert.ok(plain.includes('Illustrative only (no trace bound)') && plain.includes('tp-illus'));
+  const bound = renderBoardHtml(EX1, { mutantLogs: [{ ruleId: 'no_double_booking', path: TLC_KILL }] });
+  for (const s of ['Machine-extracted mutant trace', 'tr-steps', 'Trace-bound mutant kill']) assert.ok(bound.includes(s), s);
+  assert.equal(CJK.test(bound), false, 'an English board with a trace stays CJK-free');
+  const ja = renderBoardHtml(EX6, { mutantLogs: [{ ruleId: 'refund_cap', path: MUT('ja_mutant.log', `$ quint run m.qnt --invariant=refundsWithinEscrow\n${quintStates(2)}\n[violation] Found an issue.\n`) }] });
+  for (const s of ['機械抽出した変異体の反例', '実反例ログ突合済み', '図解のみ（反例ログ未突合）']) assert.ok(ja.includes(s), s);
+  assert.equal(uiSource(EX5), uiSource(EX5, {}), 'a board without traces gets the same copy as before');
+});
+
+test('bounds and witness: run.bounds is one escaped line above every view, tree-shaken without it; both are optional strings', () => {
+  const x = '<img src=x onerror=alert(1)>';
+  const b = withFlowEdit(EX1, (v) => { v.run.bounds = 'TLC depth 5 ' + x; v.rules[0].evidence.witness = '60/2000 traces ' + x; });
+  const html = renderBoardHtml(b);
+  expectPass(html);
+  assert.ok(html.includes('<div class="pc-wrap pc-main"><p class="pc-bounds"><b>Bounded check</b>TLC depth 5 &lt;img src=x onerror=alert(1)&gt;</p>'), 'the SSR shell opens with the bounds line');
+  assert.ok(html.includes('function boundsMarkup('));
+  assert.equal(html.includes('<img src=x'), false);
+  assert.ok(html.includes("e.witness ? kv(L.witness, e.witness)"));
+  for (const base of [EX0, EX1, EX5]) assert.equal(/pc-bounds|boundsMarkup/.test(renderBoardHtml(base)), false, base.runId);
+  const flow = withFlowEdit(EX5, (v) => { v.run.bounds = 'Alloy scope 5 · Quint 5 steps · TLC depth 4'; });
+  assert.ok(renderBoardHtml(flow, ex5Evidence()).includes('<p class="pc-bounds"><b>Bounded check</b>Alloy scope 5'));
+  schemaErr(withFlowEdit(EX1, (v) => { v.run.bounds = ' '; }), '$.run.bounds');
+  schemaErr(withFlowEdit(EX1, (v) => { v.rules[0].evidence.witness = 3; }), '$.rules[0].evidence.witness');
+  assert.ok(hasWarning(validateBoardData(withFlowEdit(EX1, (v) => { v.run.bounds = 'x'.repeat(121); })), '$.run.bounds'));
+  assert.deepEqual(validateBoardData(b).warnings, []);
 });
 
 rmSync(TMP, { recursive: true, force: true });

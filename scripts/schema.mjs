@@ -26,6 +26,7 @@ export const RENDERER_KEYS = ['__provenance', '__layout', '__titleOverride', '__
 // Recommended label lengths (characters). Longer labels still render; the validator warns.
 export const SHORT_WARN_CHARS = 20;
 export const EDGE_WARN_CHARS = 12;
+export const BOUNDS_WARN_CHARS = 120;
 
 const KEYS = {
   board: ['version', 'runId', 'title', 'subtitle', 'generatedAt', 'provenance', 'provenanceNote', 'lang', 'labels', 'defaultView', 'run', 'modules', 'flow', 'outOfScope', 'rules'],
@@ -34,7 +35,7 @@ const KEYS = {
   flowStep: ['id', 'label', 'summary', 'moduleId', 'ruleIds'],
   flowEdge: ['id', 'from', 'to', 'label', 'kind'],
   journey: ['id', 'label', 'tone', 'summary', 'stepIds', 'edgeIds', 'checkpointRuleId', 'checkpointFocus'],
-  run: ['tool', 'toolVersion', 'specHash', 'status'],
+  run: ['tool', 'toolVersion', 'specHash', 'status', 'bounds'],
   module: ['id', 'title', 'summary'],
   rule: ['id', 'no', 'moduleId', 'short', 'title', 'property', 'category', 'source', 'previewTitle', 'figure', 'states', 'defaultFocus', 'status', 'stepsChecked', 'evidence'],
   state: ['label', 'tone', 'edgeShort', 'takeaway', 'preview'],
@@ -42,7 +43,7 @@ const KEYS = {
   row: ['k', 'v', 'tone'],
   bar: ['label', 'value', 'limit', 'max', 'unit', 'ok'],
   outOfScope: ['area', 'reason'],
-  evidence: ['ruleSummary', 'ifEnforced', 'ifNotEnforced', 'checkerSummary', 'scope', 'method', 'sourceQuote', 'counterexample'],
+  evidence: ['ruleSummary', 'ifEnforced', 'ifNotEnforced', 'checkerSummary', 'scope', 'method', 'sourceQuote', 'counterexample', 'witness'],
 };
 
 // Design tokens commonly owned by a host page (shadcn/ui-style). An embedded board must
@@ -425,6 +426,8 @@ export function validateBoardData(board, { checkHash = true } = {}) {
     keys(run, KEYS.run, '$.run');
     reqStr(run, 'tool', '$.run');
     optStr(run, 'toolVersion', '$.run');
+    optStr(run, 'bounds', '$.run');
+    if (isNonEmptyString(run.bounds) && [...run.bounds].length > BOUNDS_WARN_CHARS) warn('$.run.bounds', `length ${[...run.bounds].length} exceeds the recommended ${BOUNDS_WARN_CHARS} characters (one line above the board)`);
     if (!RUN_STATUSES.includes(run.status)) err('$.run.status', `must be one of ${RUN_STATUSES.join(', ')}`);
     if (run.specHash !== undefined) {
       if (typeof run.specHash !== 'string') err('$.run.specHash', 'must be a string when present');
@@ -585,6 +588,7 @@ export function validateBoardData(board, { checkHash = true } = {}) {
       for (const k of ['ruleSummary', 'ifEnforced', 'ifNotEnforced', 'checkerSummary', 'scope', 'method']) reqStr(ev, k, `${p}.evidence`);
       optStr(ev, 'sourceQuote', `${p}.evidence`);
       optStr(ev, 'counterexample', `${p}.evidence`);
+      optStr(ev, 'witness', `${p}.evidence`);
     }
 
     // Label fit, only once the rule's structure is valid.

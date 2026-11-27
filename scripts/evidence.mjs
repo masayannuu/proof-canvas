@@ -26,8 +26,8 @@ function readFiles(paths, flag) {
     try { bytes = readFileSync(path); }
     catch (error) { fail(`cannot read --${flag} file "${file}" (${error.code ?? 'read error'})`); }
     if (flag === 'spec' && !isUtf8(bytes)) fail(`--spec file "${file}" must be UTF-8`);
-    const encoding = flag === 'log' && bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le'
-      : flag === 'log' && bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8';
+    const encoding = flag !== 'spec' && bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le'
+      : flag !== 'spec' && bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8';
     return { file, hash: sha256(bytes), text: new TextDecoder(encoding).decode(bytes) };
   }).sort((a, b) => compare(a.file, b.file));
   if (files.some((f, i) => i > 0 && f.file === files[i - 1].file)) fail(`duplicate --${flag} basename`);
@@ -443,6 +443,201 @@ function checkLogVerdicts(board, files, { specHash, specFiles, refs }) {
   return Object.fromEntries(ruleEvidence);
 }
 
+// ---- mutant counterexamples (--mutant-log <ruleId>=<path>) ----
+// A mutant log is the run of a deliberately broken model. It binds to a rule only when the checker
+// reports a violation (the mutant was killed) of exactly that rule's property; the trace steps are
+// extracted from the log itself, one capped summary line per state, so no prose can stand in for them.
+
+export const MAX_TRACE_STEPS = 12;
+const STEP_CHARS = 180;
+const VALUE_CHARS = 60;
+const MUTANT_CHECKERS = ['Quint', 'Apalache', 'TLC', 'Alloy'];
+const ABSOLUTE_PATHS = /\bfile:\/\/\S*|(?<![\w.@+~-])(?:\/(?:Users|home|var|tmp|private|etc|opt|usr|root|Volumes|proc|sys|mnt|srv|Library|Applications|System|nix)\/|~\/|[a-z]:[\\/]|\\\\)[^\s"'<>|,;()[\]{}]*/gi;
+const stripPaths = (text) => text.replace(ABSOLUTE_PATHS, (path) => '…/' + (path.split(/[/\\]/).filter(Boolean).at(-1) ?? ''));
+const clip = (text, max) => [...text].length > max ? [...text].slice(0, max - 1).join('') + '…' : text;
+const squash = (text) => stripPaths(String(text)).replace(/\s+/g, ' ').replace(/([([{]) /g, '$1').replace(/ ([)\]}])/g, '$1').trim();
+// A changed value is shown from a little before its first difference to the previous value,
+// so a change deep inside a nested map stays visible after clipping.
+function changedValue(before, after) {
+  const now = [...squash(after)];
+  if (before === undefined || now.length <= VALUE_CHARS) return clip(now.join(''), VALUE_CHARS);
+  const old = [...squash(before)];
+  let at = 0;
+  while (at < now.length && now[at] === old[at]) at++;
+  const start = at > 24 ? Math.max(0, now.lastIndexOf(' ', at - 12) + 1) : 0;
+  return clip((start ? '…' : '') + now.slice(start).join(''), VALUE_CHARS);
+}
+
+// "--mutant-log refresh_reuse=logs/mutant.log" -> { ruleId, path }.
+export function parseMutantFlag(value) {
+  const at = String(value).indexOf('=');
+  const ruleId = at > 0 ? value.slice(0, at) : '';
+  const path = at > 0 ? value.slice(at + 1) : '';
+  if (!/^[a-zA-Z0-9_-]+$/.test(ruleId) || !path) fail(`--mutant-log expects <ruleId>=<path> (got "${value}")`);
+  return { ruleId, path };
+}
+
+// Split "a: 1, b: Set(2, 3)" at top-level commas (outside brackets and strings).
+function topLevel(text, separator) {
+  const out = [];
+  let depth = 0;
+  let quote = false;
+  let start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) { if (c === '\\') i++; else if (c === '"') quote = false; }
+    else if (c === '"') quote = true;
+    else if ('([{'.includes(c)) depth++;
+    else if (')]}'.includes(c)) depth--;
+    else if (depth === 0 && text.startsWith(separator, i)) { out.push(text.slice(start, i)); start = i + separator.length; }
+  }
+  out.push(text.slice(start));
+  return out.map((part) => part.trim()).filter(Boolean);
+}
+
+// One line per state: the initial state in full, later states only the variables that changed.
+function traceSteps(states) {
+  let prev = null;
+  const lines = states.map(({ label, vars }) => {
+    const changed = prev ? vars.filter(([k, v]) => prev.get(k) !== v) : vars;
+    const body = changed.map(([k, v]) => k + ' = ' + changedValue(prev?.get(k), v)).join('; ') || (vars.length ? 'no change' : '');
+    prev = new Map(vars);
+    return clip(stripPaths(label) + (body ? ': ' + body : ''), STEP_CHARS);
+  });
+  if (lines.length <= MAX_TRACE_STEPS) return { stepCount: lines.length, steps: lines };
+  const head = lines.slice(0, 6);
+  const tail = lines.slice(-(MAX_TRACE_STEPS - 7));
+  return { stepCount: lines.length, steps: [...head, '… ' + (lines.length - head.length - tail.length) + ' more states …', ...tail] };
+}
+
+function quintStates(text) {
+  const lines = text.split('\n');
+  const heads = lines.flatMap((line, i) => /^[ \t]*\[State \d+\]/.test(line) ? [i] : []);
+  return heads.map((at, n) => {
+    const end = heads[n + 1] ?? lines.findIndex((line, i) => i > at && /^[ \t]*(?:\[(?:violation|ok)\]|error:)/i.test(line));
+    const body = [lines[at].replace(/^[ \t]*\[State \d+\]/, ''), ...lines.slice(at + 1, end < 0 ? undefined : end)].join(' ').replace(/\s+/g, ' ').trim();
+    const record = /^\{(.*)\}$/.exec(body)?.[1] ?? null;
+    const vars = record === null ? [['state', body]] : topLevel(record, ',').map((field) => {
+      const m = /^([A-Za-z_][\w]*)\s*:\s*([\s\S]*)$/.exec(field);
+      return m ? [m[1], m[2]] : ['state', field];
+    });
+    return { label: 'State ' + lines[at].match(/\d+/)[0], vars };
+  });
+}
+
+function tlcStates(text) {
+  const blocks = text.split(/\n(?=[ \t]*State \d+:)/).filter((block) => /^[ \t]*State \d+:/.test(block));
+  return blocks.map((block) => {
+    const [head, ...rest] = block.split('\n');
+    const m = /^[ \t]*State (\d+):[ \t]*(?:<(Initial predicate|[A-Za-z_][\w!]*)\b[^>]*>|(.*))/.exec(head);
+    const action = m[2] ?? m[3]?.trim();
+    const body = rest.join('\n').split(/\n[ \t]*\n/)[0];
+    const vars = body.split(/\n(?=[ \t]*\/\\ )/).flatMap((part) => {
+      const v = /^[ \t]*(?:\/\\ )?([A-Za-z_][\w]*) = ([\s\S]*)$/.exec(part);
+      return v ? [[v[1], v[2].trim()]] : [];
+    });
+    return { label: 'State ' + m[1] + (action ? ' · ' + action : ''), vars };
+  });
+}
+
+function itfValue(v) {
+  if (Array.isArray(v)) return '[' + v.map(itfValue).join(', ') + ']';
+  if (!isObject(v)) return JSON.stringify(v);
+  if (Object.hasOwn(v, '#bigint')) return String(v['#bigint']);
+  if (Object.hasOwn(v, '#set')) return 'Set(' + v['#set'].map(itfValue).join(', ') + ')';
+  if (Object.hasOwn(v, '#tup')) return '(' + v['#tup'].map(itfValue).join(', ') + ')';
+  if (Object.hasOwn(v, '#map')) return 'Map(' + v['#map'].map(([k, x]) => itfValue(k) + ' -> ' + itfValue(x)).join(', ') + ')';
+  return '{ ' + Object.entries(v).map(([k, x]) => k + ': ' + itfValue(x)).join(', ') + ' }';
+}
+
+// ITF: records directly under a variable are opened one level (s.minutes), so the changed field shows.
+function itfStates(trace) {
+  return trace.states.map((state, i) => ({
+    label: 'State ' + i,
+    vars: Object.entries(state).filter(([k]) => k !== '#meta').flatMap(([k, v]) => isObject(v) && !Object.keys(v).some((x) => x.startsWith('#'))
+      ? Object.entries(v).map(([f, x]) => [k + '.' + f, itfValue(x)]) : [[k, itfValue(v)]]),
+  }));
+}
+
+function alloyInstanceLines(command) {
+  const instance = command.solution[0]?.instances?.[0] ?? {};
+  const tuples = (data) => '{' + (Array.isArray(data) ? data.map((t) => [].concat(t).join('->')).join(', ') : '') + '}';
+  return [
+    ...Object.entries(isObject(instance.skolems) ? instance.skolems : {}).map(([k, v]) => k + ' = ' + tuples(v?.data)),
+    ...Object.entries(isObject(instance.values) ? instance.values : {}).flatMap(([atom, fields]) => isObject(fields)
+      ? Object.entries(fields).filter(([, data]) => Array.isArray(data) && data.length).map(([f, data]) => atom + '.' + f + ' = ' + tuples(data)) : []),
+  ];
+}
+
+// { checker, killed, violated: names the log reports as violated, named: false when the format
+// cannot name a property (ITF), stepCount, steps }.
+function readMutantLog(file, text) {
+  if (text.trimStart().startsWith('{')) {
+    let json;
+    try { json = JSON.parse(text); }
+    catch { fail(`invalid JSON in --mutant-log "${file}"`); }
+    if (isObject(json?.['#meta']) && Array.isArray(json.states)) {
+      const meta = json['#meta'];
+      return { checker: /\bApalache\b/.test(String(meta.description)) ? 'Apalache' : 'Quint', killed: meta.status === 'violation',
+        violated: [], named: false, ...traceSteps(itfStates(json)) };
+    }
+    if (isObject(json?.commands)) {
+      const checks = Object.entries(json.commands).filter(([, c]) => isObject(c) && c.type === 'check');
+      const sat = checks.filter(([, c]) => Array.isArray(c.solution) && c.solution.length);
+      const lines = sat.flatMap(([name, c]) => [(typeof c.source === 'string' ? c.source : 'check ' + name) + ': counterexample found', ...alloyInstanceLines(c)]);
+      const steps = lines.map((line) => clip(stripPaths(line).replace(/\s+/g, ' '), STEP_CHARS));
+      return { checker: 'Alloy', killed: sat.length > 0, violated: sat.map(([name, c]) => typeof c.name === 'string' ? c.name : name), named: true,
+        stepCount: steps.length, steps: steps.length > MAX_TRACE_STEPS ? steps.slice(0, MAX_TRACE_STEPS) : steps };
+    }
+    fail(`unrecognized --mutant-log JSON "${file}" (expected an ITF trace or an Alloy receipt.json)`);
+  }
+  const plain = cleanLog(text);
+  const quint = quintStates(plain);
+  const tlc = quint.length ? [] : tlcStates(plain);
+  const alloy = plain.split('\n').filter((line) => /^[ \t]*\d+\.[ \t]+(?:\w+[ \t]*:[ \t]*)?check\b.*\bSAT[ \t]*$/.test(line) && !/\bUNSAT[ \t]*$/.test(line));
+  const pass = /^[ \t]*\[ok\][ \t]+No violation found\b|^[ \t]*Model checking completed\. No error has been found\.|The outcome is:\s*NoError|Checker reports no error/im.test(plain);
+  const { checker, results } = /\[violation\]/i.test(plain) || !pass ? textLog(plain, []) : { checker: null, results: [] };
+  const failed = results.filter((r) => r.status === 'failed');
+  const trace = quint.length ? traceSteps(quint) : tlc.length ? traceSteps(tlc)
+    : { stepCount: alloy.length, steps: alloy.slice(0, MAX_TRACE_STEPS).map((line) => clip(line.trim().replace(/\s+/g, ' '), STEP_CHARS)) };
+  return { checker, pass, killed: failed.length > 0, violated: unique(failed.map((r) => r.property)), named: true, ...trace };
+}
+
+function mutantCounterexample(rule, { file, hash, text }) {
+  const log = readMutantLog(file, text);
+  const where = `--mutant-log for rule "${rule.id}" ("${file}")`;
+  if (!log.pass && !MUTANT_CHECKERS.includes(log.checker)) fail(`${where} is not a recognized Quint, Apalache, TLC or Alloy counterexample log`);
+  if (!log.killed) fail(`${where} reports no violation: the mutant was not killed, so it is not evidence for the rule`);
+  if (log.named) {
+    const names = log.violated.filter((name) => name !== undefined);
+    if (names.length !== 1 || log.violated.length !== 1) {
+      fail(`${where} ${names.length > 1 ? 'reports several violated properties (' + names.join(', ') + ')' : 'does not name the violated property'}; run the mutant against "${rule.property}" alone`);
+    }
+    if (names[0] !== rule.property) fail(`${where} killed "${names[0]}", not the rule's property "${rule.property}" (a different invariant failed)`);
+  }
+  if (!log.steps.length) fail(`${where} has no counterexample trace`);
+  return { file, sha256: hash, checker: log.checker, violatedProperty: log.named ? log.violated[0] : null, stepCount: log.stepCount, steps: log.steps };
+}
+
+function bindMutantLogs(board, mutantLogs) {
+  const rules = new Map(board.rules.map((rule) => [rule.id, rule]));
+  const seen = new Set();
+  return mutantLogs.map(({ ruleId, path }) => {
+    if (!rules.has(ruleId)) fail(`--mutant-log names unknown rule "${ruleId}"`);
+    if (seen.has(ruleId)) fail(`--mutant-log names rule "${ruleId}" twice`);
+    seen.add(ruleId);
+    return [ruleId, mutantCounterexample(rules.get(ruleId), readFiles([path], 'mutant-log')[0])];
+  }).sort((a, b) => compare(a[0], b[0]));
+}
+
+function validCounterexample(rule, c) {
+  return exactKeys(c, ['file', 'sha256', 'checker', 'violatedProperty', 'stepCount', 'steps']) && safeFile(c.file)
+    && typeof c.sha256 === 'string' && SHA256.test(c.sha256) && MUTANT_CHECKERS.includes(c.checker)
+    && (c.violatedProperty === rule.property || (c.violatedProperty === null && /\.json$/i.test(c.file) && ['Quint', 'Apalache'].includes(c.checker)))
+    && Number.isSafeInteger(c.stepCount) && c.stepCount >= 1 && Array.isArray(c.steps) && c.steps.length === Math.min(c.stepCount, MAX_TRACE_STEPS)
+    && c.steps.every((s) => typeof s === 'string' && s.trim() === s && s.length > 0 && [...s].length <= STEP_CHARS && !/[\r\n]/.test(s) && !absolutePath.test(s));
+}
+
 const bindingLevel = (specFiles, logFiles) => specFiles.length
   ? (logFiles.length ? 'spec-and-log' : 'spec-only')
   : (logFiles.length ? 'log-only' : 'self-reported');
@@ -450,7 +645,7 @@ const bindingLevel = (specFiles, logFiles) => specFiles.length
 const normalizedSpecHash = (hash) => typeof hash === 'string' && /^(?:sha256:)?[0-9a-f]{64}$/i.test(hash)
   ? 'sha256:' + hash.toLowerCase().replace(/^sha256:/, '') : undefined;
 
-export function bindEvidence(board, { specPaths = [], logPaths = [] } = {}) {
+export function bindEvidence(board, { specPaths = [], logPaths = [], mutantLogs = [] } = {}) {
   const specs = readFiles(specPaths, 'spec');
   const specFiles = specs.map(({ file, hash }) => ({ file, hash }));
   const specHash = specs.length ? computeSpecHash(specFiles) : null;
@@ -462,11 +657,13 @@ export function bindEvidence(board, { specPaths = [], logPaths = [] } = {}) {
     file, hash, ...(text.trimStart().startsWith('{') ? structuredLog(text.trim(), file) : textLog(text, specs)),
   }));
   const ruleEvidence = logFiles.length ? checkLogVerdicts(board, logFiles, { specHash, specFiles, refs }) : undefined;
+  const counterexamples = bindMutantLogs(board, mutantLogs);
   return {
     level: bindingLevel(specFiles, logFiles),
     specHash,
     logHash: logFiles.length ? manifestHash(logFiles) : null,
     specFiles, logFiles, refs, ...(ruleEvidence ? { ruleEvidence } : {}),
+    ...(counterexamples.length ? { counterexamples: Object.fromEntries(counterexamples) } : {}),
   };
 }
 
@@ -501,6 +698,7 @@ function validFiles(files, log) {
 export function validateBinding(board, binding) {
   const keys = ['level', 'specHash', 'logHash', 'specFiles', 'logFiles', 'refs'];
   if (binding?.logFiles?.length) keys.push('ruleEvidence');
+  if (isObject(binding) && Object.hasOwn(binding, 'counterexamples')) keys.push('counterexamples');
   if (!exactKeys(binding, keys)
     || !validFiles(binding.specFiles, false) || !validFiles(binding.logFiles, true) || !isObject(binding.refs)) {
     fail('invalid embedded evidence metadata');
@@ -522,6 +720,14 @@ export function validateBinding(board, binding) {
       || ref.endLine !== ref.line + ref.snippet.split(/\r\n|\r|\n/).length - 1 || ref.endLine - ref.line > 9
       || !excerptDeclares(ref, rule.property)) {
       fail(`invalid embedded spec reference for rule "${rule.id}"`);
+    }
+  }
+  if (Object.hasOwn(binding, 'counterexamples')) {
+    const rules = new Map(board.rules.map((rule) => [rule.id, rule]));
+    const ids = isObject(binding.counterexamples) ? Object.keys(binding.counterexamples) : [];
+    if (!ids.length || ids.some((id) => !rules.has(id))
+      || ids.some((id) => !validCounterexample(rules.get(id), binding.counterexamples[id]))) {
+      fail('invalid embedded mutant counterexample metadata');
     }
   }
   if (logFiles.length) {

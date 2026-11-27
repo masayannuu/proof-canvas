@@ -25,7 +25,8 @@ export function uiEn(o) {
     evTitle: 'Proof & log', evOpen: 'Show details', evClose: 'Hide details',
     rule: 'Rule', ifOn: 'If enforced', ifOff: 'If not enforced', quote: 'Source text', meta: 'Verification metadata',
     scope: 'Scope', method: 'Method', tool: 'Tool', binding: 'Evidence binding', specHash: 'Spec hash', logHash: 'Log hash',
-    steps: 'Steps checked', specSource: 'Spec source',
+    steps: 'Steps checked', specSource: 'Spec source', witness: 'Witness hits', bounds: 'Bounded check', scopeChip: 'Scope',
+    traceBound: 'Trace-bound mutant kill', traceIllus: 'Illustrative only (no trace bound)',
     cexTitle: 'Counterexample', cexOff: 'Counterexample without this rule', noCex: 'No counterexample recorded',
     ovHint: 'Click a card to open that rule',
     liveOk: (n) => 'Verified' + (n ? ' · ' + num(n) + ' steps checked' : ''), liveBad: 'Violation found', livePending: 'Not checked yet',
@@ -75,7 +76,8 @@ export function uiJa(o) {
     evTitle: '根拠と実ログ', evOpen: '詳細を表示', evClose: '詳細を閉じる',
     rule: 'ルール', ifOn: '守られているとき', ifOff: '守られないとき', quote: '元の文書', meta: '検証の情報',
     scope: '確認した範囲', method: '検証の方法', tool: '検証器', binding: '根拠の照合', specHash: '仕様のハッシュ', logHash: 'ログのハッシュ',
-    steps: '確認したステップ数', specSource: '仕様の該当箇所',
+    steps: '確認したステップ数', specSource: '仕様の該当箇所', witness: '到達の確認', bounds: '探索の境界', scopeChip: '範囲',
+    traceBound: '実反例ログ突合済み', traceIllus: '図解のみ（反例ログ未突合）',
     cexTitle: '反例', cexOff: 'このルールがないときの反例', noCex: '反例は記録されていません',
     ovHint: 'カードをクリックすると、そのルールを開きます',
     liveOk: (n) => '検証済み' + (n ? ' · ' + num(n) + ' ステップを確認' : ''), liveBad: '違反あり', livePending: '未検証',
@@ -135,19 +137,37 @@ export function flowUiJa(o) {
   };
 }
 
-const FACTORIES = { en: [uiEn, flowUiEn], ja: [uiJa, flowUiJa] };
-const factoriesOf = (board) => FACTORIES[board && board.lang === 'ja' ? 'ja' : 'en'];
-
-export function uiFor(board) {
-  const [base, flow] = factoriesOf(board);
-  const o = uiOptions(board);
-  return board && board.flow ? Object.assign(base(o), flow(o)) : base(o);
+// Mutant-trace copy, shipped only by boards with a bound --mutant-log (see uiSource).
+export function traceUiEn() {
+  return {
+    trTitle: 'Machine-extracted mutant trace', trFile: 'Mutant log', trProp: 'Violated property',
+    trUnnamed: 'Not named by the trace format', trLen: 'Extracted steps', trShown: (n) => ' (' + n + ' shown)',
+  };
 }
 
-// Browser source defining UI(o) and uiOptions(board), with only the board's language and,
-// without a flow, without the flow copy.
-export function uiSource(board) {
-  const [base, flow] = factoriesOf(board);
-  const ui = board && board.flow ? '(o) => Object.assign((' + base + ')(o), (' + flow + ')(o))' : String(base);
+export function traceUiJa() {
+  return {
+    trTitle: '機械抽出した変異体の反例', trFile: '変異体のログ', trProp: '違反した性質',
+    trUnnamed: 'トレース形式に性質名なし', trLen: '抽出したステップ', trShown: (n) => '（' + n + ' 件を表示）',
+  };
+}
+
+const FACTORIES = { en: { base: uiEn, flow: flowUiEn, trace: traceUiEn }, ja: { base: uiJa, flow: flowUiJa, trace: traceUiJa } };
+// The factories a board needs: the base copy, plus flow copy with a flow and trace copy with bound mutant logs.
+function factoriesOf(board, binding) {
+  const f = FACTORIES[board && board.lang === 'ja' ? 'ja' : 'en'];
+  return [f.base, ...(board && board.flow ? [f.flow] : []), ...(binding && binding.counterexamples ? [f.trace] : [])];
+}
+
+export function uiFor(board, binding) {
+  const o = uiOptions(board);
+  return Object.assign({}, ...factoriesOf(board, binding).map((f) => f(o)));
+}
+
+// Browser source defining UI(o) and uiOptions(board), with only the board's language and only the
+// flow and trace copy the board uses.
+export function uiSource(board, binding) {
+  const parts = factoriesOf(board, binding);
+  const ui = parts.length === 1 ? String(parts[0]) : '(o) => Object.assign(' + parts.map((f) => '(' + f + ')(o)').join(', ') + ')';
   return 'const UI = ' + ui + ';\n' + uiOptions;
 }
