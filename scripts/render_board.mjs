@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // proof-canvas: deterministic, offline, single-file HTML board for formal-verification results.
-// Small boards: centered floating rule pill bar. Large / multi-module boards: module selector,
-// rule index, search, status filter and a hub overview, with only the active rule's figure mounted.
+// Small boards: centered floating rule pill bar. Large / multi-module boards: a rule index grouped
+// by module, a status filter and a hub overview, with only the active rule's figure mounted.
 // Zero dependencies: Node 22+ standard-library ESM only.
 
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';

@@ -68,8 +68,8 @@ export function sizeBudgetFor(ruleCount) {
   return BUDGETS.find((b) => ruleCount <= b.upTo).bytes;
 }
 
-// Compact pill bar for small single-module boards; index layout (module selector,
-// rule index, search, status filter, hub overview) for everything larger.
+// Compact pill bar for small single-module boards; index layout (rule index grouped by
+// module, status filter, hub overview) for everything larger.
 export const COMPACT_MAX_RULES = 6;
 export function layoutFor(board) {
   const n = Array.isArray(board?.rules) ? board.rules.length : 0;

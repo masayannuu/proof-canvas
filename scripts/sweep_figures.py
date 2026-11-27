@@ -237,7 +237,7 @@ def flow_sweep(browser, html, viewports, shots):
                     status = lambda r: r.get("status") if r.get("status") in ("verified", "failed") else "pending"
                     for st in ["all"] + page.eval_on_selector_all('[data-act="status"]:not([disabled])', "(els) => els.map((e) => e.dataset.v)")[1:2]:
                         click(f'[data-act="status"][data-v="{st}"]', f"status-{st}")
-                        for m in board["modules"]:
+                        for m in board.get("modules") or []:
                             first = next((r["id"] for r in rules if r["moduleId"] == m["id"] and st in ("all", status(r))), None)
                             if first is None:
                                 continue

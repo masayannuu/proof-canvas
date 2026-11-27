@@ -38,8 +38,8 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
   and reported verdicts. The badge and Proof & log panel show which files were checked.
 - **Visualization.** You run the checker. proof-canvas renders its results and can compare
   those results with the board JSON.
-- **Scales from 1 to 100+ rules.** Up to 6 rules get a compact pill bar; larger apps get a
-  rule index grouped by module, a status filter (All / Failed / Verified / Not checked) and a
+- **Scales from 1 to 100+ rules.** Up to 6 rules in at most one module get a compact pill bar;
+  larger or multi-module boards get a rule index grouped by module, a status filter (All / Failed / Verified / Not checked) and a
   module overview. On the flow map, the status filter highlights the matching rules and dims
   the rest.
 - **Flow map.** An optional `flow` draws 2-6 stages with their rules, labeled arrows between
