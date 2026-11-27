@@ -151,14 +151,6 @@ export function provNote(p, board, binding) {
   return status + (evidence ? ' ' + evidence : '') + (board.provenanceNote ? ' Board note: ' + board.provenanceNote : '');
 }
 
-// A module title that already starts with "M1" keeps its own tag instead of getting "M1 · M1 ...".
-export function modParts(m, i) {
-  const title = String(m.title);
-  const hit = title.match(/^(M\d+)\b[\s·:.\-–—]*(.*)$/i);
-  if (hit && hit[2].trim()) return { tag: hit[1].toUpperCase(), title: hit[2].trim() };
-  return { tag: 'M' + (i + 1), title };
-}
-
 export function logLineTone(line) {
   if (/^\[ok\]|no violation|holds\b/i.test(line)) return 'good';
   if (/✗|VIOLATION|=\s*false|buggy|fail|error/i.test(line)) return 'bad';
@@ -171,7 +163,7 @@ const NOSCRIPT_STATUS = { verified: 'Verified', failed: 'Failed', pending: 'Not 
 // One line per rule, grouped by module, so the no-JS fallback stays small at 100+ rules.
 function renderNoscript(board, title, prov) {
   const groups = Array.isArray(board.modules)
-    ? board.modules.map((m, i) => ({ title: modParts(m, i).title, items: board.rules.filter((r) => r.moduleId === m.id) }))
+    ? board.modules.map((m) => ({ title: m.title, items: board.rules.filter((r) => r.moduleId === m.id) }))
     : [{ title: '', items: board.rules }];
   const body = groups.map((g) => {
     const lis = g.items.map((r) => `<li>${esc(r.no)}. ${esc(r.title)}: ${NOSCRIPT_STATUS[ruleStatus(r)]}</li>`).join('');
@@ -312,7 +304,6 @@ const CSS = `
 .ix-mod { width: 100%; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; border-radius: 7px; padding: 5px 8px; text-align: left; }
 .ix-mod:hover { background: var(--pc-hover); }
 .ix-mod[aria-pressed="true"] { background: var(--pc-active); }
-.ix-mod-no { font: 600 10.5px/1 var(--pc-mono); color: var(--pc-ink-3); border: 1px solid var(--pc-bd); border-radius: 4px; padding: 2px 4px; flex: none; }
 .ix-mod-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--pc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ix-mod-c { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--pc-ink-3); white-space: nowrap; flex: none; }
 .ix-mod-c b { color: var(--pc-bad); font-weight: 600; }
@@ -357,8 +348,11 @@ const CSS = `
 .fig-title { font-size: 16.5px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.35; min-width: 0; }
 .fig-sub { font-size: 12px; color: var(--pc-ink-3); margin-left: auto; white-space: nowrap; }
 .fx { display: flex; gap: 6px; margin: 12px 0 8px; flex-wrap: wrap; align-items: center; }
+.fx-cue { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--pc-ink-3); }
+.fx-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--pc-bd); border-radius: 16px; background: var(--pc-bg); }
 .fx button { font-size: 12.5px; font-weight: 500; padding: 4px 12px; min-height: 28px; border-radius: 999px; border: 1px solid var(--pc-bd); background: var(--pc-surface); color: var(--pc-ink-2); }
 .fx button:hover:not(.is-on) { border-color: var(--pc-bd-strong); color: var(--pc-ink); }
+.fx-seg button { border-color: transparent; background: transparent; min-height: 26px; }
 .fx button.is-on { color: #ffffff; border-color: transparent; font-weight: 600; }
 .fx .fx-normal.is-on { background: var(--pc-info); }
 .fx .fx-bug.is-on { background: var(--pc-bad); }
@@ -439,6 +433,10 @@ const CSS = `
 .pv-title { font-size: 13.5px; font-weight: 650; letter-spacing: -0.01em; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pv-live { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 500; color: var(--pc-ink-3); white-space: nowrap; }
 .pv-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--pc-good); }
+.pv-live-normal .pv-live-dot { background: var(--pc-info); }
+.pv-live-bug .pv-live-dot { background: var(--pc-bad); }
+.board.is-swap .fg-wrap, .board.is-swap .pv-body { animation: pc-swap 0.26s ease; }
+@keyframes pc-swap { from { opacity: 0.35; } }
 .pv-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
 .pv-badge { align-self: flex-start; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 9px; margin-bottom: 3px; border: 1px solid transparent; }
 .pv-badge-normal { color: var(--pc-info); background: var(--pc-info-bg); border-color: var(--pc-info-bd); }
@@ -516,6 +514,7 @@ const CSS = `
 /*@compact*/
 /* Compact overview (small boards): clean header, unobstructed scaled preview, opaque takeaway */
 .ov-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.ov-bar .fx { margin: 0; }
 .ov-hint { font-size: 12.5px; color: var(--pc-ink-3); }
 .ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: stretch; }
 .ov-grid.is-single { grid-template-columns: minmax(0, 1fr); max-width: 820px; margin: 0 auto; }
@@ -548,7 +547,6 @@ const CSS = `
 .hub.has-fail { border-color: var(--pc-bad-bd); }
 .hub-head { width: 100%; display: flex; align-items: center; gap: 8px; border: 0; background: transparent; padding: 2px 2px 0; text-align: left; border-radius: 8px; }
 .hub-head:hover .hub-title { text-decoration: underline; text-underline-offset: 3px; }
-.hub-no { display: inline-grid; place-items: center; min-width: 30px; height: 26px; padding: 0 6px; border-radius: 7px; background: var(--pc-control); color: #ffffff; font: 600 11.5px/1 var(--pc-mono); flex: none; }
 .hub-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.35; color: var(--pc-ink); }
 .hub-n { font-size: 11.5px; color: var(--pc-ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
 .hub-sum { margin: 6px 2px 0; font-size: 12px; line-height: 1.5; color: var(--pc-ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -582,11 +580,11 @@ const CSS = `
 .pc-foot code { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-2); }
 .pc-noscript { padding: 16px; font-family: sans-serif; }
 .pc-error { margin: 24px auto; max-width: 640px; padding: 14px 16px; border: 1px solid var(--pc-bad-bd); background: var(--pc-bad-bg); color: var(--pc-bad); border-radius: 10px; font-size: 13px; }
-@media (prefers-reduced-motion: reduce) { .fg-flow, .lk-bug { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .fg-flow, .lk-bug, .board.is-swap .fg-wrap, .board.is-swap .pv-body { animation: none; } }
 `;
 
 // Functions shared with the browser runtime. Their source is injected verbatim.
-const SHARED_FNS = [ruleStatus, toolLabel, bindingLabel, boundTools, ruleEvidenceDetails, footerMarkup, provLabel, provenanceBadge, provNote, modParts, logLineTone]
+const SHARED_FNS = [ruleStatus, toolLabel, bindingLabel, boundTools, ruleEvidenceDetails, footerMarkup, provLabel, provenanceBadge, provNote, logLineTone]
   .map((f) => f.toString()).join('\n');
 
 const CLIENT_JS = `(() => {
@@ -673,11 +671,11 @@ ${SHARED_FNS}
 
   const T = {
     navRules: 'Rules', viewAll: (n) => 'Overview (' + n + ')', overview: 'Overview',
-    focusLabel: 'Diagram state', linked: 'Linked',
+    scenario: 'Scenario',
     evTitle: 'Evidence', evOpen: 'Show details', evClose: 'Hide details',
     rule: 'Rule', ifOn: 'If enforced', ifOff: 'If not enforced', quote: 'Source text', meta: 'Verification metadata',
     scope: 'Scope', method: 'Method', tool: 'Tool', specHash: 'Spec hash', steps: 'Steps checked',
-    cexTitle: 'Counterexample', noCex: 'No counterexample recorded',
+    cexTitle: 'Counterexample', cexOff: 'Counterexample without this rule', noCex: 'No counterexample recorded',
     ovHint: 'Click a card to open that rule',
     liveOk: (n) => 'Verified' + (n ? ' · ' + n.toLocaleString('en-US') + ' steps checked' : ''), liveBad: 'Violation found', livePending: 'Not checked yet',
     toolbar: 'Filter rules', module: 'Module', allModules: (n) => 'All modules (' + n + ')',
@@ -692,7 +690,7 @@ ${SHARED_FNS}
   const RULES = BOARD.rules;
   const BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
   const MODS = Array.isArray(BOARD.modules) && BOARD.modules.length ? BOARD.modules : [{ id: '__flat', title: TITLE, summary: '' }];
-  const MOD_BY_ID = Object.fromEntries(MODS.map((m, i) => [m.id, { ...m, ...modParts(m, i) }]));
+  const MOD_BY_ID = Object.fromEntries(MODS.map((m) => [m.id, m]));
   const modOf = (r) => r.moduleId || MODS[0].id;
   const STATUS = Object.fromEntries(RULES.map((r) => [r.id, ruleStatus(r)]));
   const HAY = Object.fromEntries(RULES.map((r) => [r.id, norm([r.no, r.short, r.title, r.property, r.category || '', r.source, r.evidence.ruleSummary, MOD_BY_ID[modOf(r)].title].join(' '))]));
@@ -726,14 +724,18 @@ ${SHARED_FNS}
   /*@end*/
 
   // ---- figure / preview / evidence (shared by both layouts) ----
+  // The scenario switch: one segmented control that changes the diagram and the preview together.
+  function scenarioBar(stateOf, cur, act, extra) {
+    return '<div class="fx" role="group" aria-label="' + esc(T.scenario) + '"><span class="fx-cue">' + esc(T.scenario) + '</span><span class="fx-seg">' +
+      STATE_ORDER.map((k) => {
+        const f = stateOf(k);
+        const on = cur === k;
+        return '<button type="button" aria-pressed="' + on + '" class="fx-' + f.tone + (on ? ' is-on' : '') + '" data-act="' + act + '" data-v="' + k + '">' + esc(f.label) + '</button>';
+      }).join('') + '</span>' + extra + '</div>';
+  }
   function figCard(r, focusKey, uid, opt) {
     const st = r.states[focusKey];
-    const pills = opt && opt.noPills ? '' : '<div class="fx" role="group" aria-label="' + esc(T.focusLabel) + '">' +
-      STATE_ORDER.map((k) => {
-        const f = r.states[k];
-        const on = focusKey === k;
-        return '<button type="button" aria-pressed="' + on + '" class="fx-' + f.tone + (on ? ' is-on' : '') + '" data-act="focus" data-v="' + k + '">' + esc(f.label) + '</button>';
-      }).join('') + '<span class="fx-prop" title="' + esc(r.property) + '">' + esc(r.property) + '</span></div>';
+    const pills = opt && opt.noPills ? '' : scenarioBar((k) => r.states[k], focusKey, 'focus', '<span class="fx-prop" title="' + esc(r.property) + '">' + esc(r.property) + '</span>');
     return '<section class="card fig" data-fig><div class="fig-head"><span class="no">' + esc(r.no) + '</span><h2 class="fig-title">' + esc(r.title) + '</h2>' +
       (r.category ? '<span class="fig-sub">' + esc(r.category) + '</span>' : '') + '</div>' +
       pills + '<div class="fg-wrap">' + figSvg(r, st, uid, true) + '</div>' +
@@ -762,7 +764,7 @@ ${SHARED_FNS}
     const btnCls = { ok: 'pv-btn-ok', danger: 'pv-btn-danger', locked: 'pv-btn-locked' }[pv.buttonKind];
     const ico = st.tone === 'bug' ? ICON.warn : st.tone === 'safe' ? ICON.lock : ICON.ok;
     return '<section class="card pv pv-' + st.tone + ' link-target">' +
-      '<div class="pv-chrome"><span class="pv-title">' + esc(r.previewTitle) + '</span><span class="pv-live"><span class="pv-live-dot" aria-hidden="true"></span>' + esc(T.linked) + '</span></div>' +
+      '<div class="pv-chrome"><span class="pv-title">' + esc(r.previewTitle) + '</span><span class="pv-live pv-live-' + st.tone + '" title="' + esc(T.scenario) + '"><span class="pv-live-dot" aria-hidden="true"></span>' + esc(st.label) + '</span></div>' +
       '<div class="pv-body"><span class="pv-badge pv-badge-' + st.tone + '">' + esc(pv.statusBadge) + '</span>' + bars + rows + log +
       '<div class="pv-action"><div class="pv-banner ban-' + st.tone + '">' + ico + '<span>' + esc(pv.alert) + '</span></div>' +
       '<button class="pv-btn ' + btnCls + '" type="button" tabindex="-1"' + (pv.buttonKind === 'locked' ? ' disabled' : '') + '>' + (pv.buttonKind === 'locked' ? ICON.lock : '') + esc(pv.buttonLabel) + '</button></div></div></section>';
@@ -778,6 +780,10 @@ ${SHARED_FNS}
   function evCard(r) {
     const e = r.evidence;
     const { ref, source, logFiles, tool } = ruleEvidenceDetails(r, BOARD, BINDING);
+    // A failed rule's trace is the failure itself. On any other rule a trace shows what breaks
+    // with the rule switched off (a mutant), so it gets its own heading and is omitted when absent.
+    const cex = STATUS[r.id] === 'failed' ? { title: T.cexTitle, text: e.counterexample || T.noCex }
+      : e.counterexample ? { title: T.cexOff, text: e.counterexample } : null;
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
       '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
@@ -791,7 +797,7 @@ ${SHARED_FNS}
       logFiles.map((file) => kv('Log hash', file.hash, true)).join('') +
       (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
       (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">Spec source (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
-      '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(T.cexTitle) + '</div><pre class="term">' + esc(e.counterexample || T.noCex) + '</pre></div>' +
+      (cex ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(cex.title) + '</div><pre class="term">' + esc(cex.text) + '</pre></div>' : '') +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
       '<button class="ev-tg" type="button" data-act="ev" aria-expanded="' + S.evOpen + '">' +
@@ -836,12 +842,7 @@ ${SHARED_FNS}
   }
 
   function compactOverview() {
-    const fBar = '<div class="ov-bar"><div class="fx" style="margin:0" role="group" aria-label="' + esc(T.focusLabel) + '">' +
-      STATE_ORDER.map((k) => {
-        const sampleSt = RULES[0].states[k];
-        const on = S.ovFocus === k;
-        return '<button type="button" aria-pressed="' + on + '" class="fx-' + sampleSt.tone + (on ? ' is-on' : '') + '" data-act="ov-focus" data-v="' + k + '">' + esc(sampleSt.label) + '</button>';
-      }).join('') + '</div><span class="ov-hint">' + esc(T.ovHint) + '</span></div>';
+    const fBar = '<div class="ov-bar">' + scenarioBar((k) => RULES[0].states[k], S.ovFocus, 'ov-focus', '') + '<span class="ov-hint">' + esc(T.ovHint) + '</span></div>';
     const cells = RULES.map((r) => {
       const st = r.states[S.ovFocus];
       return '<article class="ov-cell"><header class="ov-head"><span class="no">' + esc(r.no) + '</span>' +
@@ -864,7 +865,7 @@ ${SHARED_FNS}
   // ================= index layout (7+ rules or multiple modules) =================
   function toolbarHtml() {
     const opts = '<option value="' + ALL + '">' + esc(T.allModules(MODS.length)) + '</option>' +
-      MODS.map((m) => { const mm = MOD_BY_ID[m.id]; return '<option value="' + esc(m.id) + '">' + esc(mm.tag + ' · ' + mm.title) + '</option>'; }).join('');
+      MODS.map((m) => { const mm = MOD_BY_ID[m.id]; return '<option value="' + esc(m.id) + '">' + esc(mm.title) + '</option>'; }).join('');
     const seg = STATUS_ORDER.map((k) => '<button type="button" data-act="status" data-v="' + k + '">' + (k === 'all' ? '' : '<span class="st-dot st-' + k + '" aria-hidden="true"></span>') + esc(T.status[k]) + ' <span class="n" data-count="' + k + '"></span></button>').join('');
     return '<div class="pc-float-wrap"><div class="pc-float-bar" role="toolbar" aria-label="' + esc(T.toolbar) + '">' +
       '<button type="button" class="pc-tb-icon" data-act="index" aria-label="' + esc(T.index) + '" title="' + esc(T.index) + '">' + ICON.panel + '</button>' +
@@ -915,7 +916,7 @@ ${SHARED_FNS}
         const bad = rules.filter((r) => STATUS[r.id] === 'failed').length;
         const mm = MOD_BY_ID[m.id];
         h += '<div class="ix-group">' + (MODS.length > 1
-          ? '<button type="button" class="ix-mod" data-act="module" data-v="' + esc(m.id) + '" aria-pressed="' + (S.module === m.id) + '" title="' + esc(T.hubOpen) + '"><span class="ix-mod-no">' + esc(mm.tag) + '</span><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + bad + ' failed</b> ' : '') + ok + '/' + rules.length + '</span></button>'
+          ? '<button type="button" class="ix-mod" data-act="module" data-v="' + esc(m.id) + '" aria-pressed="' + (S.module === m.id) + '" title="' + esc(T.hubOpen) + '"><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + bad + ' failed</b> ' : '') + ok + '/' + rules.length + '</span></button>'
           : '') + '<ul class="ix-list">' +
           shown.map((r) => '<li><button type="button" class="ix-row" data-act="rule" data-v="' + esc(r.id) + '" aria-current="' + (S.view === 'focus' && r.id === S.ruleId) + '" title="' + esc(r.title) + '"><span class="ix-no">' + esc(r.no) + '</span><span class="ix-t">' + esc(r.title) + '</span><span class="st-dot st-' + STATUS[r.id] + '" aria-label="' + esc(T.status[STATUS[r.id]]) + '"></span></button></li>').join('') +
           '</ul></div>';
@@ -933,7 +934,7 @@ ${SHARED_FNS}
     const m = MOD_BY_ID[modOf(r)];
     const pos = vis.findIndex((x) => x.id === r.id);
     const st = STATUS[r.id];
-    return '<div class="pc-crumb">' + (MODS.length > 1 ? '<span class="crumb-mod">' + esc(m.tag + ' · ' + m.title) + '</span><span class="crumb-sep">/</span>' : '') +
+    return '<div class="pc-crumb">' + (MODS.length > 1 ? '<span class="crumb-mod">' + esc(m.title) + '</span><span class="crumb-sep">/</span>' : '') +
       '<span class="st-pill st-' + st + '">' + esc(T.status[st]) + '</span><span class="pc-spacer"></span>' +
       '<span class="crumb-pos">' + (pos + 1) + ' / ' + vis.length + '</span>' +
       '<button type="button" class="crumb-btn" data-act="step" data-v="-1" aria-label="' + esc(T.prev) + '"' + (pos <= 0 ? ' disabled' : '') + '>' + ICON.left + '</button>' +
@@ -960,7 +961,7 @@ ${SHARED_FNS}
       const pct = (n) => (rules.length ? (n / rules.length) * 100 : 0).toFixed(1) + '%';
       const mm = MOD_BY_ID[m.id];
       cards.push('<section class="hub' + (c.failed ? ' has-fail' : '') + '">' +
-        '<button type="button" class="hub-head" data-act="module-open" data-v="' + esc(m.id) + '" title="' + esc(T.hubOpen) + '"><span class="hub-no">' + esc(mm.tag) + '</span><span class="hub-title">' + esc(mm.title) + '</span><span class="hub-n">' + rules.length + ' ' + esc(T.rulesN) + '</span></button>' +
+        '<button type="button" class="hub-head" data-act="module-open" data-v="' + esc(m.id) + '" title="' + esc(T.hubOpen) + '"><span class="hub-title">' + esc(mm.title) + '</span><span class="hub-n">' + rules.length + ' ' + esc(T.rulesN) + '</span></button>' +
         (m.summary ? '<p class="hub-sum">' + esc(m.summary) + '</p>' : '') +
         '<div class="hub-meter" aria-hidden="true"><i class="ok" style="width:' + pct(c.verified) + '"></i><i class="bad" style="width:' + pct(c.failed) + '"></i><i class="warn" style="width:' + pct(c.pending) + '"></i></div>' +
         '<div class="hub-meta"><span>' + esc(T.status.verified) + ' ' + c.verified + '</span>' + '<span class="' + (c.failed ? 'bad' : '') + '">' + esc(T.status.failed) + ' ' + c.failed + '</span><span>' + esc(T.status.pending) + ' ' + c.pending + '</span></div>' +
@@ -1083,7 +1084,7 @@ ${SHARED_FNS}
     const v = el.dataset.v;
     if (act === 'rule') { S.ruleId = v; S.view = 'focus'; }
     else if (act === 'rule-open') { S.ruleId = v; if (LAYOUT === 'compact') S.focusByRule[v] = S.ovFocus; S.view = 'focus'; }
-    else if (act === 'focus') { S.focusByRule[activeRule().id] = v; }
+    else if (act === 'focus') { S.focusByRule[activeRule().id] = v; render(); root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return; }
     else if (act === 'ov-focus') { S.ovFocus = v; }
     else if (act === 'view') { S.view = S.view === 'overview' ? 'focus' : 'overview'; }
     else if (act === 'ev') { S.evOpen = !S.evOpen; }

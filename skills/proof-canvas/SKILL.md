@@ -167,6 +167,12 @@ relation label collides with another element, shorten it or reorder `nodes`.
 
 **`states.<normal | bug | fixed>`**
 
+One rule is one card. The **Scenario** switch on that card moves the diagram and the screen
+preview together, so put the whole comparison inside one rule: `normal` is the everyday case,
+`bug` is what happens with the rule switched off, and `fixed` is the rule doing its job. Never
+split one rule into two rules or modules ("with rule" and "without rule"): the reader then
+meets two switches that contradict each other.
+
 Every kind:
 
 | Field | Type | Notes |
@@ -205,7 +211,7 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 | `scope` | string | Bounds of the check (model size, ranges, number of runs). |
 | `method` | string | How it was checked (exhaustive model checking, bounded simulation, property-based testing with N runs, and so on). |
 | `sourceQuote` | optional string | Verbatim text of the source the rule comes from. |
-| `counterexample` | optional string | Checker trace for a failed rule. |
+| `counterexample` | optional string | Checker trace. On a failed rule it is the failure and shows under **Counterexample**. On a verified rule, use it for the trace of the rule switched off (for example a killed mutant); it shows under **Counterexample without this rule**. When a verified rule has none, the section is left out. |
 
 ## 2. Render
 

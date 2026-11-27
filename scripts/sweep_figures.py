@@ -54,7 +54,7 @@ PROBE_JS = """() => {
       if (w > 0 && h > 0) out.lkOverlap = Math.max(out.lkOverlap, Math.min(w, h));
     }
   }
-  for (const el of root.querySelectorAll('.pv-bar-lbl, .pv-bar-val, .lk-label, .fx button, .pv-v, .pv-k')) {
+  for (const el of root.querySelectorAll('.pv-bar-lbl, .pv-bar-val, .lk-label, .fx button, .fx-cue, .pv-v, .pv-k, .pv-live')) {
     if (el.scrollWidth > el.clientWidth + 1) out.clipped += 1;
   }
   out.connector = root.querySelectorAll('.link-layer .lk-path').length;

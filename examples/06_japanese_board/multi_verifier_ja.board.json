@@ -70,7 +70,7 @@
           }
         },
         "bug": {
-          "label": "不具合",
+          "label": "ルールなし（壊れる）",
           "tone": "bug",
           "route": [
             "a1",
@@ -101,7 +101,7 @@
           }
         },
         "fixed": {
-          "label": "修正後",
+          "label": "ルールあり（防ぐ）",
           "tone": "safe",
           "route": [
             "a1",
@@ -230,7 +230,7 @@
           }
         },
         "bug": {
-          "label": "不具合",
+          "label": "ルールなし（壊れる）",
           "tone": "bug",
           "activeEdges": [
             "ab",
@@ -269,7 +269,7 @@
           }
         },
         "fixed": {
-          "label": "修正後",
+          "label": "ルールあり（防ぐ）",
           "tone": "safe",
           "activeEdges": [
             "ab",
@@ -418,7 +418,7 @@
           }
         },
         "bug": {
-          "label": "不具合",
+          "label": "ルールなし（壊れる）",
           "tone": "bug",
           "activeSteps": [
             "check",
@@ -465,7 +465,7 @@
           }
         },
         "fixed": {
-          "label": "修正後",
+          "label": "ルールあり（防ぐ）",
           "tone": "safe",
           "activeSteps": [
             "close",
@@ -486,7 +486,7 @@
             }
           ],
           "edgeShort": "却下",
-          "takeaway": "計上と期間の確認を同じ一歩で行うので、締めた後の計上は却下される。",
+          "takeaway": "期間の確認と計上を一度に行うので、締めた後の計上は却下される。",
           "preview": {
             "statusBadge": "却下",
             "rows": [
@@ -514,9 +514,9 @@
       "defaultFocus": "bug",
       "evidence": {
         "ruleSummary": "期間を締めたら、記録済みの計上額は変わらない。",
-        "ifEnforced": "計上のたびに同じ一歩で期間を確かめるので、締めた後の確定額は動かない。",
+        "ifEnforced": "計上するその時点で期間を確かめるので、締めた後の確定額は動かない。",
         "ifNotEnforced": "締める前に期間を確かめた計上が、締めた後に確定額を変えてしまう。",
-        "checkerSummary": "TLC は基本構成の状態空間をすべて調べ、エラーはなかった。",
+        "checkerSummary": "TLC は状態空間をすべて調べ、エラーは出なかった。",
         "scope": "予算 2 単位の会計期間 1 つ。",
         "method": "TLC 2.19（TLA+ tools v1.7.4）、幅優先探索"
       }

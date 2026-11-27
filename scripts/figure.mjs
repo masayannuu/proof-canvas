@@ -295,15 +295,14 @@ export function seqSvg(rule, st, uid, flow) {
     if (chips[l.id]) h += chipSvg(chips[l.id], l.x, SEQ.chipY, b.w - 14);
   }
   let k = 0;
-  let focus = g.steps[0];
   for (const s of g.steps) {
     const isOn = act.has(s.id);
-    if (s.id === st.focusStep) focus = s;
     const badge = isOn
       ? '<g class="fg-badge"><circle cx="' + s.xa + '" cy="' + s.y + '" r="' + SEQ.badge + '"/><text x="' + s.xa + '" y="' + (s.y + 4.6).toFixed(1) + '" text-anchor="middle" font-size="13">' + (++k) + '</text></g>'
       : '<circle class="fg-dot" cx="' + s.xa + '" cy="' + s.y + '" r="4"/>';
     h += edgeSvg('data-step="' + s.id + '"', (isOn ? 'is-on' : 'is-dim') + (s.id === st.focusStep ? ' is-here' : ''), s.d, (isOn ? 'fg-hh-' : 'fg-h-') + uid, isOn && flow, s.label, s.cx, s.y, s.fit, badge);
   }
+  const focus = g.steps.find((s) => s.id === st.focusStep);
   if (focus.right + 16 < 728) h += '<path class="fg-lead" d="M' + (focus.right + 8).toFixed(1) + ' ' + focus.y + ' H728"/>';
   return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="' + focus.y + '" r="4.5"/></svg>';
 }

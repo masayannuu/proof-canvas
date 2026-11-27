@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
-import { ALL_MODULES, footerMarkup, modParts, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
+import { ALL_MODULES, footerMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
 import { validateHtmlContent } from './validate_board.mjs';
@@ -437,9 +437,12 @@ test('render: the run footer deduplicates tool and version', () => {
   assert.equal(toolLabel({ tool: 'Alloy', toolVersion: '6.1' }), 'Alloy 6.1');
   assert.equal(toolLabel({ tool: 'Example checker' }), 'Example checker');
 });
-test('render: a module title that starts with "M1" is not prefixed twice', () => {
-  assert.deepEqual(modParts({ title: 'M2 · Disputes' }, 1), { tag: 'M2', title: 'Disputes' });
-  assert.deepEqual(modParts({ title: 'Disputes' }, 1), { tag: 'M2', title: 'Disputes' });
+test('render: modules are named by their own title, with no synthesized M1 / M2 codes', () => {
+  const html = renderBoardHtml(EX2);
+  assert.equal(/ix-mod-no|hub-no|\bM[1-9] ·/.test(html), false);
+  const b = clone(EX2);
+  b.modules[1].title = 'M7 · Disputes';
+  assert.ok(renderBoardHtml(b).includes('<h2>M7 · Disputes</h2>'), 'an author-written title is kept verbatim');
 });
 test('render: --title override is stored apart from the board and keeps the board in sync', () => {
   const html = renderBoardHtml(EX1, { title: 'Custom title' });
