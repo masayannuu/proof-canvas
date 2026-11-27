@@ -13,13 +13,13 @@ how, and within which bounds.
 
 ## At a glance
 
-All four screenshots below are rendered directly from the bundled examples in [`examples/`](examples/).
+All four screenshots below are rendered directly from the bundled examples in [`examples/`](examples/) (example 05 with its spec files and checker logs; examples 02 and 03 as illustrative sample boards).
 
-| Compact starter (3 rules, fixed state) | Failed rule with TLA+ counterexample & evidence (12 rules) |
+| **Spec & log verified (6 rules: Quint, Alloy, TLC)**<br>実ファイル・実ログ照合済みボード（Quint / Alloy / TLC 混在・6/6 検証済み） | **Failed rule with TLA+ counterexample & evidence (12 rules, sample)**<br>違反ルールと TLA+ 反例トレース・根拠パネル（12 ルール・サンプル） |
 |---|---|
-| ![Compact 3-rule room booking board](docs/images/01-compact.png) | ![Failed escrow payout rule with counterexample and evidence](docs/images/02-failed-counterexample.png) |
-| **Module overview with search & status filters (20 rules)** | **Embed mode (`--mode embed`, 900×700 iframe/pane)** |
-| ![20-rule multi-module overview with search and filters](docs/images/03-overview-20rules.png) | ![Embed mode at 900x700 viewport](docs/images/04-embed-900.png) |
+| ![Verified multi-checker board with Quint source excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![Failed escrow payout rule in bug state with full TLA+ counterexample trace and evidence panel](docs/images/02-failed-counterexample.png) |
+| **Module overview with search & status filters (20 rules)**<br>検索・状態フィルタ付きのモジュール俯瞰ビュー（20 ルール） | **Embed mode (`--mode embed`, 900×700 iframe/pane)**<br>埋め込みモード（`--mode embed`・900×700 の iframe / ペイン表示） |
+| ![20-rule multi-module overview with search and status filters](docs/images/03-overview-20rules.png) | ![Embed mode rendering of 20-rule board at 900x700 viewport](docs/images/04-embed-900.png) |
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same board and evidence files render to the same bytes.
@@ -156,7 +156,7 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 66.8 KB | JSON | 1.5 ms | 24 ms (253 ms cold start) | 170 | 2.7 ms | 0 | 0 |
+| 3 / none | compact | 66.8 KB | JSON | 1.5 ms | 24 ms* | 170 | 2.7 ms | 0 | 0 |
 | 12 / 3 | index | 111.4 KB | JSON | 2.0 ms | 35-44 ms | 288 | 2.1 ms | 0 | 0 |
 | 20 / 4 | index | 137.5 KB | JSON | 1.9 ms | 33-34 ms | 339 | 3.7 ms | 0 | 0 |
 | 50 / 10 | index | 244.5 KB | JSON | 4.4 ms | 29-32 ms | 530 | 4.5 ms | 0 | 0 |
@@ -164,8 +164,9 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 | 20 / 4, embed at 900x700 | index | 137.4 KB | JSON | 2.9 ms | 41 ms | 332 | 3.2 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
-connector pills overlapping a card, clipped labels and horizontal page overflow. "Cold start" is
-the first page a fresh browser process opened; it was 35.7 ms in the previous run.
+connector pills overlapping a card, clipped labels and horizontal page overflow.
+\* Warm load; the first cold-start load of a fresh browser process is documented in
+[`BENCHMARK.md`](BENCHMARK.md).
 
 Run it yourself:
 
@@ -184,6 +185,8 @@ boards never need Python or Playwright.
 
 ```
 plugin.json           Antigravity and Agent Plugins manifest
+assets/
+  logo.png            plugin icon for Antigravity and Agent Plugins
 .claude-plugin/
   icon.png            Claude Code plugin icon
   plugin.json         Claude Code plugin manifest

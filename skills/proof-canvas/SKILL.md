@@ -36,6 +36,7 @@ Start from an example:
 | `examples/02_escrow_payout.board.json` | 12 | 3 | Index layout, TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with search, filters and the module overview |
 | `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
+| `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`: their statuses and
 counterexamples were written by hand, and no checker was run.

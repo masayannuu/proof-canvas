@@ -7,5 +7,6 @@
     "name": "masayannuu"
   },
   "repository": "https://github.com/masayannuu/proof-canvas",
-  "license": "MIT"
+  "license": "MIT",
+  "logo": "assets/logo.png"
 }
