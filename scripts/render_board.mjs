@@ -10,6 +10,7 @@ import { pathToFileURL } from 'node:url';
 import { bindEvidence, parseMutantFlag } from './evidence.mjs';
 import { esc, figKind, figSvg, figureRuntime } from './figure.mjs';
 import { flowRuntime, flowView } from './flow.mjs';
+import { hlSource } from './highlight.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
 import {
   BASE64_RE, DATA_ELEMENT_ID, GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, PAYLOAD_MODES, ROOT_ELEMENT_ID, encodePayload,
@@ -281,7 +282,19 @@ const CSS = `
 /*@trace*/
 .tr-steps { list-style: none; margin: 8px 0 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--pc-bd-strong); font: 11.5px/1.6 var(--pc-mono); color: var(--pc-ink-2); }
 .tr-steps li { overflow-wrap: anywhere; }
+.tr-steps .ht { font-weight: 600; }
+/* The last state of a trace is the one that breaks the property. */
+.tr-steps .is-viol { margin-left: -14px; padding-left: 12px; border-left: 2px solid var(--pc-bad); }
 .tp.tp-unnamed { color: var(--pc-warn); border-color: var(--pc-warn-bd); }
+/*@end*/
+/*@hl,trace*/
+/* Spec excerpt and trace highlighting: keywords, operators, types, literals, comments */
+.pc-root { --hl-kw: #3730a3; --hl-op: #0f766e; --hl-type: #6d28d9; --hl-lit: #a35208; --hl-com: #71717a; }
+.hk { color: var(--hl-kw); }
+.ho { color: var(--hl-op); }
+.ht { color: var(--hl-type); }
+.hl { color: var(--hl-lit); }
+.hc { color: var(--hl-com); font-style: italic; }
 /*@end*/
 /*@oos*/
 /* Out of scope: a calm note under the main view */
@@ -829,7 +842,7 @@ ${SHARED_FNS}
     return '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.trTitle) + '</div><div class="kv">' + kv(L.trFile, c.file, true) +
       kv(L.trProp, c.violatedProperty === null ? L.trUnnamed : c.violatedProperty, c.violatedProperty !== null) + kv(L.tool, c.checker) +
       kv('SHA-256', c.sha256.slice(0, 19) + '…', true) + kv(L.trLen, L.num(c.stepCount) + (c.steps.length < c.stepCount ? L.trShown(c.steps.length) : '')) +
-      '</div><ol class="tr-steps">' + c.steps.map((x) => '<li>' + esc(x) + '</li>').join('') + '</ol></div>';
+      '</div><ol class="tr-steps">' + c.steps.map((x, i) => '<li' + (i === c.steps.length - 1 && x.startsWith('State ') ? ' class="is-viol"' : '') + '>' + hl(x, HLT) + '</li>').join('') + '</ol></div>';
   };
   /*@end*/
   let boundsHtml = () => '';
@@ -926,7 +939,7 @@ ${SHARED_FNS}
       (SPEC_HASH ? kv(L.specHash, SPEC_HASH, true) : '') +
       logFiles.map((file) => kv(L.logHash, file.hash, true)).join('') +
       (Number.isInteger(r.stepsChecked) ? kv(L.steps, L.num(r.stepsChecked)) : '') + '</div></div>' +
-      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.specSource) + ' (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
+      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.specSource) + ' (' + esc(source) + ')</div><pre class="term"><code>' + hlRef(ref) + '</code></pre></div>' : '') +
       traceHtml(r) + (cex ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(cex.title) + '</div><pre class="term">' + esc(cex.text) + '</pre></div>' : '') +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
@@ -1323,7 +1336,35 @@ function scopeCss(css) {
   return out;
 }
 // JS: drop indentation, blank lines and whole-line // comments; newlines are kept so ASI is unchanged.
-const minJs = (js) => js.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//')).join('\n');
+// Each line then loses the spaces next to a punctuator outside its '...' and "..." strings. A line is
+// squeezed only up to its first "/" (a regex, a division or a comment start, which a line scan cannot
+// tell apart), and the runtime has no template literals, so no space inside a literal ever moves.
+export const minJs = (js) => js.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('//')).map(squeezeLine).join('\n');
+const PUNCT = /[{}()[\];,:?=+*%<>!&|^~.-]/;
+// Spaces that must stay: "a + +b", "a - -b", "1 .x" and "a < !b" would read as other tokens.
+const keepSpace = (a, b) => (/[+-]/.test(a) && /[+-]/.test(b)) || (/\d/.test(a) && b === '.') || (a === '<' && b === '!');
+export function squeezeLine(line) {
+  const strings = [];
+  let code = '';
+  let i = 0;
+  while (i < line.length && line[i] !== '/') {
+    const q = line[i];
+    if (q === '`') throw new Error(`minJs: template literals are not supported in the runtime: ${line}`);
+    if (q === "'" || q === '"') {
+      let j = i + 1;
+      while (j < line.length && line[j] !== q) j += line[j] === '\\' ? 2 : 1;
+      if (j >= line.length) throw new Error(`minJs: unterminated string: ${line}`);
+      strings.push(line.slice(i, j + 1));
+      code += '\0';
+      i = j + 1;
+    } else code += line[i++];
+  }
+  const rest = line.slice(i);
+  if (rest.includes('`')) throw new Error(`minJs: template literals are not supported in the runtime: ${line}`);
+  let n = 0;
+  return code.replace(/(.)[ \t]+(?=(.))/g, (m, a, b) => ((PUNCT.test(a) || PUNCT.test(b)) && !keepSpace(a, b) ? a : m))
+    .replace(/\0/g, () => strings[n++]) + rest;
+}
 
 function checkOptions(opts) {
   if (!opts || typeof opts !== 'object' || Array.isArray(opts)) throw new Error('renderBoardHtml options must be an object');
@@ -1381,10 +1422,11 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
     `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
   const keep = [layout, ...new Set(board.rules.map(figKind)), ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : []), ...(board.run.bounds ? ['bounds'] : []),
-    ...(binding.counterexamples ? ['trace'] : [])];
+    ...(binding.counterexamples ? ['trace'] : []), ...(Object.keys(binding.refs).length ? ['hl'] : [])];
   const css = (mode === 'standalone' ? minCss(STANDALONE_CSS) : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
+  const hl = hlSource(binding);
   const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board, binding) + (board.flow ? '\n' + flowRuntime() : '') +
-    (board.outOfScope ? '\n' + oosMarkup.toString() : '') + (board.run.bounds ? '\n' + boundsMarkup.toString() : '');
+    (board.outOfScope ? '\n' + oosMarkup.toString() : '') + (board.run.bounds ? '\n' + boundsMarkup.toString() : '') + (hl ? '\n' + hl : '');
   return `<!doctype html>
 <html lang="${L.lang}">
 <head>

@@ -225,12 +225,12 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 75.6 KB | JSON | 1.0 ms | 24 ms* | 203 | 4.3 ms | 0 | 0 |
-| 12 / 3 | index | 114.8 KB | JSON | 1.4 ms | 28-36 ms | 300 | 2.0 ms | 0 | 0 |
-| 20 / 4 | index | 140.9 KB | JSON | 1.9 ms | 29-30 ms | 351 | 2.2 ms | 0 | 0 |
-| 50 / 10 | index | 247.9 KB | JSON | 3.2 ms | 23-26 ms | 529 | 2.8 ms | 0 | 0 |
-| 100 / 20 | index | 121.2 KB | gzip | 9.2 ms | 25-38 ms | 828 | 4.6 ms | 0 | 0 |
-| 20 / 4, embed at 900x700 | index | 140.8 KB | JSON | 1.7 ms | 21 ms | 344 | 1.9 ms | 0 | 0 |
+| 3 / none | compact | 72.6 KB | JSON | 1.0 ms | 24 ms* | 203 | 4.3 ms | 0 | 0 |
+| 12 / 3 | index | 111.2 KB | JSON | 1.4 ms | 28-36 ms | 300 | 2.0 ms | 0 | 0 |
+| 20 / 4 | index | 137.3 KB | JSON | 1.9 ms | 29-30 ms | 351 | 2.2 ms | 0 | 0 |
+| 50 / 10 | index | 244.3 KB | JSON | 3.2 ms | 23-26 ms | 529 | 2.8 ms | 0 | 0 |
+| 100 / 20 | index | 117.6 KB | gzip | 9.2 ms | 25-38 ms | 828 | 4.6 ms | 0 | 0 |
+| 20 / 4, embed at 900x700 | index | 137.3 KB | JSON | 1.7 ms | 21 ms | 344 | 1.9 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
 connector pills overlapping a card, clipped labels and horizontal page overflow.
@@ -277,6 +277,7 @@ scripts/
   schema.mjs          board schema, layout and provenance rules
   flow.mjs            flow map geometry and markup (shared with the browser)
   i18n.mjs            English and Japanese UI text
+  highlight.mjs       spec excerpt and trace step highlighting (shared with the browser)
   figure.mjs          gate / sequence / relation / state / timeline geometry, text fitting and SVG builders (shared with the browser)
   payload.mjs         JSON / gzip + base64 payload codec
   synth_board.mjs     deterministic synthetic boards for stress tests

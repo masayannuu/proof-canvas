@@ -10,6 +10,8 @@ and Dafny (`.dfy`) files. Include any TLC `.cfg` files used to scope passing log
 Configs contribute to the spec hash. Each rule's `property` must match exactly one declaration.
 Evidence includes the source basename, line range, and up to 10 lines or 600 characters.
 Keep absolute paths out of source excerpts before publishing the board.
+**Proof & log** colours the excerpt by its file extension (keywords, operators, built-in types,
+literals and comments); the text is the bound excerpt, escaped, and never changes.
 
 For one file, the hash is `sha256:` followed by the digest of the raw bytes. For several
 files, hash the manifest. Sort by basename, encode each entry as the basename, a
@@ -86,3 +88,22 @@ combined native-log example.
   quoted ones with spaces included, are cut to their last segment.
 - The validator extracts the steps again from the same files and fails when the file name,
   SHA-256, checker, property or steps differ.
+- **Proof & log** colours each step (the `State N` prefix, variable names, literals, arrows) and
+  marks the last step of a state trace with a red edge: that is the state that breaks the property.
+  Alloy steps are instance lines, not states, so none is marked.
+
+## Semantic fidelity check
+
+The validator proves that the excerpt and trace are the files you bound. It cannot tell whether
+your drawing says what they say. Before locking a board, open **Proof & log** on every rule and
+compare:
+
+1. **Operators and bounds.** `>` vs `>=` vs `==`, constants and limits in the figure, chips,
+   `takeaway` and preview match the bound excerpt exactly.
+2. **Counterexample causality.** The bug state's path, chips and preview values match the last
+   (marked) state of the extracted mutant trace, not a story of how it might fail.
+3. **Honest scope and quotes.** A bounded check (`--max-steps=6`, `for 6`, a TLC depth) is never
+   described as an unbounded proof, and `sourceQuote` matches the primary source verbatim.
+4. **Fresh eyes for high-risk specs.** Have a separate session or model compare `board.json`, the
+   specs and the real mutant logs once before you lock the board.
+

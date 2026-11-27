@@ -13,11 +13,12 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
-import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, stmLayout, textW, tlLayout } from './figure.mjs';
+import { FIGURE_KINDS, GEOM, esc, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, stmLayout, textW, tlLayout } from './figure.mjs';
 import { checkpointFocus, flowLayout, flowOverflows, flowRuntime, flowView } from './flow.mjs';
 import { bindEvidence, parseMutantFlag, validateBinding } from './evidence.mjs';
+import { hlSource } from './highlight.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
-import { ALL_JOURNEYS, footerMarkup, oosMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
+import { ALL_JOURNEYS, footerMarkup, minJs, oosMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, squeezeLine, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, ruleStatus, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
 import { validateHtmlContent } from './validate_board.mjs';
@@ -1907,7 +1908,7 @@ test('mutant-log: rule ids such as __proto__ and constructor bind as own keys', 
   assert.equal(Object.hasOwn(binding.counterexamples, 'constructor'), false);
   const html = renderBoardHtml(b, { mutantLogs: [{ ruleId: '__proto__', path: TLC_KILL }] });
   assert.deepEqual(validateHtmlContent(html, 'x', { mutantLogs: [{ ruleId: '__proto__', path: TLC_KILL }] }).errors, []);
-  assert.ok(html.includes('Object.hasOwn(BINDING.counterexamples, r.id)'), 'the runtime reads traces as own keys only');
+  assert.ok(html.includes(minJs('Object.hasOwn(BINDING.counterexamples, r.id)')), 'the runtime reads traces as own keys only');
   validateBinding(b, JSON.parse(JSON.stringify(binding)));
 });
 
@@ -1931,7 +1932,7 @@ test('bounds and witness: run.bounds is one escaped line above every view, tree-
   assert.ok(html.includes('<div class="pc-wrap pc-main"><p class="pc-bounds"><b>Bounded check</b>TLC depth 5 &lt;img src=x onerror=alert(1)&gt;</p>'), 'the SSR shell opens with the bounds line');
   assert.ok(html.includes('function boundsMarkup('));
   assert.equal(html.includes('<img src=x'), false);
-  assert.ok(html.includes("e.witness ? kv(L.witness, e.witness)"));
+  assert.ok(html.includes(minJs('e.witness ? kv(L.witness, e.witness)')));
   for (const base of [EX0, EX1, EX5]) assert.equal(/pc-bounds|boundsMarkup/.test(renderBoardHtml(base)), false, base.runId);
   const flow = withFlowEdit(EX5, (v) => { v.run.bounds = 'Alloy scope 5 · Quint 5 steps · TLC depth 4'; });
   assert.ok(renderBoardHtml(flow, ex5Evidence()).includes('<p class="pc-bounds"><b>Bounded check</b>Alloy scope 5'));
@@ -1971,7 +1972,7 @@ test('trace UI: only a property-matched kill earns the trace-bound pill; a prope
   const pillOf = (board, mutantLogs, id) => {
     const html = renderBoardHtml(board, { mutantLogs });
     const binding = bindEvidence(board, { mutantLogs });
-    const code = [/const hasTrace = [^\n]*/.exec(html)[0], /const tracePill = \(r\) => \{[\s\S]*?\n\s*\};/.exec(html)[0]].join('\n');
+    const code = [/const hasTrace=[^\n]*/.exec(html)[0], /const tracePill=\(r\)=>\{[\s\S]*?\n\};/.exec(html)[0]].join('\n');
     const ctx = { BINDING: binding, L: uiFor(board, binding), esc: (x) => x };
     runInNewContext(code + '\nthis.out = tracePill({ id: ' + JSON.stringify(id) + ' });', ctx);
     return ctx.out;
@@ -2142,7 +2143,7 @@ test('state and timeline: the runtime draws them exactly like the server; other 
   const ctx = {};
   runInNewContext(figureRuntime(['state', 'timeline']) + '\nthis.figSvg = figSvg;', ctx);
   for (const r of EX7.rules) for (const k of STATES) assert.equal(ctx.figSvg(r, r.states[k], 'b-' + r.id, true), figSvg(r, r.states[k], 'b-' + r.id, true), `${r.id}/${k}`);
-  const markers = ['function stmSvg', 'function tlSvg', 'function tlLayout', 'const STM', 'const TL ', 'fg-start', 'fg-axis', 'fg-pindot', 'is-amber'];
+  const markers = ['function stmSvg', 'function tlSvg', 'function tlLayout', 'const STM', 'const TL=', 'fg-start', 'fg-axis', 'fg-pindot', 'is-amber'];
   for (const b of [EX0, EX1, EX2, EX3, EX5, EX6]) {
     const html = renderBoardHtml(b);
     for (const m of markers) assert.equal(html.includes(m), false, `${b.runId} ships ${m}`);
@@ -2175,6 +2176,133 @@ test('state and timeline: ids such as constructor, toString and __proto__ draw l
   const html = renderBoardHtml(b);
   expectPass(html);
   assert.equal(html.includes('<img src=x'), false);
+});
+
+// ---- syntax highlighting of spec excerpts and trace steps ("Proof & log") ----
+// The page's highlighter source, run exactly as the browser runs it.
+const shippedHl = (binding) => runInNewContext(hlSource(binding) + '\n({ hl, hlRef: typeof hlRef === "function" ? hlRef : null, HLT: typeof HLT === "undefined" ? null : HLT })', { esc });
+const refsOf = (pairs) => ({ refs: Object.fromEntries(pairs.map(([file, snippet], i) => ['r' + i, { file, line: 1, endLine: 1, snippet }])) });
+const specHl = (file, snippet, more = []) => shippedHl(refsOf([[file, snippet], ...more])).hlRef({ file, snippet });
+const traceHl = (step) => { const h = shippedHl({ refs: {}, counterexamples: {} }); return h.hl(step, h.HLT); };
+const HL_TAG = /<span class="h[kotlc]">|<\/span>/g;
+const unesc = (x) => x.replace(/&lt;|&gt;|&quot;|&amp;/g, (e) => ({ '&lt;': '<', '&gt;': '>', '&quot;': '"', '&amp;': '&' }[e]));
+const tokens = (out) => [...out.matchAll(/<span class="h(.)">([^<]*)<\/span>/g)].map((m) => m[1] + ':' + unesc(m[2]));
+// Highlighted output is the input, escaped, with only the five span classes added around it.
+function assertHlSafe(out, input) {
+  const bare = out.replace(HL_TAG, '');
+  assert.equal(/[<>"]|&(?!lt;|gt;|quot;|amp;)/.test(bare), false, out);
+  assert.equal(unesc(bare), input, out);
+  assert.equal((out.match(/<span /g) || []).length, (out.match(/<\/span>/g) || []).length, out);
+}
+const HOSTILE = ['</script><img src=x onerror=alert(1)>', 'x = "" onclick="alert(1)"', 'a < b && c > d', 'Inv == x /\\ y \\/ z <=> w', 'a->b', 'Set("a\\"b")',
+  'constructor __proto__ toString hasOwnProperty valueOf', '/* unterminated', '(* unterminated', '/- unterminated', '"unterminated', '& &amp; &lt; \\', 'State 1: x = "</script>"; y = "…/a" …'];
+
+test('highlight: every excerpt language and trace step escapes hostile text and adds only span.h[kotlc]', () => {
+  for (const ext of ['.qnt', '.tla', '.als', '.lean', '.dfy', '.QNT']) for (const x of HOSTILE) assertHlSafe(specHl('m' + ext, x), x);
+  for (const x of HOSTILE) assertHlSafe(traceHl(x), x);
+  assert.deepEqual(tokens(specHl('m.qnt', 'constructor __proto__ toString')), [], 'prototype names are not keywords');
+  assert.equal(specHl('m.qnt', '</script><img src=x onerror=alert(1)>'), '&lt;/script&gt;&lt;img src=x onerror=alert(<span class="hl">1</span>)&gt;');
+});
+
+test('highlight: Quint, TLA+, Alloy, Lean and Dafny excerpts get their own comments, keywords and operators', () => {
+  assert.deepEqual(tokens(specHl('m.qnt', 'pure def ok(n: int): bool = n >= 0 and true // c\nval s = Set("a\\"b")')),
+    ['k:pure', 'k:def', 't:int', 't:bool', 'o:>=', 'l:0', 'k:and', 'l:true', 'c:// c', 'k:val', 't:Set', 'l:"a\\"b"']);
+  assert.deepEqual(tokens(specHl('m.tla', "Inv == \\A x \\in S: x' /= 0 /\\ ~y \\/ TRUE \\* c\n(* b *) UNCHANGED <<x>>")),
+    ['o:==', 'o:\\A', 'o:\\in', "o:'", 'o:/=', 'l:0', 'o:/\\', 'o:~', 'o:\\/', 'l:TRUE', 'c:\\* c', 'c:(* b *)', 'k:UNCHANGED']);
+  assert.deepEqual(tokens(specHl('m.als', 'assert A { no p: P | p in p.^d and a->b } -- c\nx.(*r) // d')),
+    ['k:assert', 'k:no', 'k:in', 'o:^', 'k:and', 'o:->', 'c:-- c', 'o:*', 'c:// d'], 'Alloy has no (* comment');
+  assert.deepEqual(tokens(specHl('m.lean', 'theorem t : True := by -- c\n/- b -/')), ['k:theorem', 'k:by', 'c:-- c', 'c:/- b -/']);
+  assert.deepEqual(tokens(specHl('m.dfy', 'method M() requires x > 0 // c')), ['k:method', 'k:requires', 'l:0', 'c:// c']);
+  assert.deepEqual(tokens(specHl('m.qnt', '/* cut at ten lines …')), ['c:/* cut at ten lines …']);
+  assert.deepEqual(tokens(specHl('m.tla', 'Init == q = <<>> /\\ s = <<1>>')), ['o:==', 'o:/\\', 'l:1'], 'tuple brackets stay plain');
+  assert.deepEqual(tokens(specHl('m.qnt', 'val some = 1', [['n.als', 'some x: X | x in Y']])), ['k:val', 'l:1'], 'an Alloy keyword is not a Quint keyword');
+  assert.deepEqual(tokens(specHl('x1.qnt', 'val x1 = 2')), ['k:val', 'l:2'], 'digits inside a name are not a number');
+});
+
+test('highlight: a trace step marks its state, variables, literals, arrows and elisions; clipped values never flip quotes', () => {
+  assert.deepEqual(tokens(traceHl('State 3 · Next: x = "a"; ok = TRUE; f = [a |-> 1]; t1 = Map(1 -> 2)')),
+    ['t:State 3 · Next:', 'k:x', 'l:"a"', 'k:ok', 'l:TRUE', 'k:f', 'o:|->', 'l:1', 'k:t1', 'l:1', 'o:->', 'l:2']);
+  assert.deepEqual(tokens(traceHl('State 2: no change')), ['t:State 2:', 'c:no change']);
+  assert.deepEqual(tokens(traceHl('… 4 more states …')), ['c:… 4 more states …']);
+  assert.deepEqual(tokens(traceHl('State 0: s = Set("Read", "Writ…; fam = Map(1 -> "x")')), ['t:State 0:', 'k:s', 'l:"Read"', 'l:"Writ', 'k:fam', 'l:1', 'o:->', 'l:"x"']);
+  assert.deepEqual(tokens(traceHl('State 0: log = "…/run.log"; n = 0')), ['t:State 0:', 'k:log', 'l:"…/run.log"', 'k:n', 'l:0']);
+});
+
+test('highlight: tokenizing stays linear on long adversarial input (no catastrophic backtracking)', () => {
+  const big = 100000;
+  const started = Date.now();
+  for (const x of ['/*' + 'a'.repeat(big), '"' + '\\'.repeat(big), '(*' + '*'.repeat(big), 'a'.repeat(big) + ' =', '--' + '-'.repeat(big), ('\\A ').repeat(big / 3)]) {
+    for (const ext of ['.qnt', '.tla', '.als', '.lean']) assertHlSafe(specHl('m' + ext, x), x);
+    assertHlSafe(traceHl('State 1' + x), 'State 1' + x);
+  }
+  assert.ok(Date.now() - started < 5000, `took ${Date.now() - started} ms`);
+});
+
+test('highlight: a page ships only the languages and keywords its excerpts use, and none of it without excerpts or traces', () => {
+  assert.equal(hlSource({ refs: {} }), '');
+  const q = hlSource(refsOf([['a.qnt', 'val x = 1']]));
+  assert.ok(q.includes('".qnt"') && !q.includes('".tla"') && q.includes('["val","k"]') && !q.includes('nondet') && !q.includes('HLT'));
+  const t = hlSource({ refs: {}, counterexamples: {} });
+  assert.ok(t.includes('function hl(') && t.includes('const HLT') && !t.includes('const HL ='));
+  for (const [name, b] of Object.entries(NO_FLOW)) {
+    const html = renderBoardHtml(b);
+    for (const m of ['function hl(', 'HLT', '--hl-kw', '.hk{', 'is-viol']) assert.equal(html.includes(m), false, `${name} ships ${m}`);
+  }
+  const ex5 = renderBoardHtml(EX5, ex5Evidence());
+  assert.ok(['".als"', '".qnt"', '".tla"', '--hl-kw'].every((m) => ex5.includes(m)) && !ex5.includes('HLT') && !ex5.includes('is-viol'));
+  const ex7 = renderBoardHtml(EX7, { mutantLogs: ex7Mutants() });
+  assert.ok(ex7.includes('HLT') && ex7.includes('is-viol') && !ex7.includes('const HL='));
+});
+
+test('highlight: only the last step of a state trace is marked as the violating state', () => {
+  const html = renderBoardHtml(EX1, { mutantLogs: [{ ruleId: 'no_double_booking', path: TLC_KILL }] });
+  const code = [/const hasTrace=[^\n]*/.exec(html)[0], /const kv=[^\n]*/.exec(html)[0], /traceHtml=\(r\)=>\{[\s\S]*?\n\};/.exec(html)[0]].join('\n');
+  const run = (c) => {
+    const ctx = { BINDING: { counterexamples: { r: c } }, L: uiFor(EX1), esc, traceHtml: null };
+    runInNewContext(hlSource({ refs: {}, counterexamples: {} }) + '\n' + code + '\nthis.out = traceHtml({ id: "r" });', ctx);
+    return ctx.out;
+  };
+  const c = { file: 'm.log', sha256: 'sha256:' + '0'.repeat(64), checker: 'TLC', violatedProperty: 'P', stepCount: 2, steps: ['State 1: x = 0', 'State 2: x = 1'] };
+  assert.deepEqual([...run(c).matchAll(/<li( class="is-viol")?>/g)].map((m) => !!m[1]), [false, true]);
+  assert.equal(run({ ...c, checker: 'Alloy', steps: ['check P: counterexample found', 'this/A = A$0'] }).includes('is-viol'), false, 'Alloy instance lines are not states');
+});
+
+test('highlight: the five colours keep WCAG AA contrast (4.5:1) on the excerpt and trace backgrounds', () => {
+  const html = renderBoardHtml(EX5, ex5Evidence());
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const tokensCss = [...html.matchAll(/--hl-(kw|op|type|lit|com):(#[0-9a-f]{6})/g)];
+  assert.equal(tokensCss.length, 5);
+  for (const [, name, hex] of tokensCss) for (const bg of ['#fafafa', '#ffffff']) {
+    const ratio = (lum(bg) + 0.05) / (lum(hex) + 0.05);
+    assert.ok(ratio >= 4.5, `--hl-${name} ${hex} on ${bg} is ${ratio.toFixed(2)}:1`);
+  }
+});
+
+test('example 05 with one bound mutant log stays under the 128 KB budget in both modes', () => {
+  const kill = MUT('refund_budget.log', `$ quint run m.qnt --invariant=refundsWithinEscrow\n${quintStates(2)}\n[violation] Found an issue.\n`);
+  for (const mode of ['standalone', 'embed']) {
+    const html = renderBoardHtml(EX5, { ...ex5Evidence(), mutantLogs: [{ ruleId: 'refund_cap', path: kill }], mode });
+    assert.ok(Buffer.byteLength(html) <= 128 * 1024, `${mode}: ${Buffer.byteLength(html)} bytes`);
+  }
+});
+
+test('minJs: spaces next to punctuators go, spaces inside strings and after a "/" stay; every example runtime still parses', () => {
+  assert.equal(squeezeLine("const a = 'x + y' + b ? \"c , d\" : [1, 2];"), "const a='x + y'+b?\"c , d\":[1,2];");
+  assert.equal(squeezeLine('return a + +b - -c + 1 .toFixed(2) + (x < !y);'), 'return a+ +b- -c+1 .toFixed(2)+(x< !y);');
+  assert.equal(squeezeLine("const r = s.replace(/a , b/g, ' , ');"), "const r=s.replace(/a , b/g, ' , ');");
+  assert.equal(squeezeLine("const q = 'it\\'s , ok' + x;"), "const q='it\\'s , ok'+x;");
+  assert.throws(() => squeezeLine('const t = `a ${b}`;'), /template literals/);
+  assert.throws(() => squeezeLine("const t = 'open"), /unterminated string/);
+  assert.equal(minJs('  // gone\n  a = 1;\n\n  b ( c );'), 'a=1;\nb(c);');
+  const boards = [[EX0, {}], [EX3, {}], [EX5, ex5Evidence()], [EX6, ex5Evidence()], [EX7, { mutantLogs: ex7Mutants() }]];
+  for (const [b, o] of boards) {
+    const html = renderBoardHtml(b, o);
+    const js = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).join('\n');
+    assert.doesNotThrow(() => new Function(js), b.title);
+  }
 });
 
 rmSync(TMP, { recursive: true, force: true });

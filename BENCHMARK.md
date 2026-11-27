@@ -58,16 +58,16 @@ benchmark measures the renderer, not a verification.
 
 | Tier | Rules / modules | Layout | Mode | Badge | HTML (budget) | Payload | bytes/rule | Render ms | Validate ms | Deterministic | Validator |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| tier1_3rules | 3 / 0 | compact | standalone | sample | 75.6 KB (128 KB) | JSON | 3293 | 0.98 | 1.57 | yes | PASS |
-| tier1b_escrow | 12 / 3 | index | standalone | failed | 114.8 KB (200 KB) | JSON | 3027 | 1.4 | 1.76 | yes | PASS |
-| tier2_20rules | 20 / 4 | index | standalone | sample | 140.9 KB (200 KB) | JSON | 3101 | 1.94 | 2.27 | yes | PASS |
-| tier3_50rules | 50 / 10 | index | standalone | sample | 247.9 KB (350 KB) | JSON | 3370 | 3.2 | 3.89 | yes | PASS |
-| tier4_100rules | 100 / 20 | index | standalone | sample | 121.2 KB (512 KB) | gzip+base64 | 3380 | 9.24 | 5.85 | yes | PASS |
-| embed_20rules | 20 / 4 | index | embed | sample | 140.8 KB (200 KB) | JSON | 3101 | 1.69 | 2.18 | yes | PASS |
+| tier1_3rules | 3 / 0 | compact | standalone | sample | 72.6 KB (128 KB) | JSON | 3293 | 0.98 | 1.57 | yes | PASS |
+| tier1b_escrow | 12 / 3 | index | standalone | failed | 111.2 KB (200 KB) | JSON | 3027 | 1.4 | 1.76 | yes | PASS |
+| tier2_20rules | 20 / 4 | index | standalone | sample | 137.3 KB (200 KB) | JSON | 3101 | 1.94 | 2.27 | yes | PASS |
+| tier3_50rules | 50 / 10 | index | standalone | sample | 244.3 KB (350 KB) | JSON | 3370 | 3.2 | 3.89 | yes | PASS |
+| tier4_100rules | 100 / 20 | index | standalone | sample | 117.6 KB (512 KB) | gzip+base64 | 3380 | 9.24 | 5.85 | yes | PASS |
+| embed_20rules | 20 / 4 | index | embed | sample | 137.3 KB (200 KB) | JSON | 3101 | 1.69 | 2.18 | yes | PASS |
 
 `bytes/rule` is the raw JSON size of the rules divided by their count. HTML sizes were
-re-measured with `--no-browser` after the review fixes (+0.1 KB); the timings are from the full
-run just before them. Every tier passes the
+re-measured with `--no-browser` after the runtime whitespace squeeze (-3.6 KB, see "Syntax
+highlighting" below); the timings are from an earlier full run. Every tier passes the
 validator with zero warnings.
 
 ## Results: browser
@@ -223,6 +223,39 @@ from it closes the index and brings the rule's heading on screen.
   clips at 390x844 and 375x812, and the last rule picked from a scrolled index opens with its
   heading 119px above the screen.
 
+## Syntax highlighting and the runtime squeeze
+
+**Proof & log** now colours spec excerpts (Quint, TLA+, Alloy, Lean, Dafny) and mutant trace
+steps in the browser, from the same binding text the validator re-checks, and marks the last state
+of a state trace. The highlighter ships only with bound excerpts or traces, with only the comment
+syntax of the excerpts' languages and only the keywords they contain. To pay for it, the runtime JS
+now also loses the spaces next to punctuators outside its string literals (each line only up to its
+first "/", and the runtime has no template literals).
+
+| Board | Standalone before (`f84de93`) | Standalone after | Budget |
+|---|---|---|---|
+| 00 minimal | 68,685 B | 65,580 B | 128 KB |
+| 04 refund guard (`--spec`, `--log`) | 72,057 B | 69,988 B | 128 KB |
+| 05 multi-verifier (`--spec`, `--log`) | 129,516 B | 124,366 B | 128 KB |
+| 05 with one mutant log, as the budget test renders it | 131,053 B | 126,232 B | 128 KB |
+| 06 Japanese | 111,817 B | 107,184 B | 128 KB |
+| 07 state and timeline (3 mutant logs) | 96,883 B | 93,470 B | 128 KB |
+| 16-rule OAuth board (8 specs, 7 logs, 13 mutant logs, gzip payload) | 169,521 B | 163,712 B | 200 KB |
+
+- **Cost.** Without the squeeze the highlighter adds 1,077 B (04, one language) to 1,230 B (05,
+  three languages) and 1,645 B to 05 with a mutant log, which had 19 B of headroom; boards without
+  excerpts or traces (00-03) carry none of it. With the squeeze every example shrinks, by 2,069 B
+  (04) to 5,150 B (05). A self-test keeps 05 with one mutant log under 128 KB in both modes.
+- **Checks.** `npm test` adds XSS round trips (every slice escaped, only `span.h[kotlc]` added, the
+  text unchanged) for each language and trace steps, per-language token tests, 100,000-character
+  adversarial inputs, the tree-shaking, the last-state mark, WCAG AA contrast of the five colours on
+  `#fafafa` and `#ffffff`, and the squeeze (strings and regexes untouched, every example runtime
+  parses). In Chromium, `sweep` (400 views), `flow` (173 clicks) and `mobile` (800 views, 184 taps)
+  over examples 00-07 in both modes, and `sweep` (256 views) and `flow` (257 clicks) over the
+  OAuth board at 1440x900 and 900x700, report 0 failures; opening every drawer of 05, 06, 07 and the
+  OAuth board at 1440x900 and 390x844 shows the excerpt and trace text equal to the binding with
+  nothing but the highlight spans inside.
+
 ## Analysis
 
 ### What scales well
@@ -244,8 +277,8 @@ from it closes the index and brings the rule's heading on screen.
 ### Bottlenecks
 
 1. **Payload dominates file size beyond about 15 rules.** At tier4 the HTML is 37.1 KB payload
-   (gzip + base64), 39.2 KB JS, 32.4 KB CSS and 6.5 KB `<noscript>` text; the compact layout
-   ships 33.7 KB JS and 25.4 KB CSS. The same 100-rule board as plain JSON is 418.5 KB, under
+   (gzip + base64), 36.1 KB JS, 31.9 KB CSS and 6.5 KB `<noscript>` text; the compact layout
+   ships 31.0 KB JS and 25.0 KB CSS (JS and CSS re-measured after the runtime squeeze). The same 100-rule board as plain JSON is 418.5 KB, under
    the 512 KB limit; 200 rules (`--rules 200 --modules 20 --failed 5 --unverified 20 --seed 200`)
    are 752.6 KB as plain JSON and 180.3 KB with gzip,
    which is why `auto` switches to gzip above 192 KB (covered by a self-test).

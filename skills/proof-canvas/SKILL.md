@@ -316,6 +316,9 @@ rule in every state, and **Proof & log** on the bug state, in headless Chromium;
 the flow map; `mobile` taps through both on 390 and 375px phones. They fail on overlaps, text outside its box, clipped text, page overflow, or
 console errors; `sweep` also on a trace that disagrees with the binding.
 
+No gate checks that the drawing says what the spec and trace say: run the
+[semantic fidelity check](references/evidence.md#semantic-fidelity-check) before locking.
+
 ## 5. Honesty rules
 
 Use checker results for rule verdicts, step counts, and counterexamples. Describe the
@@ -339,8 +342,8 @@ The badge also depends on which files you supply.
 
 ### Spec files and checker logs
 
-Repeat `--spec` for Quint (`.qnt`), TLA+ (`.tla`, with any TLC `.cfg`), Alloy (`.als`), Lean
-(`.lean`) and Dafny (`.dfy`) sources; each rule's `property` must match exactly one declaration.
+Repeat `--spec` for Quint, TLA+ (with any TLC `.cfg`), Alloy, Lean and Dafny sources; each
+rule's `property` must match exactly one declaration.
 Repeat `--log` for native Quint, Alloy 6, TLC and Apalache logs or `proof-canvas-log-1` JSON
 receipts. Every file needs a recognized verdict, and only named passes can substantiate a
 verified rule (a `quint run` simulation cannot). Hashes, per-checker rules and the receipt
@@ -349,8 +352,8 @@ format: [`references/evidence.md`](references/evidence.md).
 ### Mutant logs
 
 `--mutant-log <ruleId>=<path>` binds the log of a mutant run (the rule switched off) to one
-rule. The log must report a violation (`[ok]`, `No error has been found` and `UNSAT` are
-refused), and a named violated property must equal the rule's `property`. **Proof & log** pairs
+rule. The log must report a violation, and a named violated property must equal the rule's
+`property`. **Proof & log** pairs
 your bug drawing with the file name, SHA-256 and up to 12 steps extracted from the one failing
 run. A property-matched kill shows **Trace-bound mutant kill**; a Quint ITF trace, which names no
 property, **Trace attached (property unnamed)**; no log, **Illustrative only (no trace bound)**.

@@ -45,7 +45,7 @@ export function computeSpecHash(files) {
   return manifestHash(files);
 }
 
-const LANGUAGES = new Map([
+export const LANGUAGES = new Map([
   ['.qnt', { line: ['//'], block: ['/*', '*/'], declaration: /^(?:pure[ \t]+)?(?:val|def|temporal|action|assume)[ \t]+(\w+)\b/ }],
   ['.tla', { line: ['\\*'], block: ['(*', '*)'], nested: true, declaration: /^([A-Za-z_]\w*)[ \t]*(?:(?:\([^=]*\)|\[.*\])[ \t]*)?==/ }],
   ['.als', { line: ['//', '--'], block: ['/*', '*/'], declaration: /^(?:assert|pred|fact|fun)[ \t]+(?:\w+\.)?(\w+)\b/ }],
