@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
+import { uiFor } from './i18n.mjs';
 import { ALL_MODULES, footerMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
@@ -33,6 +34,7 @@ const EX1 = EXAMPLES['01_room_booking'];
 const EX2 = EXAMPLES['02_escrow_payout'];
 const EX3 = EXAMPLES['03_multi_module_20rules'];
 const clone = (o) => structuredClone(o);
+const EN = uiFor({});
 const CJK = /[\u3000-\u303f\u3040-\u30ff\u4e00-\u9fff\uff00-\uffef]/;
 const TMP = mkdtempSync(join(tmpdir(), 'proof-canvas-test-'));
 
@@ -175,7 +177,7 @@ test('provenance: one failed rule resolves to failed with the failure count in t
   b.run.status = 'failed';
   const p = resolveProvenance(b);
   assert.equal(p.kind, 'failed');
-  assert.equal(provLabel(p), '1 failed · 11/12 verified');
+  assert.equal(provLabel(p, EN), '1 failed · 11/12 verified');
   const html = renderBoardHtml(b);
   assert.equal(expectPass(html).provenance, 'failed');
   assert.ok(html.includes('1 failed · 11/12 verified'));
@@ -185,7 +187,7 @@ test('provenance: a run failure without a failed rule still resolves to failed',
   b.run.status = 'failed';
   const p = resolveProvenance(b);
   assert.equal(p.kind, 'failed');
-  assert.match(provLabel(p), /^Run failed · 20\/20 verified$/);
+  assert.match(provLabel(p, EN), /^Run failed · 20\/20 verified$/);
 });
 test('provenance: nothing checked resolves to unverified', () => {
   const b = realRun();
@@ -215,7 +217,7 @@ test('provenance: a declared unverified caps a board with verified rules, and th
   b.provenance = 'unverified';
   const p = resolveProvenance(b);
   assert.equal(p.kind, 'unverified');
-  assert.equal(provLabel(p), 'Unverified (20/20)');
+  assert.equal(provLabel(p, EN), 'Unverified (20/20)');
   const html = renderBoardHtml(b);
   assert.equal(expectPass(html).provenance, 'unverified');
   assert.equal(footerNote(html), '20 of 20 rules are marked verified, but the board is declared unverified. Self-reported JSON. No spec file or checker log was checked.');
@@ -713,7 +715,7 @@ test('binding: Quint example renders and rechecks the actual files with a determ
     assert.equal(ref.file, 'refund_guard.qnt');
     assert.equal(ref.snippet, lines.slice(ref.line - 1, ref.endLine).join('\n'));
     assert.match(ref.snippet, new RegExp('^  val ' + rule.property + ' ='));
-    const details = ruleEvidenceDetails(rule, refund, binding);
+    const details = ruleEvidenceDetails(rule, refund, binding, EN);
     assert.equal(details.tool, 'Quint 0.32.0');
     assert.equal(details.source, 'refund_guard.qnt:' + ref.line);
   }
@@ -743,7 +745,7 @@ test('binding: derive a missing hash without altering the board or masking a sup
   const html = renderBoardHtml(board, refundEvidence);
   expectPass(html);
   assert.equal(bindingIn(html).specHash, refund.run.specHash);
-  assert.match(footerMarkup(resolveProvenance(board, bindingIn(html)), board, bindingIn(html)),
+  assert.match(footerMarkup(resolveProvenance(board, bindingIn(html)), board, bindingIn(html), EN),
     new RegExp('<code>spec: ' + refund.run.specHash.slice(0, 19) + '</code>'));
   const output = tmpFile('derived.html', html);
   for (const flags of [[], ['--spec', refundSpec, '--log', refundLog]]) {
@@ -1082,7 +1084,7 @@ test('binding: source ranges keep full bodies and exclude local or out-of-module
     const board = oneRule('Real');
     const html = renderBoardHtml(board, options);
     expectPass(html);
-    const details = ruleEvidenceDetails(board.rules[0], board, bindingIn(html));
+    const details = ruleEvidenceDetails(board.rules[0], board, bindingIn(html), EN);
     assert.equal(details.ref.snippet, snippet);
     assert.equal(details.source, file + ':' + details.ref.line + '-' + details.ref.endLine);
     for (const property of excluded) {
@@ -1121,7 +1123,7 @@ test('binding: native combined example renders and validates deterministically w
   assert.match(footerNote(html), /Alloy, Quint, TLC log sha256:/);
   for (const [i, rule] of board.rules.entries()) {
     const family = Math.floor(i / 2);
-    const details = ruleEvidenceDetails(rule, board, binding);
+    const details = ruleEvidenceDetails(rule, board, binding, EN);
     assert.equal(details.tool, ['Quint', 'Alloy', 'TLC'][family]);
     assert.equal(details.logFiles.length, 1);
     const expectedHash = createHash('sha256').update(readFileSync(logPaths[family])).digest('hex');

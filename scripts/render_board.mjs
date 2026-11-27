@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bindEvidence } from './evidence.mjs';
 import { esc, figKind, figSvg, figureRuntime } from './figure.mjs';
+import { uiFor, uiSource } from './i18n.mjs';
 import {
   BASE64_RE, DATA_ELEMENT_ID, GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, PAYLOAD_MODES, ROOT_ELEMENT_ID, encodePayload,
 } from './payload.mjs';
@@ -66,11 +67,8 @@ export function toolLabel(run) {
   return rest.length ? tool + ' ' + rest.join(' ') : tool;
 }
 
-export function bindingLabel(level) {
-  if (level === 'spec-and-log') return 'Spec & log verified';
-  if (level === 'spec-only') return 'Spec checked (log self-reported)';
-  if (level === 'log-only') return 'Log checked (spec self-reported)';
-  return 'Self-reported JSON';
+export function bindingLabel(level, L) {
+  return L.bind[level] || L.bind['self-reported'];
 }
 
 export function boundTools(binding, run) {
@@ -81,74 +79,53 @@ export function boundTools(binding, run) {
   return tools.join(', ');
 }
 
-export function ruleEvidenceDetails(rule, board, binding) {
+export function ruleEvidenceDetails(rule, board, binding, L) {
   const ref = Object.hasOwn(binding.refs, rule.id) ? binding.refs[rule.id] : null;
   const source = ref ? ref.file + ':' + ref.line + (ref.line === ref.endLine ? '' : '-' + ref.endLine) : '';
   const ids = binding.ruleEvidence && Object.hasOwn(binding.ruleEvidence, rule.id) ? binding.ruleEvidence[rule.id] : [];
   const logFiles = binding.logFiles.filter((file) => ids.includes(file.file));
   return {
     ref, source, logFiles,
-    tool: boundTools({ logFiles }, board.run) || (binding.logFiles.length ? 'No bound checker verdict' : toolLabel(board.run)),
+    tool: boundTools({ logFiles }, board.run) || (binding.logFiles.length ? L.noVerdict : toolLabel(board.run)),
   };
 }
 
-export function footerMarkup(p, board, binding, specHash = binding.specHash || board.run.specHash) {
+export function footerMarkup(p, board, binding, L, specHash = binding.specHash || board.run.specHash) {
   const tool = boundTools(binding, board.run) || toolLabel(board.run);
-  return '<footer class="pc-foot" data-provenance-note="' + p.kind + '"><span>' + esc(provNote(p, board, binding)) + '</span><span class="pc-spacer"></span>' +
+  return '<footer class="pc-foot" data-provenance-note="' + p.kind + '"><span>' + esc(provNote(p, board, binding, L)) + '</span><span class="pc-spacer"></span>' +
     '<code>run: ' + esc(board.runId) + '</code>' + (specHash ? '<code>spec: ' + esc(String(specHash).slice(0, 19)) + '</code>' : '') +
     '<code>tool: ' + esc(tool) + '</code></footer>';
 }
 
-export function provLabel(p) {
-  if (p.kind === 'verified') {
-    const label = p.level === 'spec-and-log' ? bindingLabel(p.level)
-      : p.level === 'spec-only' ? 'Spec checked · self-reported log'
-        : p.level === 'log-only' ? 'Log checked · self-reported spec' : 'Self-reported';
-    return label + ' (' + p.verifiedCount + '/' + p.total + ')';
-  }
-  if (p.kind === 'failed') return (p.failedCount ? p.failedCount + ' failed' : 'Run failed') + ' · ' + p.verifiedCount + '/' + p.total + ' verified';
-  if (p.kind === 'mixed') return 'Partially verified (' + p.verifiedCount + '/' + p.total + ')';
-  if (p.kind === 'sample') return 'Sample data';
-  return (p.verifiedCount ? 'Unverified (' : 'Not checked yet (') + p.verifiedCount + '/' + p.total + ')';
+export function provLabel(p, L) {
+  const v = p.verifiedCount;
+  const t = p.total;
+  if (p.kind === 'verified') return L.prov.counted(p.level === 'spec-and-log' ? bindingLabel(p.level, L) : L.provSelf[p.level] || L.provSelf['self-reported'], v, t);
+  if (p.kind === 'failed') return L.prov.failed(p.failedCount, v, t);
+  if (p.kind === 'mixed') return L.prov.mixed(v, t);
+  if (p.kind === 'sample') return L.prov.sample;
+  return L.prov.unverified(v, t);
 }
 
-export function provenanceBadge(p) {
-  return '<span class="pc-prov pc-prov-' + p.tone + '" data-provenance="' + p.kind + '"><span class="pc-prov-dot" aria-hidden="true"></span>' + esc(provLabel(p)) + '</span>';
+export function provenanceBadge(p, L) {
+  return '<span class="pc-prov pc-prov-' + p.tone + '" data-provenance="' + p.kind + '"><span class="pc-prov-dot" aria-hidden="true"></span>' + esc(provLabel(p, L)) + '</span>';
 }
 
-export function provNote(p, board, binding) {
-  const rules = (n) => n + (n === 1 ? ' rule' : ' rules');
+export function provNote(p, board, binding, L) {
+  const N = L.note;
   let status;
-  if (p.kind === 'verified') {
-    status = 'All ' + rules(p.total) + ' are marked verified in JSON';
-    if (p.level === 'self-reported') {
-      status += ', but no spec file or checker log was checked by proof-canvas.';
-    } else status += '.';
-  } else if (p.kind === 'failed') {
-    status = (p.failedCount ? rules(p.failedCount) + ' failed.' : 'The run failed.') + ' ' + p.verifiedCount + ' of ' + rules(p.total) + ' marked verified.';
-  } else if (p.kind === 'mixed') {
-    status = p.pendingCount
-      ? p.verifiedCount + ' of ' + rules(p.total) + ' marked verified. ' + p.pendingCount + ' still pending.'
-      : 'All ' + rules(p.total) + ' are marked verified, but the run is not (it needs status "verified" and a real spec hash) or the board is declared partially verified.';
-  } else if (p.kind === 'sample') {
-    status = 'Sample data. The board is illustrative.';
-  } else {
-    status = p.verifiedCount
-      ? p.verifiedCount + ' of ' + rules(p.total) + ' are marked verified, but the board is declared unverified.'
-      : 'No rule is marked verified or failed.';
-  }
+  if (p.kind === 'verified') status = N.verified(p.total, p.level === 'self-reported');
+  else if (p.kind === 'failed') status = N.failed(p.failedCount, p.verifiedCount, p.total);
+  else if (p.kind === 'mixed') status = p.pendingCount ? N.mixedPending(p.verifiedCount, p.total, p.pendingCount) : N.mixedAll(p.total);
+  else if (p.kind === 'sample') status = N.sample;
+  else status = N.unverified(p.verifiedCount, p.total);
 
   let evidence = '';
-  if (p.level === 'spec-and-log') {
-    evidence = boundTools(binding, board.run) + ' log ' + binding.logHash + ' matched the reported verdicts. Spec ' + binding.specHash + ' matched the rule definitions.';
-  } else if (p.level === 'spec-only') {
-    evidence = 'Spec definitions and hash were checked (' + binding.specHash + '). No checker log was verified.';
-  } else if (p.level === 'log-only') {
-    evidence = boundTools(binding, board.run) + ' log ' + binding.logHash + ' matched the reported verdicts. No spec file was checked.';
-  } else if (p.kind !== 'verified') {
-    evidence = 'Self-reported JSON. No spec file or checker log was checked.';
-  }
-  return status + (evidence ? ' ' + evidence : '') + (board.provenanceNote ? ' Board note: ' + board.provenanceNote : '');
+  if (p.level === 'spec-and-log') evidence = N.specAndLog(boundTools(binding, board.run), binding.logHash, binding.specHash);
+  else if (p.level === 'spec-only') evidence = N.specOnly(binding.specHash);
+  else if (p.level === 'log-only') evidence = N.logOnly(boundTools(binding, board.run), binding.logHash);
+  else if (p.kind !== 'verified') evidence = N.selfReported;
+  return status + (evidence ? L.sep + evidence : '') + (board.provenanceNote ? L.sep + N.boardNote(board.provenanceNote) : '');
 }
 
 export function logLineTone(line) {
@@ -158,18 +135,16 @@ export function logLineTone(line) {
   return '';
 }
 
-const NOSCRIPT_STATUS = { verified: 'Verified', failed: 'Failed', pending: 'Not checked yet' };
-
 // One line per rule, grouped by module, so the no-JS fallback stays small at 100+ rules.
-function renderNoscript(board, title, prov) {
+function renderNoscript(board, title, prov, L) {
   const groups = Array.isArray(board.modules)
     ? board.modules.map((m) => ({ title: m.title, items: board.rules.filter((r) => r.moduleId === m.id) }))
     : [{ title: '', items: board.rules }];
   const body = groups.map((g) => {
-    const lis = g.items.map((r) => `<li>${esc(r.no)}. ${esc(r.title)}: ${NOSCRIPT_STATUS[ruleStatus(r)]}</li>`).join('');
+    const lis = g.items.map((r) => `<li>${esc(r.no)}. ${esc(r.title)}: ${esc(L.noscript[ruleStatus(r)])}</li>`).join('');
     return `${g.title ? `<h2>${esc(g.title)}</h2>` : ''}<ul>${lis}</ul>`;
   }).join('');
-  return `<noscript><div class="pc-noscript"><p><strong>${esc(title)}</strong> (${esc(provLabel(prov))})</p>${body}</div></noscript>`;
+  return `<noscript><div class="pc-noscript"><p><strong>${esc(title)}</strong> (${esc(provLabel(prov, L))})</p>${body}</div></noscript>`;
 }
 
 // Page-level rules exist only in standalone mode; an embedded board styles nothing outside .pc-root.
@@ -602,7 +577,7 @@ ${SHARED_FNS}
     const box = document.createElement('div');
     box.className = 'pc-error';
     box.setAttribute('role', 'alert');
-    box.textContent = 'This board could not be displayed: ' + String((e && e.message) || e);
+    box.textContent = UI(uiOptions(null)).err + String((e && e.message) || e);
     root.prepend(box);
   }
 
@@ -649,6 +624,7 @@ ${SHARED_FNS}
   const LAYOUT = BOARD.__layout;
   const PROV = BOARD.__provenance;
   const BINDING = BOARD.__binding;
+  const L = UI(uiOptions(BOARD));
   const TITLE = BOARD.__titleOverride || BOARD.title;
   const ALL = ${JSON.stringify(ALL_MODULES)};
   const STATE_ORDER = ['normal', 'bug', 'fixed'];
@@ -669,22 +645,6 @@ ${SHARED_FNS}
     panel: SV('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'),
   };
 
-  const T = {
-    navRules: 'Rules', viewAll: (n) => 'Overview (' + n + ')', overview: 'Overview',
-    scenario: 'Scenario',
-    evTitle: 'Evidence', evOpen: 'Show details', evClose: 'Hide details',
-    rule: 'Rule', ifOn: 'If enforced', ifOff: 'If not enforced', quote: 'Source text', meta: 'Verification metadata',
-    scope: 'Scope', method: 'Method', tool: 'Tool', specHash: 'Spec hash', steps: 'Steps checked',
-    cexTitle: 'Counterexample', cexOff: 'Counterexample without this rule', noCex: 'No counterexample recorded',
-    ovHint: 'Click a card to open that rule',
-    liveOk: (n) => 'Verified' + (n ? ' · ' + n.toLocaleString('en-US') + ' steps checked' : ''), liveBad: 'Violation found', livePending: 'Not checked yet',
-    toolbar: 'Filter rules', module: 'Module', allModules: (n) => 'All modules (' + n + ')',
-    search: 'Search rules', searchPh: 'Search rules…', statusGroup: 'Status',
-    status: { all: 'All', failed: 'Failed', verified: 'Verified', pending: 'Not checked' },
-    rules: 'Rules', index: 'Toggle rule index', noMatch: 'No rules match these filters', clear: 'Clear filters',
-    prev: 'Previous rule', next: 'Next rule', modulesN: 'modules', rulesN: 'rules',
-    hubHint: 'Click a number to open that rule', hubOpen: 'Filter to this module',
-  };
 
   const norm = (s) => String(s ?? '').normalize('NFKC').toLowerCase();
   const RULES = BOARD.rules;
@@ -726,7 +686,7 @@ ${SHARED_FNS}
   // ---- figure / preview / evidence (shared by both layouts) ----
   // The scenario switch: one segmented control that changes the diagram and the preview together.
   function scenarioBar(stateOf, cur, act, extra) {
-    return '<div class="fx" role="group" aria-label="' + esc(T.scenario) + '"><span class="fx-cue">' + esc(T.scenario) + '</span><span class="fx-seg">' +
+    return '<div class="fx" role="group" aria-label="' + esc(L.compare) + '"><span class="fx-cue">' + esc(L.compare) + '</span><span class="fx-seg">' +
       STATE_ORDER.map((k) => {
         const f = stateOf(k);
         const on = cur === k;
@@ -764,7 +724,7 @@ ${SHARED_FNS}
     const btnCls = { ok: 'pv-btn-ok', danger: 'pv-btn-danger', locked: 'pv-btn-locked' }[pv.buttonKind];
     const ico = st.tone === 'bug' ? ICON.warn : st.tone === 'safe' ? ICON.lock : ICON.ok;
     return '<section class="card pv pv-' + st.tone + ' link-target">' +
-      '<div class="pv-chrome"><span class="pv-title">' + esc(r.previewTitle) + '</span><span class="pv-live pv-live-' + st.tone + '" title="' + esc(T.scenario) + '"><span class="pv-live-dot" aria-hidden="true"></span>' + esc(st.label) + '</span></div>' +
+      '<div class="pv-chrome"><span class="pv-title">' + esc(r.previewTitle) + '</span><span class="pv-live pv-live-' + st.tone + '" title="' + esc(L.compare) + '"><span class="pv-live-dot" aria-hidden="true"></span>' + esc(st.label) + '</span></div>' +
       '<div class="pv-body"><span class="pv-badge pv-badge-' + st.tone + '">' + esc(pv.statusBadge) + '</span>' + bars + rows + log +
       '<div class="pv-action"><div class="pv-banner ban-' + st.tone + '">' + ico + '<span>' + esc(pv.alert) + '</span></div>' +
       '<button class="pv-btn ' + btnCls + '" type="button" tabindex="-1"' + (pv.buttonKind === 'locked' ? ' disabled' : '') + '>' + (pv.buttonKind === 'locked' ? ICON.lock : '') + esc(pv.buttonLabel) + '</button></div></div></section>';
@@ -772,39 +732,39 @@ ${SHARED_FNS}
 
   function liveStatusItem(r) {
     const s = STATUS[r.id];
-    if (s === 'verified') return '<li class="ok">' + esc(T.liveOk(r.stepsChecked)) + '</li>';
-    if (s === 'failed') return '<li class="bad">' + esc(T.liveBad) + '</li>';
-    return '<li class="warn">' + esc(T.livePending) + '</li>';
+    if (s === 'verified') return '<li class="ok">' + esc(L.liveOk(r.stepsChecked)) + '</li>';
+    if (s === 'failed') return '<li class="bad">' + esc(L.liveBad) + '</li>';
+    return '<li class="warn">' + esc(L.livePending) + '</li>';
   }
 
   function evCard(r) {
     const e = r.evidence;
-    const { ref, source, logFiles, tool } = ruleEvidenceDetails(r, BOARD, BINDING);
+    const { ref, source, logFiles, tool } = ruleEvidenceDetails(r, BOARD, BINDING, L);
     // A failed rule's trace is the failure itself. On any other rule a trace shows what breaks
     // with the rule switched off (a mutant), so it gets its own heading and is omitted when absent.
-    const cex = STATUS[r.id] !== 'verified' ? { title: T.cexTitle, text: e.counterexample || T.noCex }
-      : e.counterexample ? { title: T.cexOff, text: e.counterexample } : null;
+    const cex = STATUS[r.id] !== 'verified' ? { title: L.cexTitle, text: e.counterexample || L.noCex }
+      : e.counterexample ? { title: L.cexOff, text: e.counterexample } : null;
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +
-      '<div><div class="ev-sec">' + esc(T.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
-      '<div class="ev-impacts"><div class="ev-imp"><b class="t-ok">' + esc(T.ifOn) + '</b>' + esc(e.ifEnforced) + '</div>' +
-      '<div class="ev-imp"><b class="t-bad">' + esc(T.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
-      '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(T.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
-      '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(T.meta) + '</div>' +
-      '<div class="kv">' + kv(T.scope, e.scope) + kv(T.method, e.method) + kv(T.tool, tool) +
-      kv('Evidence binding', bindingLabel(BINDING.level)) +
-      (SPEC_HASH ? kv(T.specHash, SPEC_HASH, true) : '') +
-      logFiles.map((file) => kv('Log hash', file.hash, true)).join('') +
-      (Number.isInteger(r.stepsChecked) ? kv(T.steps, r.stepsChecked.toLocaleString('en-US')) : '') + '</div></div>' +
-      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">Spec source (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
+      '<div><div class="ev-sec">' + esc(L.rule) + ' (' + esc(r.property) + (r.category ? ' · ' + esc(r.category) : '') + ')</div><div class="ev-rule">' + esc(e.ruleSummary) + '</div>' +
+      '<div class="ev-impacts"><div class="ev-imp"><b class="t-ok">' + esc(L.ifOn) + '</b>' + esc(e.ifEnforced) + '</div>' +
+      '<div class="ev-imp"><b class="t-bad">' + esc(L.ifOff) + '</b>' + esc(e.ifNotEnforced) + '</div></div></div>' +
+      '<div>' + (e.sourceQuote ? '<div class="ev-sec">' + esc(L.quote) + ' (' + esc(r.source) + ')</div><blockquote class="ev-quote">' + esc(e.sourceQuote) + '</blockquote>' : '') +
+      '<div class="ev-sec" style="margin-top:' + (e.sourceQuote ? '10px' : '0') + '">' + esc(L.meta) + '</div>' +
+      '<div class="kv">' + kv(L.scope, e.scope) + kv(L.method, e.method) + kv(L.tool, tool) +
+      kv(L.binding, bindingLabel(BINDING.level, L)) +
+      (SPEC_HASH ? kv(L.specHash, SPEC_HASH, true) : '') +
+      logFiles.map((file) => kv(L.logHash, file.hash, true)).join('') +
+      (Number.isInteger(r.stepsChecked) ? kv(L.steps, L.num(r.stepsChecked)) : '') + '</div></div>' +
+      (ref ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(L.specSource) + ' (' + esc(source) + ')</div><pre class="term"><code>' + esc(ref.snippet) + '</code></pre></div>' : '') +
       (cex ? '<div style="grid-column:1 / -1"><div class="ev-sec">' + esc(cex.title) + '</div><pre class="term">' + esc(cex.text) + '</pre></div>' : '') +
       '</div></div>';
     return '<section class="card ev"><h3 class="ev-head">' +
       '<button class="ev-tg" type="button" data-act="ev" aria-expanded="' + S.evOpen + '">' +
       '<span class="ev-chev" aria-hidden="true">' + ICON.chevron + '</span>' +
       '<span class="ev-shield" aria-hidden="true">' + ICON.shield + '</span>' +
-      '<span>' + esc(T.evTitle) + '</span>' +
-      '<span class="ev-cue">' + esc(S.evOpen ? T.evClose : T.evOpen) + '</span></button></h3>' +
+      '<span>' + esc(L.evTitle) + '</span>' +
+      '<span class="ev-cue">' + esc(S.evOpen ? L.evClose : L.evOpen) + '</span></button></h3>' +
       '<ul class="ev-facts" role="list"><li>' + esc(r.source) + '</li><li>' + esc(e.checkerSummary) + '</li>' + liveStatusItem(r) + '</ul>' + body + '</section>';
   }
 
@@ -816,11 +776,11 @@ ${SHARED_FNS}
 
   function headerHtml() {
     return '<header class="pc-head"><div class="pc-brand"><h1 class="pc-title" title="' + esc(TITLE) + '">' + esc(TITLE) + '</h1><p class="pc-sub" title="' + esc(BOARD.subtitle) + '">' + esc(BOARD.subtitle) + '</p></div>' +
-      '<div class="pc-head-right">' + provenanceBadge(PROV) + '</div></header>';
+      '<div class="pc-head-right">' + provenanceBadge(PROV, L) + '</div></header>';
   }
 
   function footerHtml() {
-    return footerMarkup(PROV, BOARD, BINDING, SPEC_HASH);
+    return footerMarkup(PROV, BOARD, BINDING, L, SPEC_HASH);
   }
 
   function setRootData() {
@@ -837,12 +797,12 @@ ${SHARED_FNS}
   // ================= compact layout (<= 6 rules, single module) =================
   function compactBar() {
     const btns = RULES.map((r) => '<button type="button" aria-pressed="' + (S.view === 'focus' && S.ruleId === r.id) + '" data-act="rule" data-v="' + esc(r.id) + '"><span class="pc-float-no">' + esc(r.no) + '.</span>' + esc(r.short) + '</button>').join('');
-    return '<div class="pc-float-wrap"><nav class="pc-float-bar" aria-label="' + esc(T.navRules) + '">' + btns +
-      '<span class="pc-float-sep" aria-hidden="true"></span><button type="button" aria-pressed="' + (S.view === 'overview') + '" data-act="view" data-v="overview">' + ICON.grid + esc(T.viewAll(RULES.length)) + '</button></nav></div>';
+    return '<div class="pc-float-wrap"><nav class="pc-float-bar" aria-label="' + esc(L.navRules) + '">' + btns +
+      '<span class="pc-float-sep" aria-hidden="true"></span><button type="button" aria-pressed="' + (S.view === 'overview') + '" data-act="view" data-v="overview">' + ICON.grid + esc(L.viewAll(RULES.length)) + '</button></nav></div>';
   }
 
   function compactOverview() {
-    const fBar = '<div class="ov-bar">' + scenarioBar((k) => RULES[0].states[k], S.ovFocus, 'ov-focus', '') + '<span class="ov-hint">' + esc(T.ovHint) + '</span></div>';
+    const fBar = '<div class="ov-bar">' + scenarioBar((k) => RULES[0].states[k], S.ovFocus, 'ov-focus', '') + '<span class="ov-hint">' + esc(L.ovHint) + '</span></div>';
     const cells = RULES.map((r) => {
       const st = r.states[S.ovFocus];
       return '<article class="ov-cell"><header class="ov-head"><span class="no">' + esc(r.no) + '</span>' +
@@ -864,21 +824,21 @@ ${SHARED_FNS}
   /*@index*/
   // ================= index layout (7+ rules or multiple modules) =================
   function toolbarHtml() {
-    const opts = '<option value="' + ALL + '">' + esc(T.allModules(MODS.length)) + '</option>' +
+    const opts = '<option value="' + ALL + '">' + esc(L.allModules(MODS.length)) + '</option>' +
       MODS.map((m) => { const mm = MOD_BY_ID[m.id]; return '<option value="' + esc(m.id) + '">' + esc(mm.title) + '</option>'; }).join('');
-    const seg = STATUS_ORDER.map((k) => '<button type="button" data-act="status" data-v="' + k + '">' + (k === 'all' ? '' : '<span class="st-dot st-' + k + '" aria-hidden="true"></span>') + esc(T.status[k]) + ' <span class="n" data-count="' + k + '"></span></button>').join('');
-    return '<div class="pc-float-wrap"><div class="pc-float-bar" role="toolbar" aria-label="' + esc(T.toolbar) + '">' +
-      '<button type="button" class="pc-tb-icon" data-act="index" aria-label="' + esc(T.index) + '" title="' + esc(T.index) + '">' + ICON.panel + '</button>' +
-      (MODS.length > 1 ? '<label class="pc-select"><span class="sr">' + esc(T.module) + '</span><select id="pc-module" data-change="module">' + opts + '</select>' + ICON.chevron + '</label>' : '') +
-      '<label class="pc-search">' + ICON.search + '<span class="sr">' + esc(T.search) + '</span><input type="search" id="pc-q" placeholder="' + esc(T.searchPh) + '" autocomplete="off" spellcheck="false"><span class="pc-kbd" aria-hidden="true">/</span></label>' +
-      '<div class="pc-seg" role="group" aria-label="' + esc(T.statusGroup) + '">' + seg + '</div>' +
+    const seg = STATUS_ORDER.map((k) => '<button type="button" data-act="status" data-v="' + k + '">' + (k === 'all' ? '' : '<span class="st-dot st-' + k + '" aria-hidden="true"></span>') + esc(L.status[k]) + ' <span class="n" data-count="' + k + '"></span></button>').join('');
+    return '<div class="pc-float-wrap"><div class="pc-float-bar" role="toolbar" aria-label="' + esc(L.toolbar) + '">' +
+      '<button type="button" class="pc-tb-icon" data-act="index" aria-label="' + esc(L.index) + '" title="' + esc(L.index) + '">' + ICON.panel + '</button>' +
+      (MODS.length > 1 ? '<label class="pc-select"><span class="sr">' + esc(L.module) + '</span><select id="pc-module" data-change="module">' + opts + '</select>' + ICON.chevron + '</label>' : '') +
+      '<label class="pc-search">' + ICON.search + '<span class="sr">' + esc(L.search) + '</span><input type="search" id="pc-q" placeholder="' + esc(L.searchPh) + '" autocomplete="off" spellcheck="false"><span class="pc-kbd" aria-hidden="true">/</span></label>' +
+      '<div class="pc-seg" role="group" aria-label="' + esc(L.statusGroup) + '">' + seg + '</div>' +
       '<span class="pc-float-sep" aria-hidden="true"></span>' +
-      '<button type="button" data-act="view" data-v="overview">' + ICON.grid + esc(T.overview) + '</button></div></div>';
+      '<button type="button" data-act="view" data-v="overview">' + ICON.grid + esc(L.overview) + '</button></div></div>';
   }
 
   function renderShell() {
     root.innerHTML = headerHtml() + '<main class="pc-canvas">' + toolbarHtml() +
-      '<div class="pc-split"><nav class="pc-index" id="pc-index" aria-label="' + esc(T.rules) + '"></nav><div class="pc-main" id="pc-main"></div></div></main>' + footerHtml();
+      '<div class="pc-split"><nav class="pc-index" id="pc-index" aria-label="' + esc(L.rules) + '"></nav><div class="pc-main" id="pc-main"></div></div></main>' + footerHtml();
   }
 
   function syncToolbar() {
@@ -898,13 +858,13 @@ ${SHARED_FNS}
   }
 
   function emptyState() {
-    return '<span>' + esc(T.noMatch) + '</span><button type="button" class="pc-link-btn" data-act="clear">' + esc(T.clear) + '</button>';
+    return '<span>' + esc(L.noMatch) + '</span><button type="button" class="pc-link-btn" data-act="clear">' + esc(L.clear) + '</button>';
   }
 
   function renderIndex(vis) {
     const nav = root.querySelector('#pc-index');
     const visSet = new Set(vis.map((r) => r.id));
-    let h = '<div class="ix-head"><span>' + esc(T.rules) + '</span><span class="ix-count">' + vis.length + ' / ' + RULES.length + '</span></div>';
+    let h = '<div class="ix-head"><span>' + esc(L.rules) + '</span><span class="ix-count">' + vis.length + ' / ' + RULES.length + '</span></div>';
     if (!vis.length) {
       h += '<div class="ix-empty">' + emptyState() + '</div>';
     } else {
@@ -916,9 +876,9 @@ ${SHARED_FNS}
         const bad = rules.filter((r) => STATUS[r.id] === 'failed').length;
         const mm = MOD_BY_ID[m.id];
         h += '<div class="ix-group">' + (MODS.length > 1
-          ? '<button type="button" class="ix-mod" data-act="module" data-v="' + esc(m.id) + '" aria-pressed="' + (S.module === m.id) + '" title="' + esc(T.hubOpen) + '"><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + bad + ' failed</b> ' : '') + ok + '/' + rules.length + '</span></button>'
+          ? '<button type="button" class="ix-mod" data-act="module" data-v="' + esc(m.id) + '" aria-pressed="' + (S.module === m.id) + '" title="' + esc(L.hubOpen) + '"><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + esc(L.nFailed(bad)) + '</b> ' : '') + ok + '/' + rules.length + '</span></button>'
           : '') + '<ul class="ix-list">' +
-          shown.map((r) => '<li><button type="button" class="ix-row" data-act="rule" data-v="' + esc(r.id) + '" aria-current="' + (S.view === 'focus' && r.id === S.ruleId) + '" title="' + esc(r.title) + '"><span class="ix-no">' + esc(r.no) + '</span><span class="ix-t">' + esc(r.title) + '</span><span class="st-dot st-' + STATUS[r.id] + '" aria-label="' + esc(T.status[STATUS[r.id]]) + '"></span></button></li>').join('') +
+          shown.map((r) => '<li><button type="button" class="ix-row" data-act="rule" data-v="' + esc(r.id) + '" aria-current="' + (S.view === 'focus' && r.id === S.ruleId) + '" title="' + esc(r.title) + '"><span class="ix-no">' + esc(r.no) + '</span><span class="ix-t">' + esc(r.title) + '</span><span class="st-dot st-' + STATUS[r.id] + '" aria-label="' + esc(L.status[STATUS[r.id]]) + '"></span></button></li>').join('') +
           '</ul></div>';
       }
     }
@@ -935,22 +895,22 @@ ${SHARED_FNS}
     const pos = vis.findIndex((x) => x.id === r.id);
     const st = STATUS[r.id];
     return '<div class="pc-crumb">' + (MODS.length > 1 ? '<span class="crumb-mod">' + esc(m.title) + '</span><span class="crumb-sep">/</span>' : '') +
-      '<span class="st-pill st-' + st + '">' + esc(T.status[st]) + '</span><span class="pc-spacer"></span>' +
+      '<span class="st-pill st-' + st + '">' + esc(L.status[st]) + '</span><span class="pc-spacer"></span>' +
       '<span class="crumb-pos">' + (pos + 1) + ' / ' + vis.length + '</span>' +
-      '<button type="button" class="crumb-btn" data-act="step" data-v="-1" aria-label="' + esc(T.prev) + '"' + (pos <= 0 ? ' disabled' : '') + '>' + ICON.left + '</button>' +
-      '<button type="button" class="crumb-btn" data-act="step" data-v="1" aria-label="' + esc(T.next) + '"' + (pos >= vis.length - 1 ? ' disabled' : '') + '>' + ICON.right + '</button></div>';
+      '<button type="button" class="crumb-btn" data-act="step" data-v="-1" aria-label="' + esc(L.prev) + '"' + (pos <= 0 ? ' disabled' : '') + '>' + ICON.left + '</button>' +
+      '<button type="button" class="crumb-btn" data-act="step" data-v="1" aria-label="' + esc(L.next) + '"' + (pos >= vis.length - 1 ? ' disabled' : '') + '>' + ICON.right + '</button></div>';
   }
 
   function hubOverview(vis) {
     const visSet = new Set(vis.map((r) => r.id));
     const tot = { verified: 0, failed: 0, pending: 0 };
     for (const r of RULES) tot[STATUS[r.id]] += 1;
-    const sum = '<div class="hv-sum"><span class="hv-stat"><b>' + RULES.length + '</b>' + esc(T.rulesN) + '</span>' +
-      (MODS.length > 1 ? '<span class="hv-stat"><b>' + MODS.length + '</b>' + esc(T.modulesN) + '</span>' : '') +
-      '<span class="hv-stat ok"><b>' + tot.verified + '</b>' + esc(T.status.verified) + '</span>' +
-      '<span class="hv-stat bad"><b>' + tot.failed + '</b>' + esc(T.status.failed) + '</span>' +
-      '<span class="hv-stat warn"><b>' + tot.pending + '</b>' + esc(T.status.pending) + '</span>' +
-      '<span class="hv-hint">' + esc(T.hubHint) + '</span></div>';
+    const sum = '<div class="hv-sum"><span class="hv-stat"><b>' + RULES.length + '</b>' + esc(L.rulesN) + '</span>' +
+      (MODS.length > 1 ? '<span class="hv-stat"><b>' + MODS.length + '</b>' + esc(L.modulesN) + '</span>' : '') +
+      '<span class="hv-stat ok"><b>' + tot.verified + '</b>' + esc(L.status.verified) + '</span>' +
+      '<span class="hv-stat bad"><b>' + tot.failed + '</b>' + esc(L.status.failed) + '</span>' +
+      '<span class="hv-stat warn"><b>' + tot.pending + '</b>' + esc(L.status.pending) + '</span>' +
+      '<span class="hv-hint">' + esc(L.hubHint) + '</span></div>';
     const cards = [];
     for (const m of MODS) {
       const rules = RULES.filter((r) => modOf(r) === m.id);
@@ -961,11 +921,11 @@ ${SHARED_FNS}
       const pct = (n) => (rules.length ? (n / rules.length) * 100 : 0).toFixed(1) + '%';
       const mm = MOD_BY_ID[m.id];
       cards.push('<section class="hub' + (c.failed ? ' has-fail' : '') + '">' +
-        '<button type="button" class="hub-head" data-act="module-open" data-v="' + esc(m.id) + '" title="' + esc(T.hubOpen) + '"><span class="hub-title">' + esc(mm.title) + '</span><span class="hub-n">' + rules.length + ' ' + esc(T.rulesN) + '</span></button>' +
+        '<button type="button" class="hub-head" data-act="module-open" data-v="' + esc(m.id) + '" title="' + esc(L.hubOpen) + '"><span class="hub-title">' + esc(mm.title) + '</span><span class="hub-n">' + rules.length + ' ' + esc(L.rulesN) + '</span></button>' +
         (m.summary ? '<p class="hub-sum">' + esc(m.summary) + '</p>' : '') +
         '<div class="hub-meter" aria-hidden="true"><i class="ok" style="width:' + pct(c.verified) + '"></i><i class="bad" style="width:' + pct(c.failed) + '"></i><i class="warn" style="width:' + pct(c.pending) + '"></i></div>' +
-        '<div class="hub-meta"><span>' + esc(T.status.verified) + ' ' + c.verified + '</span>' + '<span class="' + (c.failed ? 'bad' : '') + '">' + esc(T.status.failed) + ' ' + c.failed + '</span><span>' + esc(T.status.pending) + ' ' + c.pending + '</span></div>' +
-        '<ul class="hub-spokes">' + shown.map((r) => '<li><button type="button" class="spoke st-' + STATUS[r.id] + '" data-act="rule-open" data-v="' + esc(r.id) + '" title="' + esc(r.no + '. ' + r.title + ' (' + T.status[STATUS[r.id]] + ')') + '"><span class="spoke-no">' + esc(r.no) + '</span><span class="spoke-t">' + esc(r.short) + '</span></button></li>').join('') + '</ul></section>');
+        '<div class="hub-meta"><span>' + esc(L.status.verified) + ' ' + c.verified + '</span>' + '<span class="' + (c.failed ? 'bad' : '') + '">' + esc(L.status.failed) + ' ' + c.failed + '</span><span>' + esc(L.status.pending) + ' ' + c.pending + '</span></div>' +
+        '<ul class="hub-spokes">' + shown.map((r) => '<li><button type="button" class="spoke st-' + STATUS[r.id] + '" data-act="rule-open" data-v="' + esc(r.id) + '" title="' + esc(r.no + '. ' + r.title + ' (' + L.status[STATUS[r.id]] + ')') + '"><span class="spoke-no">' + esc(r.no) + '</span><span class="spoke-t">' + esc(r.short) + '</span></button></li>').join('') + '</ul></section>');
     }
     const lod = RULES.length > 120 ? ' lod-min' : '';
     const body = cards.length ? '<div class="hv-grid' + lod + '">' + cards.join('') + '</div>' : '<div class="card pc-empty-main">' + emptyState() + '</div>';
@@ -1071,7 +1031,7 @@ ${SHARED_FNS}
       if (btn) {
         btn.setAttribute('aria-expanded', 'true');
         const cue = btn.querySelector('.ev-cue');
-        if (cue) cue.textContent = T.evClose;
+        if (cue) cue.textContent = L.evClose;
       }
     }
   });
@@ -1139,9 +1099,17 @@ ${SHARED_FNS}
   }
 })();`;
 
-// Keep only the CSS/JS blocks a layout needs (/*@compact*/ ... /*@end*/, /*@index*/ ... /*@end*/).
-const pickLayout = (src, layout) =>
-  src.replace(/\/\*@(compact|index)\*\/([\s\S]*?)\/\*@end\*\//g, (_, tag, body) => (tag === layout ? body : ''));
+// Keep only the CSS/JS blocks a board needs. A block is /*@tag*/ ... /*@end*/ or /*@a,b*/ ... /*@end*/
+// (kept when any of its tags is in `keep`); blocks may nest, and the innermost are resolved first.
+const BLOCK_RE = /\/\*@([a-z,]+)\*\/((?:(?!\/\*@)[\s\S])*?)\/\*@end\*\//g;
+export function pickBlocks(src, keep) {
+  let out = src;
+  for (let prev = ''; prev !== out;) {
+    prev = out;
+    out = out.replace(BLOCK_RE, (_, tags, body) => (tags.split(',').some((t) => keep.includes(t)) ? body : ''));
+  }
+  return out;
+}
 // Whitespace-only minification that cannot change meaning: CSS comments and indentation,
 // spaces around { } ; and never around ":" (selectors such as ".a :focus-visible" depend on it).
 const minCss = (css) => css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s*\n\s*/g, ' ').replace(/\s*([{};])\s*/g, '$1').trim();
@@ -1225,25 +1193,28 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
   const layout = layoutFor(board);
   const payload = encodePayload({ ...board, __provenance: prov, __layout: layout, __binding: binding, ...(title !== undefined ? { __titleOverride: title } : {}) }, payloadMode);
 
+  const L = uiFor(board);
   const first = board.rules[0];
   const firstSt = first.states[first.defaultFocus];
 
   // Pre-hydration shell: header, provenance badge and the first rule's figure.
   const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="focus" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}">` +
     `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
-    `<div class="pc-head-right">${provenanceBadge(prov)}</div></header>` +
+    `<div class="pc-head-right">${provenanceBadge(prov, L)}</div></header>` +
     `<main class="pc-canvas"><div class="pc-wrap pc-main"><div class="board" data-board="focus-${esc(first.id)}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
     `<section class="card fig" data-fig><div class="fig-head"><span class="no">${esc(first.no)}</span><h2 class="fig-title">${esc(first.title)}</h2></div>` +
     `<div class="fg-wrap">${figSvg(first, firstSt, `focus-${first.id}`, false)}</div><p class="take take-${firstSt.tone}">${esc(firstSt.takeaway)}</p></section>` +
     `<section class="card pv pv-${firstSt.tone} link-target"><div class="pv-chrome"><span class="pv-title">${esc(first.previewTitle)}</span></div><div class="pv-body"><span class="pv-badge pv-badge-${firstSt.tone}">${esc(firstSt.preview.statusBadge)}</span></div></section>` +
     `<svg class="link-layer" aria-hidden="true"></svg></div></div></main>` +
-    `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding))}</span></footer>` +
+    `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding, L))}</span></footer>` +
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
-    `${renderNoscript(board, shownTitle, prov)}</div>`;
+    `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
-  const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickLayout(CSS, layout)));
+  const keep = [layout];
+  const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
+  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board);
   return `<!doctype html>
-<html lang="en">
+<html lang="${L.lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1253,7 +1224,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
 <body>
 ${ssrShell}
 <script id="${DATA_ELEMENT_ID}" type="${payload.type}">${payload.text}</script>
-<script>${minJs(pickLayout(CLIENT_JS, layout).replace('/*@figures*/', () => figureRuntime(board.rules.map(figKind))))}</script>
+<script>${minJs(pickBlocks(CLIENT_JS, keep).replace('/*@figures*/', () => runtime))}</script>
 </body>
 </html>
 `;

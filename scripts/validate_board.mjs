@@ -19,6 +19,7 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 import { bindEvidence, validateBinding } from './evidence.mjs';
 import { esc } from './figure.mjs';
+import { uiFor } from './i18n.mjs';
 import { provenanceBadge, provNote } from './render_board.mjs';
 import { DATA_ELEMENT_ID, ROOT_ELEMENT_ID, decodePayload, findPayloads, stripPayloads } from './payload.mjs';
 import { MAX_BYTES, RESERVED_HOST_TOKENS, layoutFor, resolveProvenance, sizeBudgetFor, splitRendererKeys, validateBoardData } from './schema.mjs';
@@ -204,14 +205,15 @@ export function validateHtmlContent(html, label = '<html>', { specPaths = [], lo
       }
       if (bindingOk) {
         const expected = resolveProvenance(board, binding);
+        const L = uiFor(board);
         if (badges.length === 1) {
           if (badges[0] !== expected.kind) {
             errors.push(`provenance: HTML badge shows "${badges[0]}" but the embedded board resolves to "${expected.kind}"`);
-          } else if (!domHtml.includes(provenanceBadge(expected))) {
+          } else if (!domHtml.includes(provenanceBadge(expected, L))) {
             errors.push('provenance: HTML badge text or tone differs from the embedded evidence');
           }
         }
-        const note = `<footer class="pc-foot" data-provenance-note="${expected.kind}"><span>${esc(provNote(expected, board, binding))}</span></footer>`;
+        const note = `<footer class="pc-foot" data-provenance-note="${expected.kind}"><span>${esc(provNote(expected, board, binding, L))}</span></footer>`;
         if (notes.length !== 1 || notes[0] !== expected.kind || !domHtml.includes(note)) {
           errors.push(`provenance: footer note does not match the embedded evidence for "${expected.kind}"`);
         }
