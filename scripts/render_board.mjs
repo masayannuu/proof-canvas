@@ -782,7 +782,7 @@ ${SHARED_FNS}
     const { ref, source, logFiles, tool } = ruleEvidenceDetails(r, BOARD, BINDING);
     // A failed rule's trace is the failure itself. On any other rule a trace shows what breaks
     // with the rule switched off (a mutant), so it gets its own heading and is omitted when absent.
-    const cex = STATUS[r.id] === 'failed' ? { title: T.cexTitle, text: e.counterexample || T.noCex }
+    const cex = STATUS[r.id] !== 'verified' ? { title: T.cexTitle, text: e.counterexample || T.noCex }
       : e.counterexample ? { title: T.cexOff, text: e.counterexample } : null;
     const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
     const body = '<div class="ev-panel"' + (S.evOpen ? '' : ' hidden="until-found"') + '><div class="ev-body">' +

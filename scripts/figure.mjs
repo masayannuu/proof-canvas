@@ -236,7 +236,7 @@ export function seqLayout(rule) {
   const lw = SEQ.laneW[n];
   const ys = SEQ.rowY[steps.length];
   const B = SEQ.badge;
-  const at = {};
+  const at = Object.create(null);
   lanes.forEach((l, i) => { at[l.id] = i; });
   return {
     lw,
@@ -259,7 +259,7 @@ export function seqLayout(rule) {
       const x1 = xa + dir * (B + 3);
       const x2 = xs[b] - dir * 2;
       const room = Math.abs(x2 - x1) - 28;
-      return { id: s.id, label: s.label, xa, y, room, fit: pillFit(s.label, room), cx: (x1 + x2) / 2, right: Math.max(x1, x2), d: 'M' + x1 + ' ' + y + ' H' + x2 };
+      return { id: s.id, label: s.label, xa, y, room, fit: pillFit(s.label, room), cx: (x1 + x2) / 2, right: Math.max(x1, x2, xa + B), d: 'M' + x1 + ' ' + y + ' H' + x2 };
     }),
   };
 }
@@ -284,7 +284,7 @@ export function seqOverflows(rule) {
 export function seqSvg(rule, st, uid, flow) {
   const g = seqLayout(rule);
   const act = new Set(st.activeSteps);
-  const chips = {};
+  const chips = Object.create(null);
   for (const c of st.chips || []) chips[c.lane] = c;
   let h = figOpen(rule, st, uid, '');
   for (const l of g.lanes) h += '<line class="fg-life" x1="' + l.x + '" y1="' + (l.box.y + l.box.h) + '" x2="' + l.x + '" y2="' + SEQ.lifeEnd + '"/>';
@@ -334,7 +334,7 @@ export function relLayout(rule) {
   const W = REL.w;
   const H = REL.h;
   const ph = FS.label * 1.2 + 5;
-  const N = {};
+  const N = Object.create(null);
   nodes.forEach((nd, i) => {
     const [x, y, side] = REL.slots[nodes.length][i];
     N[nd.id] = { x, y, w: W, h: H, cx: x + W / 2, cy: y + H / 2, side };
@@ -365,8 +365,15 @@ export function relLayout(rule) {
       const ny = (-dx / len) * bend;
       const s = bend ? 8 / bend : 0;
       const k = bend ? (bend - 8) / 0.75 / bend : 0;
-      const p0 = [a.cx + dx * t + nx * s, a.cy + dy * t + ny * s];
-      const p3 = [b.cx - dx * t + nx * s, b.cy - dy * t + ny * s];
+      // A bowed pair's endpoints shift sideways by 8; clip that shifted line, not the center line,
+      // at 2 outside each border so the arrow tip never sits inside the target box.
+      const ox = nx * s;
+      const oy = ny * s;
+      const exit = (sx, sy) => Math.min(dx ? (W / 2 + 2 - Math.sign(dx) * sx) / Math.abs(dx) : Infinity, dy ? (H / 2 + 2 - Math.sign(dy) * sy) / Math.abs(dy) : Infinity);
+      const ta = exit(ox, oy);
+      const tb = exit(-ox, -oy);
+      const p0 = [a.cx + ox + dx * ta, a.cy + oy + dy * ta];
+      const p3 = [b.cx + ox - dx * tb, b.cy + oy - dy * tb];
       const p = [p0, [p0[0] + (p3[0] - p0[0]) / 3 + nx * k, p0[1] + (p3[1] - p0[1]) / 3 + ny * k], [p0[0] + (p3[0] - p0[0]) * 2 / 3 + nx * k, p0[1] + (p3[1] - p0[1]) * 2 / 3 + ny * k], p3];
       const vis = len * (1 - 2 * t);
       const cos = Math.abs(dx) / len;
@@ -431,7 +438,7 @@ export function relSvg(rule, st, uid) {
   const act = new Set(st.activeEdges);
   const foc = new Set(st.focusNodes || []);
   const on = new Set(foc);
-  const chips = {};
+  const chips = Object.create(null);
   for (const c of st.chips || []) chips[c.node] = c;
   const mk = (id, cls, d, size) => '<marker id="' + id + '-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="' + size + '" markerHeight="' + size + '" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="' + d + '" class="' + cls + '"/></marker>';
   let h = figOpen(rule, st, uid, mk('fg-hb', 'fg-head-bad', 'M0 0 L10 5 L0 10 z', 11) + mk('fg-hs', 'fg-stop', 'M8 0 L8 10', 18));

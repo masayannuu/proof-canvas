@@ -1341,6 +1341,49 @@ test('relation: invalid nodes, edges and state references are errors', () => {
   schemaErr(edit((r) => { r.figure.kind = 'graph'; }), `${p}.figure.kind`);
 });
 
+test('sequence: the connector lead of a right-to-left focus step starts right of its number badge', () => {
+  const r = EX5.rules[SEQ_RULE];
+  assert.equal(r.states.fixed.focusStep, 'reject');
+  const svg = figSvg(r, r.states.fixed, 'u', true);
+  const badge = svg.match(/data-step="reject"[^]*?<g class="fg-badge"><circle cx="([\d.]+)" cy="[\d.]+" r="([\d.]+)"/);
+  const lead = svg.match(/class="fg-lead" d="M([\d.]+) /);
+  assert.ok(badge && lead, 'the reject step has a badge and the figure a lead');
+  assert.ok(Number(lead[1]) > Number(badge[1]) + Number(badge[2]), `lead starts at ${lead[1]}, inside the badge at ${badge[1]} r ${badge[2]}`);
+});
+test('relation: endpoints of bowed bidirectional pairs sit on the node borders, never inside', () => {
+  const r = clone(EX5.rules[REL_RULE]);
+  r.figure.nodes = ['a', 'b', 'c'].map((id) => ({ id, label: id.toUpperCase() }));
+  r.figure.edges = [['a', 'b'], ['b', 'a'], ['b', 'c'], ['c', 'b'], ['c', 'a'], ['a', 'c']].map(([f, t]) => ({ id: f + t, from: f, to: t, label: 'x' }));
+  const g = relLayout(r);
+  const gap = (pt, n) => {
+    const inside = pt[0] > n.x && pt[0] < n.x + n.w && pt[1] > n.y && pt[1] < n.y + n.h;
+    return inside ? -1 : Math.hypot(Math.max(n.x - pt[0], 0, pt[0] - n.x - n.w), Math.max(n.y - pt[1], 0, pt[1] - n.y - n.h));
+  };
+  for (const x of g.edges) {
+    for (const [pt, id] of [[x.p[0], x.e.from], [x.p[3], x.e.to]]) {
+      const d = gap(pt, g.nodes[id]);
+      assert.ok(d >= 0 && d <= 2.5, `edge ${x.e.id} endpoint (${pt.map((v) => v.toFixed(1))}) is ${d < 0 ? 'inside' : d.toFixed(1) + ' away from'} node ${id}`);
+    }
+  }
+});
+test('figure: lane and node ids such as constructor, toString and __proto__ draw like any other id', () => {
+  const rename = (rule, map) => JSON.parse(Object.entries(map).reduce((t, [a, z]) => t.split('"' + a + '"').join('"' + z + '"'), JSON.stringify(rule)));
+  const b = clone(EX5);
+  b.rules[SEQ_RULE] = rename(b.rules[SEQ_RULE], { acct: 'constructor', ledger: 'toString' });
+  b.rules[REL_RULE] = rename(b.rules[REL_RULE], { alice: 'constructor', bob: 'toString', carol: '__proto__' });
+  assert.deepEqual(validateBoardData(b).errors, []);
+  assert.deepEqual(validateBoardData(b).warnings, []);
+  for (const i of [SEQ_RULE, REL_RULE]) {
+    const r = b.rules[i];
+    for (const [k, st] of Object.entries(r.states)) {
+      const svg = figSvg(r, st, 'u', true);
+      assert.equal(/NaN|undefined/.test(svg), false, `${r.id}/${k} draws NaN or undefined`);
+      assert.equal((svg.match(/class="fg-chip /g) || []).length, (st.chips || []).length, `${r.id}/${k} draws a chip that is not in the state`);
+    }
+  }
+  expectPass(renderBoardHtml(b));
+});
+
 rmSync(TMP, { recursive: true, force: true });
 const failed = results.filter((r) => !r.ok);
 for (const r of results) process.stdout.write(`${r.ok ? 'ok  ' : 'FAIL'} ${r.name}${r.ok ? '' : `\n     ${r.msg.replace(/\n/g, '\n     ')}`}\n`);

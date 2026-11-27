@@ -173,12 +173,12 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 66.8 KB | JSON | 1.5 ms | 24 ms* | 170 | 2.7 ms | 0 | 0 |
-| 12 / 3 | index | 111.4 KB | JSON | 2.0 ms | 35-44 ms | 288 | 2.1 ms | 0 | 0 |
-| 20 / 4 | index | 137.5 KB | JSON | 1.9 ms | 33-34 ms | 339 | 3.7 ms | 0 | 0 |
-| 50 / 10 | index | 244.5 KB | JSON | 4.4 ms | 29-32 ms | 530 | 4.5 ms | 0 | 0 |
-| 100 / 20 | index | 117.8 KB | gzip | 38.0 ms | 33-35 ms | 852 | 5.3 ms | 0 | 0 |
-| 20 / 4, embed at 900x700 | index | 137.4 KB | JSON | 2.9 ms | 41 ms | 332 | 3.2 ms | 0 | 0 |
+| 3 / none | compact | 73.4 KB | JSON | 2.2 ms | 27 ms* | 200 | 3.0 ms | 0 | 0 |
+| 12 / 3 | index | 117.1 KB | JSON | 4.8 ms | 46-54 ms | 313 | 3.0 ms | 0 | 0 |
+| 20 / 4 | index | 143.2 KB | JSON | 4.9 ms | 36-46 ms | 365 | 4.8 ms | 0 | 0 |
+| 50 / 10 | index | 250.2 KB | JSON | 8.0 ms | 36-47 ms | 549 | 7.3 ms | 0 | 0 |
+| 100 / 20 | index | 123.5 KB | gzip | 31.4 ms | 37-43 ms | 858 | 8.2 ms | 0 | 0 |
+| 20 / 4, embed at 900x700 | index | 143.1 KB | JSON | 3.8 ms | 34 ms | 358 | 3.2 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
 connector pills overlapping a card, clipped labels and horizontal page overflow.

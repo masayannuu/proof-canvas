@@ -153,8 +153,11 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 **`figure`**
 
 Pick the kind that shows what the checker proved. `figure.kind` is optional and defaults to
-`gate`. Every kind draws into the same canvas, and the figure text that cannot fit, or a label
-that collides with another label, line, or box, produces a validator warning.
+`gate`. Every kind draws into the same canvas. The validator warns when figure text cannot fit:
+a box, lane or node label, a chip, or a line label too long for its free length. `gate` and
+`sequence` use fixed slots, so only fit is checked. `relation` also warns when a line label
+overlaps another label or a node, when a line crosses a node it does not connect, or when a line
+crosses another line's label. Line-on-line crossings are not checked.
 
 | Kind | Use for | Fields |
 |---|---|---|
@@ -211,7 +214,7 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 | `scope` | string | Bounds of the check (model size, ranges, number of runs). |
 | `method` | string | How it was checked (exhaustive model checking, bounded simulation, property-based testing with N runs, and so on). |
 | `sourceQuote` | optional string | Verbatim text of the source the rule comes from. |
-| `counterexample` | optional string | Checker trace. On a failed rule it is the failure and shows under **Counterexample**. On a verified rule, use it for the trace of the rule switched off (for example a killed mutant); it shows under **Counterexample without this rule**. When a verified rule has none, the section is left out. |
+| `counterexample` | optional string | Checker trace. On a failed or not-checked rule it shows under **Counterexample** ("No counterexample recorded" when absent). On a verified rule, use it for the trace of the rule switched off (for example a killed mutant); it shows under **Counterexample without this rule**. When a verified rule has none, the section is left out. |
 
 ## 2. Render
 
