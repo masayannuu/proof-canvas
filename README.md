@@ -6,20 +6,29 @@ You (or your agent) describe the checked rules in one JSON file. `proof-canvas` 
 **one offline HTML file** that product owners, domain experts and reviewers can read without
 knowing the spec language, and a validator proves the file is safe to share.
 
-Each rule is drawn as the same 6-box flow (two inputs, the check, then pass / hold / reject) with
-three switchable states: **normal**, **bug** (what happens without the rule) and **fixed**. A
-linked screen preview shows what a user would see, and an evidence panel says what was checked,
-how, and within which bounds.
+Each rule is drawn as one of three figures, picked to match what the checker proved, with three
+switchable states: **normal**, **bug** (what happens without the rule) and **fixed**. A linked
+screen preview shows what a user would see, and an evidence panel says what was checked, how, and
+within which bounds.
+
+| Figure | Draws | Fits |
+|---|---|---|
+| `gate` (default) | Two inputs, one check, then pass / hold / reject | Value limits and guards: Quint or TLC invariants on amounts, budgets, statuses |
+| `sequence` | 2-3 actors with lifelines and 2-5 numbered steps | Races and check-then-act bugs: TLA+ / TLC, Quint, Apalache interleavings |
+| `relation` | 3-5 entities and 2-7 directed relations, forbidden ones dashed | Structure: Alloy delegation, RBAC, ownership and cycle checks |
 
 ## At a glance
 
-All four screenshots below are rendered directly from the bundled examples in [`examples/`](examples/) (example 05 with its spec files and checker logs; examples 02 and 03 as illustrative sample boards).
+Every screenshot is rendered from the bundled [`examples/`](examples/): examples 05 and 06 with
+their spec files and checker logs, examples 02 and 03 as illustrative sample boards.
 
-| **Spec & log verified (6 rules: Quint, Alloy, TLC)**<br>実ファイル・実ログ照合済みボード（Quint / Alloy / TLC 混在・6/6 検証済み） | **Failed rule with TLA+ counterexample & evidence (12 rules, sample)**<br>違反ルールと TLA+ 反例トレース・根拠パネル（12 ルール・サンプル） |
+| **Alloy `relation`: delegation cycle (Spec & log verified 6/6)** | **TLA+ `sequence`: period-close race (Spec & log verified 6/6)** |
 |---|---|
-| ![Verified multi-checker board with Quint source excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![Failed escrow payout rule in bug state with full TLA+ counterexample trace and evidence panel](docs/images/02-failed-counterexample.png) |
-| **Module overview with search & status filters (20 rules)**<br>検索・状態フィルタ付きのモジュール俯瞰ビュー（20 ルール） | **Embed mode (`--mode embed`, 900×700 iframe/pane)**<br>埋め込みモード（`--mode embed`・900×700 の iframe / ペイン表示） |
-| ![20-rule multi-module overview with search and status filters](docs/images/03-overview-20rules.png) | ![Embed mode rendering of 20-rule board at 900x700 viewport](docs/images/04-embed-900.png) |
+| ![Alloy NoCyclicDelegation rule as a relation graph in the bug state, with the delegation_rbac.als excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![TLC ClosedPeriodImmutable rule as a three-lane sequence diagram in the bug state, with the period_lock.tla excerpt](docs/images/02-sequence-race.png) |
+| **Failed rule with a TLA+ counterexample (12 rules, sample)** | **Japanese board copy, same renderer (Spec & log verified 3/3)** |
+| ![Failed escrow payout rule in the bug state with the full TLA+ counterexample trace and evidence panel](docs/images/03-failed-counterexample.png) | ![Japanese-language board with gate, relation and sequence rules bound to the example 05 specs and logs](docs/images/04-japanese-board.png) |
+| **Module overview with search and status filters (20 rules)** | **Embed mode (`--mode embed`, 900×700)** |
+| ![20-rule multi-module overview with search and status filters](docs/images/05-overview-20rules.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same board and evidence files render to the same bytes.
@@ -52,7 +61,8 @@ in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, search, filters, module overview |
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
-| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board |
+| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures |
+| `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`.
 
@@ -116,7 +126,14 @@ node scripts/validate_board.mjs --in "$example/multi_verifier.board.json" "${fla
 
 The board shows **Spec & log verified (6/6)**. Each **Evidence** card shows the
 rule's checker, log hash, and source excerpt. The footer lists the three checkers
-and the combined log hash.
+and the combined log hash. The Quint rules use `gate`, the Alloy rules use `relation`,
+and the TLC period-lock rule uses `sequence`.
+
+The [Japanese board](examples/06_japanese_board/) binds to the same files. Its labels,
+states and evidence text come from the board JSON, so they render in Japanese while the
+renderer's own labels stay in English. Pass the same flags with
+`--in examples/06_japanese_board/multi_verifier_ja.board.json` to get
+**Spec & log verified (3/3)**.
 
 ## Install
 
@@ -204,16 +221,18 @@ scripts/
   validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync, binding
   evidence.mjs        spec hashes, source excerpts, and checker log verdicts
   schema.mjs          board schema, layout and provenance rules
-  figure.mjs          figure geometry, text fitting and the SVG builder (shared with the browser)
+  figure.mjs          gate / sequence / relation geometry, text fitting and SVG builders (shared with the browser)
   payload.mjs         JSON / gzip + base64 payload codec
   synth_board.mjs     deterministic synthetic boards for stress tests
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
+  sweep_figures.py    headless Chromium layout sweep and screenshots (development only)
 examples/
   00-03               sample boards
   04_refund_guard/    Quint spec and log
   05_multi_verifier/  Quint, Alloy, and TLC specs and logs
+  06_japanese_board/  Japanese board bound to the 05 specs and logs
 ```
 
 ## Acknowledgements

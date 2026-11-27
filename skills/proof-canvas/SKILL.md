@@ -36,7 +36,8 @@ Start from an example:
 | `examples/02_escrow_payout.board.json` | 12 | 3 | Index layout, TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with search, filters and the module overview |
 | `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
-| `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board |
+| `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board; `gate`, `relation` and `sequence` figures |
+| `examples/06_japanese_board/` | 3 | none | The 05 specs and logs with Japanese board copy, one rule per figure kind |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`: their statuses and
 counterexamples were written by hand, and no checker was run.
@@ -142,30 +143,57 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `category` | optional string | For example `safety`, `liveness`, `security`. |
 | `source` | string | Where the rule comes from (requirement, policy, section). |
 | `previewTitle` | string | Title of the linked screen preview. |
-| `figure.boxes` | object | `src1`, `src2` (inputs), `gate` (the check), `pass`, `hold`, `bad` (outcomes). Labels wrap to two lines; text that still cannot fit warns. |
-| `figure.arrows` | object | `a1` src1 to gate, `a2` src2 to gate, `a3` gate to pass, `a4` gate to hold, `a5` gate to bad. Keep labels to about 12 characters. |
+| `figure` | object | The diagram: one of three kinds, below. |
 | `states.normal`, `states.bug`, `states.fixed` | object | The three switchable states (below). |
 | `defaultFocus` | `normal \| bug \| fixed` | State shown first. |
 | `status` | optional `verified \| failed \| pending` | Checker result for this rule. Missing means `pending` (shown as "Not checked yet"). |
 | `stepsChecked` | optional integer >= 0 | States or steps the checker explored, shown as "N steps checked". |
 | `evidence` | object | What was checked and how (below). |
 
+**`figure`**
+
+Pick the kind that shows what the checker proved. `figure.kind` is optional and defaults to
+`gate`. Every kind draws into the same canvas, and the figure text that cannot fit, or a label
+that collides with another label, line, or box, produces a validator warning.
+
+| Kind | Use for | Fields |
+|---|---|---|
+| `gate` (default) | A value or status check: limits, budgets, guards | `boxes`: `src1`, `src2` (inputs), `gate` (the check), `pass`, `hold`, `bad` (outcomes). `arrows`: `a1` src1 to gate, `a2` src2 to gate, `a3` gate to pass, `a4` gate to hold, `a5` gate to bad. Box labels wrap to two lines; keep arrow labels to about 12 characters. |
+| `sequence` | Races, check-then-act, ordering between actors (TLA+ / TLC, Quint, Apalache) | `lanes`: 2 or 3 `{ id, label }` actors. `steps`: 2 to 5 `{ id, from, to, label }` in time order, top to bottom; `from` and `to` are lane ids, and `from` equal to `to` draws a step on one lane. |
+| `relation` | Structure: delegation, roles, ownership, cycles (Alloy) | `nodes`: 3 to 5 `{ id, label, role? }`, placed in fixed slots in array order (3: triangle, 4: 2 x 2, 5: corners and center); `role` is a caption above the label. `edges`: 2 to 7 `{ id, from, to, label, forbidden? }`; `from` equal to `to` draws a loop, an edge and its reverse bow apart, and `forbidden: true` draws the edge dashed. At most one edge per direction between two nodes. |
+
+Ids in `lanes`, `steps`, `nodes`, and `edges` are unique `[a-zA-Z0-9_-]` strings. If a
+relation label collides with another element, shorten it or reorder `nodes`.
+
 **`states.<normal | bug | fixed>`**
+
+Every kind:
 
 | Field | Type | Notes |
 |---|---|---|
 | `label` | string | Button text. |
-| `tone` | `normal \| bug \| safe` | Color of the route, connector and preview. |
-| `route` | array of arrow ids | Arrows drawn as active. |
-| `here` | `pass \| hold \| bad` | Outcome box the state ends in. |
+| `tone` | `normal \| bug \| safe` | Color of the active route, connector and preview. |
 | `edgeShort` | string | Connector pill between the figure and the preview; warns above 12 characters. |
-| `chips` | array | `{ box, text, tone }` with `tone` `neutral \| good \| bad`: a value shown inside a box. |
 | `takeaway` | string | One sentence under the figure. |
 | `preview.statusBadge`, `preview.alert`, `preview.buttonLabel` | string | Screen preview text. |
 | `preview.buttonKind` | `ok \| danger \| locked` | Button style. |
 | `preview.rows` | array, 1..N | `{ k, v, tone? }` with `tone` `normal \| ok \| bad \| warn \| mute`. |
 | `preview.bars` | optional array | `{ label, value, limit, max, unit?, ok }`: a meter with a limit marker. |
 | `preview.logLines` | optional array of strings | Short trace lines. |
+
+By figure kind (chip `tone` is `neutral \| good \| bad`):
+
+| Kind | Field | Type | Notes |
+|---|---|---|---|
+| `gate` | `route` | array of arrow ids | Arrows drawn as active. |
+| `gate` | `here` | `pass \| hold \| bad` | Outcome box the state ends in; the connector starts there. |
+| `gate` | `chips` | array | `{ box, text, tone }`: a value shown inside a box. |
+| `sequence` | `activeSteps` | non-empty array of step ids | Steps drawn as active and numbered 1, 2, ... top to bottom; the rest are dimmed. |
+| `sequence` | `focusStep` | step id | One of `activeSteps`: where the outcome happens. It is emphasized, and the connector starts on its row. |
+| `sequence` | `chips` | optional array | `{ lane, text, tone }`, at most one per lane, shown under the lane header. |
+| `relation` | `activeEdges` | non-empty array of edge ids | Edges drawn as active. An active forbidden edge is red; in a `safe` state it ends in a stop bar instead of an arrowhead. |
+| `relation` | `focusNodes` | optional array of node ids | Nodes outlined in the state color. |
+| `relation` | `chips` | optional array | `{ node, text, tone }`, at most one per node, shown inside the node. With a chip, a node with a `role` keeps its label on one line. |
 
 **`evidence`**
 
@@ -210,7 +238,7 @@ node "$PLUGIN_ROOT/scripts/validate_board.mjs" --in board.json board.html   # ex
 
 Each gate reports a distinct error prefix.
 
-1. `size:` strictly < 512 KB; warns above the per-scale budget (up to 6 rules 100 KB, 20 rules
+1. `size:` strictly < 512 KB; warns above the per-scale budget (up to 6 rules 128 KB, 20 rules
    200 KB, 50 rules 350 KB, more 512 KB).
 2. `html:` / `data:` / `board.` structure and schema: exactly one root and one payload element,
    strict base64, decoded size limits, the full board schema above.
@@ -236,6 +264,10 @@ Regenerate older HTML boards to add the evidence metadata required by this valid
 Open the HTML in a browser and check: no console errors, no horizontal scroll, the state buttons
 move the route, the connector and the preview together, and Failed filters down to the broken
 rules in one click.
+
+For a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.html>` shows every
+rule in every state in headless Chromium and fails on figure text outside its box, colliding
+labels, clipped text, page overflow, console errors, or external requests.
 
 ## 5. Honesty rules
 

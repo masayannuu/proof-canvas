@@ -289,51 +289,78 @@
       "previewTitle": "Approval delegation",
       "status": "verified",
       "figure": {
-        "boxes": {
-          "src1": "Delegation",
-          "src2": "Approval ranks",
-          "gate": "Compare ranks",
-          "pass": "Grant delegation",
-          "hold": "Reject delegation",
-          "bad": "Delegation cycle"
-        },
-        "arrows": {
-          "a1": "request",
-          "a2": "condition",
-          "a3": "allowed",
-          "a4": "blocked",
-          "a5": "bypass"
-        }
+        "kind": "relation",
+        "nodes": [
+          {
+            "id": "alice",
+            "label": "Alice",
+            "role": "Rank 1"
+          },
+          {
+            "id": "bob",
+            "label": "Bob",
+            "role": "Rank 2"
+          },
+          {
+            "id": "carol",
+            "label": "Carol",
+            "role": "Rank 3"
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "from": "alice",
+            "to": "bob",
+            "label": "delegates to"
+          },
+          {
+            "id": "bc",
+            "from": "bob",
+            "to": "carol",
+            "label": "delegates to"
+          },
+          {
+            "id": "ca",
+            "from": "carol",
+            "to": "alice",
+            "label": "delegates back",
+            "forbidden": true
+          }
+        ]
       },
       "states": {
         "normal": {
           "label": "Normal",
           "tone": "normal",
-          "route": [
-            "a1",
-            "a2",
-            "a3"
+          "activeEdges": [
+            "ab",
+            "bc"
           ],
-          "here": "pass",
-          "edgeShort": "Allowed",
           "chips": [
             {
-              "box": "pass",
-              "text": "Rank 1 to 2",
+              "node": "carol",
+              "text": "Chain ends",
               "tone": "good"
             }
           ],
-          "takeaway": "A principal delegates to a principal with higher rank.",
+          "edgeShort": "Acyclic",
+          "takeaway": "Delegation climbs from rank 1 to rank 3 and stops.",
           "preview": {
             "statusBadge": "Allowed",
             "rows": [
               {
-                "k": "Delegation",
-                "v": "Rank 1 to 2",
+                "k": "Delegation chain",
+                "v": "Alice → Bob → Carol",
+                "tone": "ok"
+              },
+              {
+                "k": "Ranks",
+                "v": "1 → 2 → 3",
                 "tone": "ok"
               }
             ],
-            "alert": "A principal delegates to a principal with higher rank.",
+            "alert": "Each delegate has a higher rank than the delegator.",
             "buttonLabel": "Proceed",
             "buttonKind": "ok"
           }
@@ -341,30 +368,38 @@
         "bug": {
           "label": "Bug",
           "tone": "bug",
-          "route": [
-            "a1",
-            "a5"
+          "activeEdges": [
+            "ab",
+            "bc",
+            "ca"
           ],
-          "here": "bad",
-          "edgeShort": "Violation",
+          "focusNodes": [
+            "alice"
+          ],
           "chips": [
             {
-              "box": "bad",
-              "text": "Rank 2 to 1",
+              "node": "alice",
+              "text": "Cycle!",
               "tone": "bad"
             }
           ],
-          "takeaway": "A reverse edge makes a cycle.",
+          "edgeShort": "Cycle",
+          "takeaway": "Without the rank rule, Carol delegates back to Alice and approval loops forever.",
           "preview": {
             "statusBadge": "Violation",
             "rows": [
               {
-                "k": "Delegation",
-                "v": "Rank 2 to 1",
+                "k": "Delegation chain",
+                "v": "Alice → Bob → Carol → Alice",
+                "tone": "bad"
+              },
+              {
+                "k": "Ranks",
+                "v": "1 → 2 → 3 → 1",
                 "tone": "bad"
               }
             ],
-            "alert": "A reverse edge makes a cycle.",
+            "alert": "Carol delegates back to Alice, so the chain becomes a cycle.",
             "buttonLabel": "Proceed",
             "buttonKind": "danger"
           }
@@ -372,31 +407,38 @@
         "fixed": {
           "label": "Fixed",
           "tone": "safe",
-          "route": [
-            "a1",
-            "a2",
-            "a4"
+          "activeEdges": [
+            "ab",
+            "bc",
+            "ca"
           ],
-          "here": "hold",
-          "edgeShort": "Blocked",
+          "focusNodes": [
+            "carol"
+          ],
           "chips": [
             {
-              "box": "hold",
-              "text": "Rank 2 to 1",
+              "node": "carol",
+              "text": "3 → 1 rejected",
               "tone": "good"
             }
           ],
-          "takeaway": "The rank constraint excludes the reverse edge.",
+          "edgeShort": "Blocked",
+          "takeaway": "The rank check rejects Carol (rank 3) delegating to Alice (rank 1), so no cycle forms.",
           "preview": {
             "statusBadge": "Blocked",
             "rows": [
               {
                 "k": "Delegation",
-                "v": "Rank 2 to 1",
+                "v": "Carol → Alice",
+                "tone": "bad"
+              },
+              {
+                "k": "Rank check",
+                "v": "3 < 1 is false",
                 "tone": "ok"
               }
             ],
-            "alert": "The rank constraint excludes the reverse edge.",
+            "alert": "A delegate must have a higher rank, so Carol cannot delegate to Alice.",
             "buttonLabel": "Blocked",
             "buttonKind": "locked"
           }
@@ -405,8 +447,8 @@
       "defaultFocus": "fixed",
       "evidence": {
         "ruleSummary": "Delegation never forms a cycle.",
-        "ifEnforced": "The rank constraint excludes the reverse edge.",
-        "ifNotEnforced": "A reverse edge makes a cycle.",
+        "ifEnforced": "The rank check rejects a delegation back to a lower rank.",
+        "ifNotEnforced": "A delegation back to a lower rank closes a cycle.",
         "checkerSummary": "Alloy returned UNSAT at scope 5.",
         "scope": "Overall scope 5, 4-bit integers.",
         "method": "Alloy 6.2.0 check with SAT4J"
@@ -423,115 +465,167 @@
       "previewTitle": "Approval delegation",
       "status": "verified",
       "figure": {
-        "boxes": {
-          "src1": "Escrow release",
-          "src2": "Delegation list",
-          "gate": "Check approver",
-          "pass": "Authorize release",
-          "hold": "Reject approval",
-          "bad": "Self-approved"
-        },
-        "arrows": {
-          "a1": "request",
-          "a2": "condition",
-          "a3": "allowed",
-          "a4": "blocked",
-          "a5": "bypass"
-        }
+        "kind": "relation",
+        "nodes": [
+          {
+            "id": "alice",
+            "label": "Alice",
+            "role": "Requester"
+          },
+          {
+            "id": "bob",
+            "label": "Bob",
+            "role": "Approver"
+          },
+          {
+            "id": "release",
+            "label": "Release #42",
+            "role": "Escrow release"
+          }
+        ],
+        "edges": [
+          {
+            "id": "del",
+            "from": "alice",
+            "to": "bob",
+            "label": "delegates to"
+          },
+          {
+            "id": "req",
+            "from": "alice",
+            "to": "release",
+            "label": "requests"
+          },
+          {
+            "id": "appr",
+            "from": "bob",
+            "to": "release",
+            "label": "approves"
+          },
+          {
+            "id": "self",
+            "from": "alice",
+            "to": "alice",
+            "label": "self-approves",
+            "forbidden": true
+          }
+        ]
       },
       "states": {
         "normal": {
           "label": "Normal",
           "tone": "normal",
-          "route": [
-            "a1",
-            "a2",
-            "a3"
+          "activeEdges": [
+            "del",
+            "req",
+            "appr"
           ],
-          "here": "pass",
-          "edgeShort": "Allowed",
+          "focusNodes": [
+            "release"
+          ],
           "chips": [
             {
-              "box": "pass",
-              "text": "A / B",
+              "node": "release",
+              "text": "Bob approves",
               "tone": "good"
             }
           ],
-          "takeaway": "The requester assigns approval to a delegate.",
+          "edgeShort": "Approved",
+          "takeaway": "Alice requests the release and Bob, her delegate, approves it.",
           "preview": {
-            "statusBadge": "Allowed",
+            "statusBadge": "Approved",
             "rows": [
               {
-                "k": "Requester / approver",
-                "v": "A / B",
+                "k": "Requester",
+                "v": "Alice",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Bob",
                 "tone": "ok"
               }
             ],
-            "alert": "The requester assigns approval to a delegate.",
-            "buttonLabel": "Proceed",
+            "alert": "A second person approves Release #42.",
+            "buttonLabel": "Release funds",
             "buttonKind": "ok"
           }
         },
         "bug": {
           "label": "Bug",
           "tone": "bug",
-          "route": [
-            "a1",
-            "a5"
+          "activeEdges": [
+            "req",
+            "self"
           ],
-          "here": "bad",
-          "edgeShort": "Violation",
+          "focusNodes": [
+            "alice"
+          ],
           "chips": [
             {
-              "box": "bad",
-              "text": "A / A",
+              "node": "alice",
+              "text": "Own approval",
               "tone": "bad"
             }
           ],
-          "takeaway": "The requester approves their own release.",
+          "edgeShort": "Violation",
+          "takeaway": "If the approver could be the requester, Alice approves her own release.",
           "preview": {
             "statusBadge": "Violation",
             "rows": [
               {
-                "k": "Requester / approver",
-                "v": "A / A",
+                "k": "Requester",
+                "v": "Alice",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Alice",
                 "tone": "bad"
               }
             ],
-            "alert": "The requester approves their own release.",
-            "buttonLabel": "Proceed",
+            "alert": "Release #42 is approved by the person who requested it.",
+            "buttonLabel": "Release funds",
             "buttonKind": "danger"
           }
         },
         "fixed": {
           "label": "Fixed",
           "tone": "safe",
-          "route": [
-            "a1",
-            "a2",
-            "a4"
+          "activeEdges": [
+            "req",
+            "self",
+            "del",
+            "appr"
           ],
-          "here": "hold",
-          "edgeShort": "Blocked",
+          "focusNodes": [
+            "alice"
+          ],
           "chips": [
             {
-              "box": "hold",
-              "text": "A / A",
+              "node": "alice",
+              "text": "Self blocked",
               "tone": "good"
             }
           ],
-          "takeaway": "The requester has no self-delegation and cannot approve.",
+          "edgeShort": "Blocked",
+          "takeaway": "Alice cannot approve her own release, so approval goes to her delegate Bob.",
           "preview": {
-            "statusBadge": "Blocked",
+            "statusBadge": "Needs Bob",
             "rows": [
               {
-                "k": "Requester / approver",
-                "v": "A / A",
+                "k": "Requester",
+                "v": "Alice",
+                "tone": "normal"
+              },
+              {
+                "k": "Approver",
+                "v": "Alice (rejected)",
                 "tone": "ok"
               }
             ],
-            "alert": "The requester has no self-delegation and cannot approve.",
-            "buttonLabel": "Blocked",
+            "alert": "Approval must come from Alice's delegate, not from Alice.",
+            "buttonLabel": "Waiting for Bob",
             "buttonKind": "locked"
           }
         }
@@ -539,8 +633,8 @@
       "defaultFocus": "fixed",
       "evidence": {
         "ruleSummary": "A requester cannot approve their own release.",
-        "ifEnforced": "The requester has no self-delegation and cannot approve.",
-        "ifNotEnforced": "The requester approves their own release.",
+        "ifEnforced": "Every release is approved by a delegate of the requester, never the requester.",
+        "ifNotEnforced": "A requester approves their own release.",
         "checkerSummary": "Alloy returned UNSAT at scope 5.",
         "scope": "Overall scope 5, 4-bit integers.",
         "method": "Alloy 6.2.0 check with SAT4J"
@@ -557,124 +651,194 @@
       "previewTitle": "Accounting period",
       "status": "verified",
       "figure": {
-        "boxes": {
-          "src1": "New release",
-          "src2": "Period status",
-          "gate": "Check period lock",
-          "pass": "Post release",
-          "hold": "Reject posting",
-          "bad": "Record changed"
-        },
-        "arrows": {
-          "a1": "request",
-          "a2": "condition",
-          "a3": "allowed",
-          "a4": "blocked",
-          "a5": "bypass"
-        }
+        "kind": "sequence",
+        "lanes": [
+          {
+            "id": "acct",
+            "label": "Accountant"
+          },
+          {
+            "id": "lock",
+            "label": "Period lock"
+          },
+          {
+            "id": "ledger",
+            "label": "Ledger"
+          }
+        ],
+        "steps": [
+          {
+            "id": "check",
+            "from": "acct",
+            "to": "lock",
+            "label": "check: open"
+          },
+          {
+            "id": "close",
+            "from": "lock",
+            "to": "lock",
+            "label": "close October"
+          },
+          {
+            "id": "write",
+            "from": "acct",
+            "to": "ledger",
+            "label": "post release"
+          },
+          {
+            "id": "post",
+            "from": "acct",
+            "to": "lock",
+            "label": "post via lock"
+          },
+          {
+            "id": "reject",
+            "from": "lock",
+            "to": "acct",
+            "label": "rejected: closed"
+          }
+        ]
       },
       "states": {
         "normal": {
           "label": "Normal",
           "tone": "normal",
-          "route": [
-            "a1",
-            "a2",
-            "a3"
+          "activeSteps": [
+            "check",
+            "write"
           ],
-          "here": "pass",
-          "edgeShort": "Allowed",
+          "focusStep": "write",
           "chips": [
             {
-              "box": "pass",
-              "text": "Open",
+              "lane": "lock",
+              "text": "October open",
               "tone": "good"
             }
           ],
-          "takeaway": "An open period accepts an eligible release.",
+          "edgeShort": "Posted",
+          "takeaway": "While October is open, the release posts and the total is still unlocked.",
           "preview": {
-            "statusBadge": "Allowed",
+            "statusBadge": "Posted",
             "rows": [
               {
-                "k": "Period status",
+                "k": "October",
                 "v": "Open",
                 "tone": "ok"
+              },
+              {
+                "k": "Spent / locked",
+                "v": "1 / not locked",
+                "tone": "normal"
               }
             ],
-            "alert": "An open period accepts an eligible release.",
-            "buttonLabel": "Proceed",
-            "buttonKind": "ok"
+            "alert": "The release posts to the open period.",
+            "buttonLabel": "Post release",
+            "buttonKind": "ok",
+            "logLines": [
+              "check October: open",
+              "post release: spent 0 → 1"
+            ]
           }
         },
         "bug": {
           "label": "Bug",
           "tone": "bug",
-          "route": [
-            "a1",
-            "a5"
+          "activeSteps": [
+            "check",
+            "close",
+            "write"
           ],
-          "here": "bad",
-          "edgeShort": "Violation",
+          "focusStep": "write",
           "chips": [
             {
-              "box": "bad",
-              "text": "Closed",
+              "lane": "lock",
+              "text": "October closed",
+              "tone": "bad"
+            },
+            {
+              "lane": "ledger",
+              "text": "Total changed",
               "tone": "bad"
             }
           ],
-          "takeaway": "Spending changes after the period is closed.",
+          "edgeShort": "Changed",
+          "takeaway": "A stale \"open\" check lets the release post after October closed, so the closed total changes.",
           "preview": {
             "statusBadge": "Violation",
             "rows": [
               {
-                "k": "Period status",
+                "k": "October",
                 "v": "Closed",
+                "tone": "bad"
+              },
+              {
+                "k": "Spent / locked",
+                "v": "2 / 1",
                 "tone": "bad"
               }
             ],
-            "alert": "Spending changes after the period is closed.",
-            "buttonLabel": "Proceed",
-            "buttonKind": "danger"
+            "alert": "A release posted into a closed period.",
+            "buttonLabel": "Post release",
+            "buttonKind": "danger",
+            "logLines": [
+              "check October: open",
+              "close October: locked 1",
+              "post release: spent 1 → 2"
+            ]
           }
         },
         "fixed": {
           "label": "Fixed",
           "tone": "safe",
-          "route": [
-            "a1",
-            "a2",
-            "a4"
+          "activeSteps": [
+            "close",
+            "post",
+            "reject"
           ],
-          "here": "hold",
-          "edgeShort": "Blocked",
+          "focusStep": "reject",
           "chips": [
             {
-              "box": "hold",
-              "text": "Closed",
+              "lane": "lock",
+              "text": "October closed",
+              "tone": "good"
+            },
+            {
+              "lane": "ledger",
+              "text": "Total unchanged",
               "tone": "good"
             }
           ],
-          "takeaway": "The closed period rejects the posting.",
+          "edgeShort": "Rejected",
+          "takeaway": "Posting checks the period in the same step, so a release after closing is rejected.",
           "preview": {
-            "statusBadge": "Blocked",
+            "statusBadge": "Rejected",
             "rows": [
               {
-                "k": "Period status",
+                "k": "October",
                 "v": "Closed",
+                "tone": "ok"
+              },
+              {
+                "k": "Spent / locked",
+                "v": "1 / 1",
                 "tone": "ok"
               }
             ],
-            "alert": "The closed period rejects the posting.",
-            "buttonLabel": "Blocked",
-            "buttonKind": "locked"
+            "alert": "October is closed. The release was not posted.",
+            "buttonLabel": "Period closed",
+            "buttonKind": "locked",
+            "logLines": [
+              "close October: locked 1",
+              "post release: rejected"
+            ]
           }
         }
       },
       "defaultFocus": "fixed",
       "evidence": {
         "ruleSummary": "Closing the period freezes recorded spending.",
-        "ifEnforced": "The closed period rejects the posting.",
-        "ifNotEnforced": "Spending changes after the period is closed.",
+        "ifEnforced": "Posting checks that the period is open in the same step, so a closed total never changes.",
+        "ifNotEnforced": "A posting that checked the period before it closed changes the closed total.",
         "checkerSummary": "TLC exhausted the baseline state space without an error.",
         "scope": "One period with a two-unit budget.",
         "method": "TLC 2.19 from TLA+ tools v1.7.4, breadth-first"

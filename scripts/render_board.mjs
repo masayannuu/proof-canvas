@@ -8,7 +8,7 @@ import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bindEvidence } from './evidence.mjs';
-import { ARROWS, FS, GEOM, HOT, TONES, charEm, esc, figSvg, fitFontSize, layoutBoxLabel, splitTwo, textW } from './figure.mjs';
+import { esc, figKind, figSvg, figureRuntime } from './figure.mjs';
 import {
   BASE64_RE, DATA_ELEMENT_ID, GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, PAYLOAD_MODES, ROOT_ELEMENT_ID, encodePayload,
 } from './payload.mjs';
@@ -347,7 +347,7 @@ const CSS = `
 /* Split board: figure card -> connector -> live preview. --pc-gap also caps the connector label width. */
 .board { --pc-gap: 96px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 340px; column-gap: var(--pc-gap); align-items: stretch; }
 @container (max-width: 1100px) { .board { --pc-gap: 80px; grid-template-columns: minmax(0, 1fr) 288px; } }
-@container (max-width: 900px) { .board { grid-template-columns: minmax(0, 1fr); row-gap: 16px; } .link-layer, .lk-label { display: none; } }
+@container (max-width: 900px) { .board { grid-template-columns: minmax(0, 1fr); row-gap: 16px; } .link-layer, .lk-label, .fg-port, .fg-lead { display: none; } }
 .link-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; z-index: 3; }
 .card { background: var(--pc-surface); border: 1px solid var(--pc-bd); border-radius: 12px; box-shadow: var(--pc-shadow-1); }
 .fig { padding: 18px 20px 14px; display: flex; flex-direction: column; min-width: 0; }
@@ -366,7 +366,7 @@ const CSS = `
 .fx-prop { margin-left: auto; font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fg-wrap { position: relative; margin: 8px auto 0; width: 100%; max-width: 740px; }
 .fg-svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--pc-font); }
-.fg-svg [data-box], .fg-svg [data-arrow] { transition: opacity 0.22s ease; }
+.fg-svg .fg-box, .fg-svg .fg-arrow { transition: opacity 0.22s ease; }
 .fg-svg .is-dim { opacity: 0.20; }
 .fg-box rect { stroke-width: 1px; }
 .fg-box > text.fg-blabel { font-weight: 600; fill: var(--pc-ink); }
@@ -386,6 +386,20 @@ const CSS = `
 .fg-alabel { fill: var(--pc-ink-2); font-weight: 500; }
 .fg-apill { fill: var(--pc-surface); opacity: 0.96; }
 .is-on .fg-alabel { fill: var(--hot); font-weight: 600; }
+.fg-life { stroke: var(--pc-bd-strong); stroke-width: 1.4px; stroke-dasharray: 4 5; }
+.fg-badge circle { fill: var(--hot); }
+.fg-badge text { fill: #ffffff; font-weight: 700; }
+.fg-dot { fill: #a1a1aa; }
+.fg-svg .is-here .fg-line { stroke-width: 3.4px; }
+.fg-svg .is-here .fg-apill { stroke: var(--hot); stroke-width: 1.5px; }
+.is-forbid .fg-line { stroke-dasharray: 7 5; }
+.is-forbid.is-on .fg-line { stroke: var(--pc-bad); }
+.is-forbid.is-on .fg-alabel { fill: var(--pc-bad); }
+.fg-head-bad { fill: var(--pc-bad); }
+.fg-stop { fill: none; stroke: var(--pc-bad); stroke-width: 2.6px; }
+.fg-lead { fill: none; stroke: var(--hot); stroke-width: 1.5px; stroke-dasharray: 2 4; }
+.fg-port { fill: var(--hot); }
+.fg-box > text.fg-brole { fill: var(--pc-ink-3); font-weight: 500; }
 .fg-chip rect { stroke-width: 1px; }
 .fg-chip text { font-weight: 600; }
 .chip-good rect { fill: var(--chip-good-f); stroke: #86efac; }
@@ -572,18 +586,14 @@ const CSS = `
 `;
 
 // Functions shared with the browser runtime. Their source is injected verbatim.
-const SHARED_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figSvg, ruleStatus, toolLabel, bindingLabel, boundTools, ruleEvidenceDetails, footerMarkup, provLabel, provenanceBadge, provNote, modParts, logLineTone]
+const SHARED_FNS = [ruleStatus, toolLabel, bindingLabel, boundTools, ruleEvidenceDetails, footerMarkup, provLabel, provenanceBadge, provNote, modParts, logLineTone]
   .map((f) => f.toString()).join('\n');
 
 const CLIENT_JS = `(() => {
   const dataEl = document.getElementById(${JSON.stringify(DATA_ELEMENT_ID)});
   const root = document.getElementById(${JSON.stringify(ROOT_ELEMENT_ID)});
   if (!dataEl || !root) return;
-  const GEOM = ${JSON.stringify(GEOM)};
-  const TONES = ${JSON.stringify(TONES)};
-  const ARROWS = ${JSON.stringify(ARROWS)};
-  const FS = ${JSON.stringify(FS)};
-  const HOT = ${JSON.stringify(HOT)};
+/*@figures*/
   const MAX_TEXT = ${MAX_PAYLOAD_TEXT_BYTES};
   const MAX_DECODED = ${MAX_DECODED_BYTES};
   const BASE64 = new RegExp(${JSON.stringify(BASE64_RE.source)});
@@ -794,7 +804,7 @@ ${SHARED_FNS}
 
   function boardMarkup(r, focusKey, uid, opt) {
     const st = r.states[focusKey];
-    return '<div class="board" data-board="' + uid + '" data-here="' + st.here + '" data-tone="' + st.tone + '" data-edge="' + esc(st.edgeShort) + '">' +
+    return '<div class="board" data-board="' + uid + '" data-tone="' + st.tone + '" data-edge="' + esc(st.edgeShort) + '">' +
       figCard(r, focusKey, uid, opt) + pvCard(r, focusKey) + '<svg class="link-layer" aria-hidden="true"></svg></div>';
   }
 
@@ -1007,7 +1017,7 @@ ${SHARED_FNS}
     const uid = b.dataset.board;
     const tone = b.dataset.tone;
     const svg = b.querySelector('.link-layer');
-    const src = b.querySelector('[data-box="' + b.dataset.here + '"] > rect');
+    const src = b.querySelector('.fg-svg [data-anchor]');
     const fig = b.querySelector('[data-fig]');
     const tgt = b.querySelector('.link-target');
     b.querySelectorAll('.lk-label').forEach((x) => x.remove());
@@ -1221,7 +1231,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
   const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="focus" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}">` +
     `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
     `<div class="pc-head-right">${provenanceBadge(prov)}</div></header>` +
-    `<main class="pc-canvas"><div class="pc-wrap pc-main"><div class="board" data-board="focus-${esc(first.id)}" data-here="${firstSt.here}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
+    `<main class="pc-canvas"><div class="pc-wrap pc-main"><div class="board" data-board="focus-${esc(first.id)}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
     `<section class="card fig" data-fig><div class="fig-head"><span class="no">${esc(first.no)}</span><h2 class="fig-title">${esc(first.title)}</h2></div>` +
     `<div class="fg-wrap">${figSvg(first, firstSt, `focus-${first.id}`, false)}</div><p class="take take-${firstSt.tone}">${esc(firstSt.takeaway)}</p></section>` +
     `<section class="card pv pv-${firstSt.tone} link-target"><div class="pv-chrome"><span class="pv-title">${esc(first.previewTitle)}</span></div><div class="pv-body"><span class="pv-badge pv-badge-${firstSt.tone}">${esc(firstSt.preview.statusBadge)}</span></div></section>` +
@@ -1242,7 +1252,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
 <body>
 ${ssrShell}
 <script id="${DATA_ELEMENT_ID}" type="${payload.type}">${payload.text}</script>
-<script>${minJs(pickLayout(CLIENT_JS, layout))}</script>
+<script>${minJs(pickLayout(CLIENT_JS, layout).replace('/*@figures*/', () => figureRuntime(board.rules.map(figKind))))}</script>
 </body>
 </html>
 `;

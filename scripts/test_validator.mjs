@@ -8,11 +8,12 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { runInNewContext } from 'node:vm';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
-import { GEOM, layoutBoxLabel, textW } from './figure.mjs';
+import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
 import { ALL_MODULES, footerMarkup, modParts, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
@@ -1176,6 +1177,165 @@ test('synth: requested status counts are exact and the board validates without w
   const v = validateBoardData(b);
   assert.equal(v.ok, true, v.errors.join('\n'));
   assert.deepEqual(v.warnings, []);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Figure kinds: gate, sequence, relation
+// ---------------------------------------------------------------------------------------------
+const EX5 = load('05_multi_verifier/multi_verifier.board.json');
+const EX6 = load('06_japanese_board/multi_verifier_ja.board.json');
+const SEQ_RULE = 4;
+const REL_RULE = 2;
+const STATES = ['normal', 'bug', 'fixed'];
+const ex5Flags = () => {
+  const example = (f) => join(ROOT, 'examples', '05_multi_verifier', f);
+  return [
+    ...['escrow_ledger.qnt', 'delegation_rbac.als', 'period_lock.tla', 'period_lock.cfg'].flatMap((f) => ['--spec', example(f)]),
+    ...['quint_escrow.log', 'alloy_rbac.log', 'tlc_pass.log'].flatMap((f) => ['--log', example(f)]),
+  ];
+};
+const anchors = (svg) => (svg.match(/data-anchor="1"/g) || []).length;
+
+test('figure: example 05 draws gate, relation and sequence rules; 06 draws all three in Japanese', () => {
+  assert.deepEqual(EX5.rules.map((r) => r.figure.kind ?? 'gate'), ['gate', 'gate', 'relation', 'relation', 'sequence', 'gate']);
+  assert.deepEqual(EX6.rules.map((r) => r.figure.kind ?? 'gate'), ['gate', 'relation', 'sequence']);
+});
+test('example 06_japanese_board: binds to the 05 specs and logs, 3/3 green, no warnings, Japanese copy', () => {
+  const input = join(ROOT, 'examples', '06_japanese_board', 'multi_verifier_ja.board.json');
+  const r = validateBoardData(EX6);
+  assert.equal(r.ok, true, r.errors.join('\n'));
+  assert.deepEqual(r.warnings, []);
+  for (const mode of ['standalone', 'embed']) {
+    const output = join(TMP, `ja-${mode}.html`);
+    const rendered = node('render_board.mjs', ['--in', input, ...ex5Flags(), '--mode', mode, '--out', output]);
+    assert.equal(rendered.status, 0, rendered.stderr);
+    assert.equal(rendered.stderr, '');
+    const html = readFileSync(output, 'utf8');
+    assert.match(html, /pc-prov-good[^>]*><span[^>]*><\/span>Spec &amp; log verified \(3\/3\)/);
+    assert.match(html, /<html lang="en">/);
+    assert.ok(CJK.test(html), 'the Japanese board copy is missing');
+    assert.ok(html.includes('締済みの会計期間には計上できない'));
+    const validated = node('validate_board.mjs', ['--in', input, ...ex5Flags(), output]);
+    assert.equal(validated.status, 0, validated.stdout + validated.stderr);
+    assert.equal(/WARN/.test(validated.stdout), false, validated.stdout);
+  }
+});
+test('figure: every state of every kind marks exactly one connector anchor', () => {
+  for (const b of [EX5, EX6, EX1]) {
+    for (const r of b.rules) for (const k of STATES) assert.equal(anchors(figSvg(r, r.states[k], 'u', true)), 1, `${r.id}/${k}`);
+  }
+});
+test('figure: a missing kind is the gate, drawn exactly like kind "gate"', () => {
+  const r = clone(EX1.rules[0]);
+  const explicit = clone(r);
+  explicit.figure.kind = 'gate';
+  for (const k of STATES) assert.equal(figSvg(explicit, explicit.states[k], 'u', true), figSvg(r, r.states[k], 'u', true));
+  assert.equal(validateBoardData({ ...clone(EX1), rules: [explicit, ...clone(EX1).rules.slice(1)] }).ok, true);
+});
+test('figure: the injected runtime draws every kind exactly like the server, and ships only the kinds used', () => {
+  const ctx = {};
+  runInNewContext(figureRuntime(FIGURE_KINDS) + '\nthis.figSvg = figSvg;', ctx);
+  for (const r of [...EX5.rules, ...EX6.rules]) {
+    for (const k of STATES) assert.equal(ctx.figSvg(r, r.states[k], 'b-' + r.id, true), figSvg(r, r.states[k], 'b-' + r.id, true), `${r.id}/${k}`);
+  }
+  const gateOnly = figureRuntime(['gate']);
+  assert.equal(/function (seqSvg|relSvg|relLayout)\b/.test(gateOnly), false);
+  const g = {};
+  runInNewContext(gateOnly + '\nthis.figSvg = figSvg;', g);
+  assert.equal(g.figSvg(EX1.rules[0], EX1.rules[0].states.bug, 'x', true), figSvg(EX1.rules[0], EX1.rules[0].states.bug, 'x', true));
+  assert.equal(renderBoardHtml(EX1).includes('function relSvg'), false);
+  assert.ok(renderBoardHtml(EX5).includes('function relSvg'));
+});
+test('figure: a board whose first rule is a relation still server-renders unique static markers', () => {
+  const b = clone(EX5);
+  b.rules.unshift(...b.rules.splice(REL_RULE, 1));
+  const html = renderBoardHtml(b);
+  expectPass(html);
+  assert.ok(html.includes('id="fg-hs-focus-delegation_cycle"'));
+  const seqFirst = clone(EX5);
+  seqFirst.rules.unshift(...seqFirst.rules.splice(SEQ_RULE, 1));
+  expectPass(renderBoardHtml(seqFirst));
+});
+test('sequence: 3 lanes x 5 steps with a lane-skipping step, a self-step on the last lane and chips fit without warnings', () => {
+  const b = clone(EX5);
+  const r = b.rules[SEQ_RULE];
+  r.figure.steps[1] = { id: 'close', from: 'ledger', to: 'ledger', label: 'close October' };
+  assert.deepEqual(figureOverflows(r), []);
+  const svg = figSvg(r, r.states.bug, 'u', true);
+  assert.equal((svg.match(/class="fg-badge"/g) || []).length, 3);
+  assert.ok(/data-step="write" class="fg-arrow is-on is-here"/.test(svg));
+  assert.ok(/data-step="post" class="fg-arrow is-dim"/.test(svg));
+  assert.equal(validateBoardData(b).warnings.length, 0);
+});
+test('sequence: two lanes and two steps are valid; a step label too wide for its lanes warns', () => {
+  const b = clone(EX5);
+  const r = b.rules[SEQ_RULE];
+  r.figure.lanes = r.figure.lanes.slice(0, 2);
+  r.figure.steps = [{ id: 'check', from: 'acct', to: 'lock', label: 'check: open' }, { id: 'close', from: 'lock', to: 'lock', label: 'close October' }];
+  for (const st of Object.values(r.states)) { st.activeSteps = ['check', 'close']; st.focusStep = 'close'; delete st.chips; }
+  assert.deepEqual(validateBoardData(b).warnings, []);
+  r.figure.steps[1].label = 'close October and every other open period in the ledger';
+  assert.ok(hasWarning(validateBoardData(b), `$.rules[${SEQ_RULE}].figure.steps[1].label`));
+});
+test('sequence: invalid lanes, steps and state references are errors', () => {
+  const p = `$.rules[${SEQ_RULE}]`;
+  const edit = (f) => { const b = clone(EX5); f(b.rules[SEQ_RULE]); return b; };
+  schemaErr(edit((r) => { r.figure.lanes.push({ id: 'x', label: 'X' }, { id: 'y', label: 'Y' }); }), `${p}.figure.lanes`);
+  schemaErr(edit((r) => { r.figure.steps[0].from = 'nobody'; }), `${p}.figure.steps[0].from`);
+  schemaErr(edit((r) => { r.figure.steps[1].id = 'check'; }), `${p}.figure.steps[1].id`);
+  schemaErr(edit((r) => { r.states.bug.focusStep = 'post'; }), `${p}.states.bug.focusStep`);
+  schemaErr(edit((r) => { r.states.bug.activeSteps = []; }), `${p}.states.bug.activeSteps`);
+  schemaErr(edit((r) => { r.states.bug.activeSteps.push('nope'); }), `${p}.states.bug.activeSteps`);
+  schemaErr(edit((r) => { r.states.bug.chips.push({ lane: 'lock', text: 'again', tone: 'bad' }); }), `${p}.states.bug.chips[2].lane`);
+  const gateKey = edit((r) => { r.states.bug.route = ['a1']; });
+  assert.ok(hasWarning(validateBoardData(gateKey), `${p}.states.bug.route`));
+});
+test('relation: 5 nodes x 7 edges with a bidirectional pair and a self-loop fit without warnings', () => {
+  const b = clone(EX5);
+  const r = b.rules[REL_RULE];
+  r.figure.nodes = ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, label: 'Node ' + id.toUpperCase() }));
+  r.figure.edges = [
+    { id: 'ab', from: 'a', to: 'b', label: 'owns' },
+    { id: 'ba', from: 'b', to: 'a', label: 'trusts' },
+    { id: 'ad', from: 'a', to: 'd', label: 'manages' },
+    { id: 'be', from: 'b', to: 'e', label: 'manages' },
+    { id: 'de', from: 'd', to: 'e', label: 'reports to' },
+    { id: 'cc', from: 'c', to: 'c', label: 'audits', forbidden: true },
+    { id: 'ec', from: 'e', to: 'c', label: 'asks' },
+  ];
+  for (const st of Object.values(r.states)) { st.activeEdges = ['ab', 'ba', 'cc']; st.focusNodes = ['c']; st.chips = [{ node: 'c', text: 'Self audit', tone: 'bad' }]; }
+  assert.deepEqual(figureOverflows(r), []);
+  assert.deepEqual(validateBoardData(b).warnings, []);
+  const g = relLayout(r);
+  const [ab, ba] = g.edges;
+  assert.ok(Math.abs(ab.cy - ba.cy) >= 30, 'the two directions of a pair must bow apart');
+  const pa = pillBox(ab.cx, ab.cy, ab.fit);
+  const pb = pillBox(ba.cx, ba.cy, ba.fit);
+  assert.ok(pa.y + pa.h <= pb.y || pb.y + pb.h <= pa.y, 'the labels of a bidirectional pair overlap');
+  const safe = figSvg(r, { ...r.states.fixed }, 'u', true);
+  assert.ok(safe.includes('marker-end="url(#fg-hs-u)"'), 'an active forbidden edge in the fixed state ends in a stop bar');
+  assert.ok(figSvg(r, r.states.bug, 'u', true).includes('marker-end="url(#fg-hb-u)"'));
+});
+test('relation: crossing diagonals of a 2x2 layout are reported as a label collision', () => {
+  const b = clone(EX5);
+  const r = b.rules[REL_RULE];
+  r.figure.nodes = ['a', 'b', 'c', 'd'].map((id) => ({ id, label: id.toUpperCase() }));
+  r.figure.edges = [{ id: 'ad', from: 'a', to: 'd', label: 'grants role' }, { id: 'bc', from: 'b', to: 'c', label: 'grants role' }];
+  for (const st of Object.values(r.states)) { st.activeEdges = ['ad']; delete st.focusNodes; delete st.chips; }
+  const w = validateBoardData(b).warnings;
+  assert.ok(w.some((x) => x.startsWith(`$.rules[${REL_RULE}].figure.edges[1].label`) && /overlaps the label|crossed by/.test(x)), w.join('\n'));
+});
+test('relation: invalid nodes, edges and state references are errors', () => {
+  const p = `$.rules[${REL_RULE}]`;
+  const edit = (f) => { const b = clone(EX5); f(b.rules[REL_RULE]); return b; };
+  schemaErr(edit((r) => { r.figure.nodes = r.figure.nodes.slice(0, 2); }), `${p}.figure.nodes`);
+  schemaErr(edit((r) => { r.figure.edges[0].to = 'mallory'; }), `${p}.figure.edges[0].to`);
+  schemaErr(edit((r) => { r.figure.edges.push({ id: 'ab2', from: 'alice', to: 'bob', label: 'again' }); }), `${p}.figure.edges[3]`);
+  schemaErr(edit((r) => { r.figure.edges[2].forbidden = 'yes'; }), `${p}.figure.edges[2].forbidden`);
+  schemaErr(edit((r) => { r.states.bug.focusNodes = ['mallory']; }), `${p}.states.bug.focusNodes`);
+  schemaErr(edit((r) => { r.states.normal.activeEdges = []; }), `${p}.states.normal.activeEdges`);
+  schemaErr(edit((r) => { r.states.bug.chips[0].node = 'mallory'; }), `${p}.states.bug.chips[0].node`);
+  schemaErr(edit((r) => { r.figure.kind = 'graph'; }), `${p}.figure.kind`);
 });
 
 rmSync(TMP, { recursive: true, force: true });

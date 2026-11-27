@@ -1,7 +1,7 @@
 // proof-canvas board schema (version 1), provenance resolution and size budgets.
 // Zero dependencies: Node 22+ standard-library ESM only.
 
-import { figureOverflows } from './figure.mjs';
+import { FIGURE_KINDS, figureOverflows } from './figure.mjs';
 
 export const BOX_KEYS = ['src1', 'src2', 'gate', 'pass', 'hold', 'bad'];
 export const ARROW_KEYS = ['a1', 'a2', 'a3', 'a4', 'a5'];
@@ -27,9 +27,7 @@ const KEYS = {
   run: ['tool', 'toolVersion', 'specHash', 'status'],
   module: ['id', 'title', 'summary'],
   rule: ['id', 'no', 'moduleId', 'short', 'title', 'property', 'category', 'source', 'previewTitle', 'figure', 'states', 'defaultFocus', 'status', 'stepsChecked', 'evidence'],
-  figure: ['boxes', 'arrows'],
-  state: ['label', 'tone', 'route', 'here', 'edgeShort', 'chips', 'takeaway', 'preview'],
-  chip: ['box', 'text', 'tone'],
+  state: ['label', 'tone', 'edgeShort', 'takeaway', 'preview'],
   preview: ['statusBadge', 'rows', 'bars', 'logLines', 'alert', 'buttonLabel', 'buttonKind'],
   row: ['k', 'v', 'tone'],
   bar: ['label', 'value', 'limit', 'max', 'unit', 'ok'],
@@ -50,7 +48,7 @@ export const RESERVED_HOST_TOKENS = [
 // Size discipline. MAX_BYTES is a hard ceiling; the per-scale budget only warns.
 export const MAX_BYTES = 512 * 1024;
 const BUDGETS = [
-  { upTo: 6, bytes: 100 * 1024 },
+  { upTo: 6, bytes: 128 * 1024 },
   { upTo: 20, bytes: 200 * 1024 },
   { upTo: 50, bytes: 350 * 1024 },
   { upTo: Infinity, bytes: MAX_BYTES },
@@ -133,6 +131,128 @@ export function resolveProvenance(board, binding) {
   return { kind, tone: kind === 'verified' && level === 'spec-and-log' ? 'good' : 'warn', ...base };
 }
 
+// Items of a figure list: objects with unique [a-zA-Z0-9_-] ids, count in [min, max].
+// Returns the set of valid ids, so states can be checked against them.
+function figureItems(list, path, min, max, allowed, c) {
+  const ids = new Set();
+  if (!Array.isArray(list) || list.length < min || list.length > max) {
+    c.err(path, `must be an array of ${min} to ${max} items`);
+    return ids;
+  }
+  list.forEach((it, i) => {
+    const ip = `${path}[${i}]`;
+    if (!isPlainObject(it)) { c.err(ip, 'must be an object'); return; }
+    c.keys(it, allowed, ip);
+    if (!isNonEmptyString(it.id) || !SAFE_ID.test(it.id)) c.err(`${ip}.id`, 'must be a non-empty [a-zA-Z0-9_-] string');
+    else if (ids.has(it.id)) c.err(`${ip}.id`, `duplicate id "${it.id}"`);
+    else ids.add(it.id);
+    c.reqStr(it, 'label', ip);
+  });
+  return ids;
+}
+
+// A state's list of ids that must all be known and distinct.
+function idRefs(list, known, path, nonEmpty, what, c) {
+  if (!Array.isArray(list) || (nonEmpty && list.length < 1)) { c.err(path, `must be ${nonEmpty ? 'a non-empty' : 'an'} array of ${what} IDs`); return; }
+  const seen = new Set();
+  for (const id of list) {
+    if (!known.has(id)) c.err(path, `invalid ${what} ID "${id}"`);
+    else if (seen.has(id)) c.err(path, `duplicate ${what} ID "${id}"`);
+    seen.add(id);
+  }
+}
+
+// Chips of a state: { <target>, text, tone }, at most one per target.
+function chipList(chips, target, known, path, required, c) {
+  if (chips === undefined && !required) return;
+  if (!Array.isArray(chips)) { c.err(path, required ? 'must be an array' : 'must be an array when present'); return; }
+  const seen = new Set();
+  chips.forEach((ch, ci) => {
+    const cp = `${path}[${ci}]`;
+    if (!isPlainObject(ch)) { c.err(cp, 'must be an object'); return; }
+    c.keys(ch, [target, 'text', 'tone'], cp);
+    if (!known.has(ch[target])) c.err(`${cp}.${target}`, `invalid ${target} "${ch[target]}"`);
+    else if (!required && seen.has(ch[target])) c.err(`${cp}.${target}`, `a second chip for ${target} "${ch[target]}"`);
+    seen.add(ch[target]);
+    c.reqStr(ch, 'text', cp);
+    if (!CHIP_TONES.includes(ch.tone)) c.err(`${cp}.tone`, `must be one of ${CHIP_TONES.join(', ')}`);
+  });
+}
+
+// Per-kind checks of rule.figure (returns the ids states may reference) and of a state's figure fields.
+const KIND_CHECKS = {
+  gate: {
+    figureKeys: ['kind', 'boxes', 'arrows'],
+    stateKeys: ['label', 'tone', 'route', 'here', 'edgeShort', 'chips', 'takeaway', 'preview'],
+    figure(fig, fp, c) {
+      if (!isPlainObject(fig.boxes)) {
+        c.err(`${fp}.boxes`, 'must be an object with 6 box labels');
+      } else {
+        c.keys(fig.boxes, BOX_KEYS, `${fp}.boxes`);
+        for (const bk of BOX_KEYS) c.reqStr(fig.boxes, bk, `${fp}.boxes`);
+      }
+      if (!isPlainObject(fig.arrows)) {
+        c.err(`${fp}.arrows`, 'must be an object with 5 arrow labels');
+      } else {
+        c.keys(fig.arrows, ARROW_KEYS, `${fp}.arrows`);
+        for (const ak of ARROW_KEYS) c.reqStr(fig.arrows, ak, `${fp}.arrows`);
+      }
+      return null;
+    },
+    state(st, _refs, sp, c) {
+      if (!Array.isArray(st.route) || st.route.length < 1) {
+        c.err(`${sp}.route`, 'must be a non-empty array of arrow IDs');
+      } else {
+        for (const a of st.route) if (!ARROW_KEYS.includes(a)) c.err(`${sp}.route`, `invalid arrow ID "${a}"`);
+      }
+      if (!EXIT_BOXES.includes(st.here)) c.err(`${sp}.here`, `must be one of ${EXIT_BOXES.join(', ')}`);
+      chipList(st.chips, 'box', new Set(BOX_KEYS), `${sp}.chips`, true, c);
+    },
+  },
+  sequence: {
+    figureKeys: ['kind', 'lanes', 'steps'],
+    stateKeys: ['label', 'tone', 'activeSteps', 'focusStep', 'edgeShort', 'chips', 'takeaway', 'preview'],
+    figure(fig, fp, c) {
+      const lanes = figureItems(fig.lanes, `${fp}.lanes`, 2, 3, ['id', 'label'], c);
+      const steps = figureItems(fig.steps, `${fp}.steps`, 2, 5, ['id', 'from', 'to', 'label'], c);
+      (Array.isArray(fig.steps) ? fig.steps : []).forEach((s, i) => {
+        for (const k of ['from', 'to']) if (isPlainObject(s) && !lanes.has(s[k])) c.err(`${fp}.steps[${i}].${k}`, `must be a lane id (got "${s[k]}")`);
+      });
+      return { lanes, steps };
+    },
+    state(st, refs, sp, c) {
+      idRefs(st.activeSteps, refs.steps, `${sp}.activeSteps`, true, 'step', c);
+      if (!Array.isArray(st.activeSteps) || !st.activeSteps.includes(st.focusStep)) c.err(`${sp}.focusStep`, 'must be one of the state\'s activeSteps');
+      chipList(st.chips, 'lane', refs.lanes, `${sp}.chips`, false, c);
+    },
+  },
+  relation: {
+    figureKeys: ['kind', 'nodes', 'edges'],
+    stateKeys: ['label', 'tone', 'activeEdges', 'focusNodes', 'edgeShort', 'chips', 'takeaway', 'preview'],
+    figure(fig, fp, c) {
+      const nodes = figureItems(fig.nodes, `${fp}.nodes`, 3, 5, ['id', 'label', 'role'], c);
+      const edges = figureItems(fig.edges, `${fp}.edges`, 2, 7, ['id', 'from', 'to', 'label', 'forbidden'], c);
+      const pairs = new Set();
+      (Array.isArray(fig.nodes) ? fig.nodes : []).forEach((n, i) => { if (isPlainObject(n)) c.optStr(n, 'role', `${fp}.nodes[${i}]`); });
+      (Array.isArray(fig.edges) ? fig.edges : []).forEach((e, i) => {
+        if (!isPlainObject(e)) return;
+        const ep = `${fp}.edges[${i}]`;
+        for (const k of ['from', 'to']) if (!nodes.has(e[k])) c.err(`${ep}.${k}`, `must be a node id (got "${e[k]}")`);
+        if (e.forbidden !== undefined && typeof e.forbidden !== 'boolean') c.err(`${ep}.forbidden`, 'must be a boolean when present');
+        const pair = e.from + '>' + e.to;
+        if (pairs.has(pair)) c.err(ep, `a second edge from "${e.from}" to "${e.to}"`);
+        pairs.add(pair);
+      });
+      return { nodes, edges };
+    },
+    state(st, refs, sp, c) {
+      idRefs(st.activeEdges, refs.edges, `${sp}.activeEdges`, true, 'edge', c);
+      if (st.focusNodes !== undefined) idRefs(st.focusNodes, refs.nodes, `${sp}.focusNodes`, false, 'node', c);
+      chipList(st.chips, 'node', refs.nodes, `${sp}.chips`, false, c);
+    },
+  },
+};
+
 export function validateBoardData(board, { checkHash = true } = {}) {
   const errors = [];
   const warnings = [];
@@ -146,6 +266,7 @@ export function validateBoardData(board, { checkHash = true } = {}) {
   };
   const reqStr = (obj, k, path) => { if (!isNonEmptyString(obj[k])) err(`${path}.${k}`, 'must be a non-empty string'); };
   const optStr = (obj, k, path) => { if (obj[k] !== undefined && !isNonEmptyString(obj[k])) err(`${path}.${k}`, 'must be a non-empty string when present'); };
+  const ctx = { err, keys, reqStr, optStr };
 
   if (!isPlainObject(board)) {
     err('$', 'root must be a JSON object');
@@ -242,24 +363,18 @@ export function validateBoardData(board, { checkHash = true } = {}) {
       err(`${p}.stepsChecked`, 'must be a non-negative integer when present');
     }
 
-    // 6-box topology
+    // Figure: one of FIGURE_KINDS, checked by its entry in KIND_CHECKS.
     const fig = rule.figure;
+    let kind = null;
+    let refs = null;
     if (!isPlainObject(fig)) {
       err(`${p}.figure`, 'must be an object');
+    } else if (fig.kind !== undefined && !FIGURE_KINDS.includes(fig.kind)) {
+      err(`${p}.figure.kind`, `must be one of ${FIGURE_KINDS.join(', ')} when present`);
     } else {
-      keys(fig, KEYS.figure, `${p}.figure`);
-      if (!isPlainObject(fig.boxes)) {
-        err(`${p}.figure.boxes`, 'must be an object with 6 box labels');
-      } else {
-        keys(fig.boxes, BOX_KEYS, `${p}.figure.boxes`);
-        for (const bk of BOX_KEYS) reqStr(fig.boxes, bk, `${p}.figure.boxes`);
-      }
-      if (!isPlainObject(fig.arrows)) {
-        err(`${p}.figure.arrows`, 'must be an object with 5 arrow labels');
-      } else {
-        keys(fig.arrows, ARROW_KEYS, `${p}.figure.arrows`);
-        for (const ak of ARROW_KEYS) reqStr(fig.arrows, ak, `${p}.figure.arrows`);
-      }
+      kind = KIND_CHECKS[fig.kind ?? 'gate'];
+      keys(fig, kind.figureKeys, `${p}.figure`);
+      refs = kind.figure(fig, `${p}.figure`, ctx);
     }
 
     // 3 focus states: normal, bug, fixed
@@ -272,32 +387,15 @@ export function validateBoardData(board, { checkHash = true } = {}) {
         const st = states[sk];
         const sp = `${p}.states.${sk}`;
         if (!isPlainObject(st)) { err(sp, 'missing required state'); continue; }
-        keys(st, KEYS.state, sp);
+        keys(st, kind ? kind.stateKeys : KEYS.state, sp);
         reqStr(st, 'label', sp);
         if (!FOCUS_TONES.includes(st.tone)) err(`${sp}.tone`, `must be one of ${FOCUS_TONES.join(', ')}`);
-        if (!Array.isArray(st.route) || st.route.length < 1) {
-          err(`${sp}.route`, 'must be a non-empty array of arrow IDs');
-        } else {
-          for (const a of st.route) if (!ARROW_KEYS.includes(a)) err(`${sp}.route`, `invalid arrow ID "${a}"`);
-        }
-        if (!EXIT_BOXES.includes(st.here)) err(`${sp}.here`, `must be one of ${EXIT_BOXES.join(', ')}`);
+        if (kind) kind.state(st, refs, sp, ctx);
         reqStr(st, 'edgeShort', sp);
         if (isNonEmptyString(st.edgeShort) && [...st.edgeShort].length > EDGE_WARN_CHARS) {
           warn(`${sp}.edgeShort`, `length ${[...st.edgeShort].length} exceeds the recommended ${EDGE_WARN_CHARS} characters (the connector label wraps)`);
         }
         reqStr(st, 'takeaway', sp);
-        if (!Array.isArray(st.chips)) {
-          err(`${sp}.chips`, 'must be an array');
-        } else {
-          st.chips.forEach((c, ci) => {
-            const cp = `${sp}.chips[${ci}]`;
-            if (!isPlainObject(c)) { err(cp, 'must be an object'); return; }
-            keys(c, KEYS.chip, cp);
-            if (!BOX_KEYS.includes(c.box)) err(`${cp}.box`, `invalid box "${c.box}"`);
-            reqStr(c, 'text', cp);
-            if (!CHIP_TONES.includes(c.tone)) err(`${cp}.tone`, `must be one of ${CHIP_TONES.join(', ')}`);
-          });
-        }
 
         const pv = st.preview;
         const pp = `${sp}.preview`;
@@ -355,7 +453,7 @@ export function validateBoardData(board, { checkHash = true } = {}) {
     // Label fit, only once the rule's structure is valid.
     if (errors.length === errorsBefore) {
       for (const o of figureOverflows(rule)) {
-        warn(`${p}.${o.where}`, `"${o.text}" is wider than ${o.room}; shorten it`);
+        warn(`${p}.${o.where}`, o.msg ?? `"${o.text}" is wider than ${o.room}; shorten it`);
       }
     }
   });

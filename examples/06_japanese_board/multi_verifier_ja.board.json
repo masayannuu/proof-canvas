@@ -1,0 +1,525 @@
+{
+  "version": 1,
+  "runId": "multi_verifier_ja",
+  "title": "エスクローと会計期間のルール",
+  "subtitle": "Quint・Alloy 6・TLC の実ファイルと実ログで確かめた 3 つのルール",
+  "generatedAt": "2026-11-26T18:09:18+00:00",
+  "run": {
+    "tool": "複数の検証器",
+    "specHash": "sha256:55cb9e26947178c2cefc6f816df4b25e71685891134084d0374e5bfa5c759309",
+    "status": "verified"
+  },
+  "rules": [
+    {
+      "id": "refund_cap",
+      "no": 1,
+      "short": "返金の上限",
+      "title": "返金累計は預り金を超えない",
+      "property": "refundsWithinEscrow",
+      "source": "エスクロー台帳",
+      "previewTitle": "エスクロー台帳",
+      "status": "verified",
+      "figure": {
+        "boxes": {
+          "src1": "返金申請",
+          "src2": "預り金 2",
+          "gate": "返金上限の確認",
+          "pass": "返金する",
+          "hold": "返金を断る",
+          "bad": "払いすぎ"
+        },
+        "arrows": {
+          "a1": "申請",
+          "a2": "上限",
+          "a3": "範囲内",
+          "a4": "上限超え",
+          "a5": "確認なし"
+        }
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "route": [
+            "a1",
+            "a2",
+            "a3"
+          ],
+          "here": "pass",
+          "chips": [
+            {
+              "box": "pass",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "返金できる",
+          "takeaway": "2回目の返金で、預り金をちょうど使い切る。",
+          "preview": {
+            "statusBadge": "返金済み",
+            "rows": [
+              {
+                "k": "返金累計 / 預り金",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "預り金の範囲内なので返金できます。",
+            "buttonLabel": "返金する",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "route": [
+            "a1",
+            "a5"
+          ],
+          "here": "bad",
+          "chips": [
+            {
+              "box": "bad",
+              "text": "3 / 2",
+              "tone": "bad"
+            }
+          ],
+          "edgeShort": "払いすぎ",
+          "takeaway": "上限を確かめないと、3回目の返金で預り金を超えてしまう。",
+          "preview": {
+            "statusBadge": "違反",
+            "rows": [
+              {
+                "k": "返金累計 / 預り金",
+                "v": "3 / 2",
+                "tone": "bad"
+              }
+            ],
+            "alert": "返金累計が預り金を1単位超えています。",
+            "buttonLabel": "返金する",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "route": [
+            "a1",
+            "a2",
+            "a4"
+          ],
+          "here": "hold",
+          "chips": [
+            {
+              "box": "hold",
+              "text": "2 / 2",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "受け付けない",
+          "takeaway": "台帳が3回目の返金を断るので、累計は預り金に収まる。",
+          "preview": {
+            "statusBadge": "受付停止",
+            "rows": [
+              {
+                "k": "返金累計 / 預り金",
+                "v": "2 / 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "預り金を使い切ったため、これ以上は返金できません。",
+            "buttonLabel": "返金できません",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "fixed",
+      "evidence": {
+        "ruleSummary": "返金の累計は、預り金の額を超えない。",
+        "ifEnforced": "3回目の返金は台帳が断る。",
+        "ifNotEnforced": "3回目の返金で、預り金より多く払ってしまう。",
+        "checkerSummary": "Quint は 5 ステップ以内に違反を見つけなかった。",
+        "scope": "預り金 2 単位のエスクロー 1 件を、5 回の遷移まで確認。",
+        "method": "Quint verify 0.32.0（Apalache 0.56.1）"
+      }
+    },
+    {
+      "id": "delegation_cycle",
+      "no": 2,
+      "short": "代理の循環",
+      "title": "代理承認は循環しない",
+      "property": "NoCyclicDelegation",
+      "source": "承認の代理",
+      "previewTitle": "代理の指名",
+      "status": "verified",
+      "figure": {
+        "kind": "relation",
+        "nodes": [
+          {
+            "id": "sato",
+            "label": "佐藤",
+            "role": "ランク 1"
+          },
+          {
+            "id": "suzuki",
+            "label": "鈴木",
+            "role": "ランク 2"
+          },
+          {
+            "id": "takahashi",
+            "label": "高橋",
+            "role": "ランク 3"
+          }
+        ],
+        "edges": [
+          {
+            "id": "ab",
+            "from": "sato",
+            "to": "suzuki",
+            "label": "代理に指名"
+          },
+          {
+            "id": "bc",
+            "from": "suzuki",
+            "to": "takahashi",
+            "label": "代理に指名"
+          },
+          {
+            "id": "ca",
+            "from": "takahashi",
+            "to": "sato",
+            "label": "逆向きに指名",
+            "forbidden": true
+          }
+        ]
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "activeEdges": [
+            "ab",
+            "bc"
+          ],
+          "chips": [
+            {
+              "node": "takahashi",
+              "text": "ここで終わり",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "循環なし",
+          "takeaway": "代理はランク1から3へ上がっていき、高橋で止まる。",
+          "preview": {
+            "statusBadge": "指名できる",
+            "rows": [
+              {
+                "k": "代理のつながり",
+                "v": "佐藤 → 鈴木 → 高橋",
+                "tone": "ok"
+              },
+              {
+                "k": "ランク",
+                "v": "1 → 2 → 3",
+                "tone": "ok"
+              }
+            ],
+            "alert": "代理には、自分よりランクの高い人だけを指名できます。",
+            "buttonLabel": "指名する",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "activeEdges": [
+            "ab",
+            "bc",
+            "ca"
+          ],
+          "focusNodes": [
+            "sato"
+          ],
+          "chips": [
+            {
+              "node": "sato",
+              "text": "循環！",
+              "tone": "bad"
+            }
+          ],
+          "edgeShort": "循環",
+          "takeaway": "ランクの決まりがないと、高橋が佐藤を指名でき、承認がいつまでも回り続ける。",
+          "preview": {
+            "statusBadge": "違反",
+            "rows": [
+              {
+                "k": "代理のつながり",
+                "v": "佐藤 → 鈴木 → 高橋 → 佐藤",
+                "tone": "bad"
+              },
+              {
+                "k": "ランク",
+                "v": "1 → 2 → 3 → 1",
+                "tone": "bad"
+              }
+            ],
+            "alert": "高橋が佐藤を指名したため、代理が輪になりました。",
+            "buttonLabel": "指名する",
+            "buttonKind": "danger"
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "activeEdges": [
+            "ab",
+            "bc",
+            "ca"
+          ],
+          "focusNodes": [
+            "takahashi"
+          ],
+          "chips": [
+            {
+              "node": "takahashi",
+              "text": "3 → 1 は不可",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "指名できない",
+          "takeaway": "ランク3の高橋はランク1の佐藤を指名できないので、輪はできない。",
+          "preview": {
+            "statusBadge": "指名不可",
+            "rows": [
+              {
+                "k": "指名",
+                "v": "高橋 → 佐藤",
+                "tone": "bad"
+              },
+              {
+                "k": "ランクの確認",
+                "v": "3 < 1 は成り立たない",
+                "tone": "ok"
+              }
+            ],
+            "alert": "代理には、自分よりランクの高い人しか指名できません。",
+            "buttonLabel": "指名できません",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "evidence": {
+        "ruleSummary": "代理の指名をたどっても、元の人には戻らない。",
+        "ifEnforced": "低いランクへ戻す指名は、ランクの確認で断られる。",
+        "ifNotEnforced": "低いランクへ戻す指名で、代理が輪になる。",
+        "checkerSummary": "Alloy はスコープ 5 で反例を見つけなかった（UNSAT）。",
+        "scope": "全体スコープ 5、整数は 4 ビット。",
+        "method": "Alloy 6.2.0 の check（SAT4J）"
+      }
+    },
+    {
+      "id": "period_closed",
+      "no": 3,
+      "short": "締めた後の計上",
+      "title": "締済みの会計期間には計上できない",
+      "property": "ClosedPeriodImmutable",
+      "source": "会計期間",
+      "previewTitle": "会計期間",
+      "status": "verified",
+      "figure": {
+        "kind": "sequence",
+        "lanes": [
+          {
+            "id": "acct",
+            "label": "経理担当"
+          },
+          {
+            "id": "lock",
+            "label": "期間ロック"
+          },
+          {
+            "id": "ledger",
+            "label": "台帳"
+          }
+        ],
+        "steps": [
+          {
+            "id": "check",
+            "from": "acct",
+            "to": "lock",
+            "label": "開いているか確認"
+          },
+          {
+            "id": "close",
+            "from": "lock",
+            "to": "lock",
+            "label": "10月を締める"
+          },
+          {
+            "id": "write",
+            "from": "acct",
+            "to": "ledger",
+            "label": "払い出しを計上"
+          },
+          {
+            "id": "post",
+            "from": "acct",
+            "to": "lock",
+            "label": "ロック経由で計上"
+          },
+          {
+            "id": "reject",
+            "from": "lock",
+            "to": "acct",
+            "label": "締済みで却下"
+          }
+        ]
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "activeSteps": [
+            "check",
+            "write"
+          ],
+          "focusStep": "write",
+          "chips": [
+            {
+              "lane": "lock",
+              "text": "10月は開いている",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "計上済み",
+          "takeaway": "10月が開いている間は、払い出しをそのまま計上できる。",
+          "preview": {
+            "statusBadge": "計上済み",
+            "rows": [
+              {
+                "k": "10月",
+                "v": "開いている",
+                "tone": "ok"
+              },
+              {
+                "k": "計上額 / 確定額",
+                "v": "1 / 未確定",
+                "tone": "normal"
+              }
+            ],
+            "alert": "開いている期間に計上しました。",
+            "buttonLabel": "計上する",
+            "buttonKind": "ok",
+            "logLines": [
+              "10月を確認: 開いている",
+              "払い出しを計上: 0 → 1"
+            ]
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "activeSteps": [
+            "check",
+            "close",
+            "write"
+          ],
+          "focusStep": "write",
+          "chips": [
+            {
+              "lane": "lock",
+              "text": "10月は締済み",
+              "tone": "bad"
+            },
+            {
+              "lane": "ledger",
+              "text": "確定額が変わる",
+              "tone": "bad"
+            }
+          ],
+          "edgeShort": "確定額が変化",
+          "takeaway": "締める前の「開いている」を信じて計上すると、締めた後に確定額が変わってしまう。",
+          "preview": {
+            "statusBadge": "違反",
+            "rows": [
+              {
+                "k": "10月",
+                "v": "締済み",
+                "tone": "bad"
+              },
+              {
+                "k": "計上額 / 確定額",
+                "v": "2 / 1",
+                "tone": "bad"
+              }
+            ],
+            "alert": "締めた期間に払い出しが計上されました。",
+            "buttonLabel": "計上する",
+            "buttonKind": "danger",
+            "logLines": [
+              "10月を確認: 開いている",
+              "10月を締める: 確定額 1",
+              "払い出しを計上: 1 → 2"
+            ]
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "activeSteps": [
+            "close",
+            "post",
+            "reject"
+          ],
+          "focusStep": "reject",
+          "chips": [
+            {
+              "lane": "lock",
+              "text": "10月は締済み",
+              "tone": "good"
+            },
+            {
+              "lane": "ledger",
+              "text": "確定額はそのまま",
+              "tone": "good"
+            }
+          ],
+          "edgeShort": "却下",
+          "takeaway": "計上と期間の確認を同じ一歩で行うので、締めた後の計上は却下される。",
+          "preview": {
+            "statusBadge": "却下",
+            "rows": [
+              {
+                "k": "10月",
+                "v": "締済み",
+                "tone": "ok"
+              },
+              {
+                "k": "計上額 / 確定額",
+                "v": "1 / 1",
+                "tone": "ok"
+              }
+            ],
+            "alert": "10月は締済みのため、計上しませんでした。",
+            "buttonLabel": "締済み",
+            "buttonKind": "locked",
+            "logLines": [
+              "10月を締める: 確定額 1",
+              "払い出しを計上: 却下"
+            ]
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "evidence": {
+        "ruleSummary": "期間を締めたら、記録済みの計上額は変わらない。",
+        "ifEnforced": "計上のたびに同じ一歩で期間を確かめるので、締めた後の確定額は動かない。",
+        "ifNotEnforced": "締める前に期間を確かめた計上が、締めた後に確定額を変えてしまう。",
+        "checkerSummary": "TLC は基本構成の状態空間をすべて調べ、エラーはなかった。",
+        "scope": "予算 2 単位の会計期間 1 つ。",
+        "method": "TLC 2.19（TLA+ tools v1.7.4）、幅優先探索"
+      }
+    }
+  ]
+}

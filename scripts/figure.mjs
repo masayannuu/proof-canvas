@@ -1,8 +1,16 @@
-// Shared figure geometry, text metrics and the SVG builder for one rule.
+// Shared figure geometry, text metrics and the SVG builders for one rule.
 // The server-side render, the browser runtime and the validator's overflow warnings all use
 // these same functions: render_board.mjs injects their source into the page with
-// Function.prototype.toString, so each function must stay self-contained (it may reference
-// only the other functions and the constants below, which are injected under the same names).
+// Function.prototype.toString (see figureRuntime), so each function must stay self-contained
+// (it may reference only the other functions and the constants below, which are injected under
+// the same names).
+//
+// A rule's figure is one of three kinds, chosen by figure.kind (missing means 'gate'):
+//   gate      { boxes, arrows }   two inputs, one check, three outcomes      state: route, here, chips
+//   sequence  { lanes, steps }    2-3 actors with lifelines, 2-5 ordered steps  state: activeSteps, focusStep, chips?
+//   relation  { nodes, edges }    3-5 entities, 2-7 directed relations         state: activeEdges, focusNodes?, chips?
+// Every kind draws into the same 740 x 328 viewBox and marks one element with data-anchor,
+// where the connector to the screen preview starts.
 
 export const GEOM = {
   src1: { x: 8, y: 34, w: 168, h: 80 },
@@ -91,8 +99,64 @@ export function layoutBoxLabel(label, maxW, hasChip) {
   return { fs: FS.boxMin, lines: [s], overflow: oneFs < FS.boxMin };
 }
 
-// Label overflow report for one rule: [{ where, text, room }] for every label that cannot fit.
-export function figureOverflows(rule) {
+
+// ---- shared SVG pieces ----
+
+export function figKind(rule) {
+  return rule.figure.kind ?? 'gate';
+}
+
+// Opening <svg> tag and arrowhead markers. Marker ids carry the board uid, so they stay unique.
+export function figOpen(rule, st, uid, extraMarkers) {
+  return '<svg class="fg-svg" viewBox="0 0 740 328" role="img" aria-label="' + esc(rule.title) + '" style="--hot:' + HOT[st.tone] + '"><defs>' +
+    '<marker id="fg-h-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="fg-head"/></marker>' +
+    '<marker id="fg-hh-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="fg-head-hot"/></marker>' + extraMarkers + '</defs>';
+}
+
+// Box label lines from layoutBoxLabel, the first baseline at y0.
+export function blabel(lay, cx, y0) {
+  const lh = lay.fs * 1.18;
+  return '<text class="fg-blabel" text-anchor="middle" font-size="' + lay.fs + '">' +
+    lay.lines.map((ln, i) => '<tspan x="' + cx + '" y="' + (y0 + i * lh).toFixed(1) + '">' + esc(ln) + '</tspan>').join('') + '</text>';
+}
+
+// Baseline of the first line of a label centered vertically in [y, y + h].
+export function midY(lay, y, h) {
+  return y + h / 2 + lay.fs * 0.35 - (lay.lines.length === 2 ? lay.fs * 0.59 : 0);
+}
+
+// Value chip (25 units tall) centered on cx, at most maxW wide.
+export function chipSvg(c, cx, y, maxW) {
+  const cfs = fitFontSize(c.text, FS.chip, maxW - 12, FS.chipMin);
+  const cw = Math.min(maxW, textW(c.text, cfs) + 18);
+  return '<g class="fg-chip chip-' + c.tone + '"><rect x="' + (cx - cw / 2).toFixed(1) + '" y="' + y + '" width="' + cw.toFixed(1) + '" height="25" rx="12.5"/>' +
+    '<text x="' + cx + '" y="' + (y + 17.2).toFixed(1) + '" text-anchor="middle" font-size="' + cfs + '">' + esc(c.text) + '</text></g>';
+}
+
+// Label pill centered on (cx, cy). The renderer draws and the validator checks this same box.
+export function pillBox(cx, cy, fit) {
+  return { x: cx - fit.pw / 2, y: cy - fit.fs * 0.65 - 2, w: fit.pw, h: fit.fs * 1.2 + 5 };
+}
+
+// Font size and pill width for a label given `room` units of pill width.
+export function pillFit(lab, room) {
+  const r = Math.max(room, 24);
+  const fs = fitFontSize(lab, FS.label, r - 12, FS.labelMin);
+  return { fs, pw: Math.min(r, textW(lab, fs) + 12) };
+}
+
+// One labelled line (a sequence step or a relation edge), structured like a gate arrow.
+export function edgeSvg(attr, cls, d, marker, flowOn, lab, cx, cy, fit, extra) {
+  const b = pillBox(cx, cy, fit);
+  return '<g ' + attr + ' class="fg-arrow ' + cls + '"><path class="fg-line" d="' + d + '" marker-end="url(#' + marker + ')"/>' +
+    (flowOn ? '<path class="fg-flow" d="' + d + '"/>' : '') + extra +
+    '<rect class="fg-apill" x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' + b.w.toFixed(1) + '" height="' + b.h.toFixed(1) + '" rx="5"/>' +
+    '<text class="fg-alabel" x="' + cx.toFixed(1) + '" y="' + (cy + fit.fs * 0.35).toFixed(1) + '" text-anchor="middle" font-size="' + fit.fs + '">' + esc(lab) + '</text></g>';
+}
+
+// ---- gate: two inputs, one check, three outcomes ----
+
+export function gateOverflows(rule) {
   const out = [];
   for (const [id, g] of Object.entries(GEOM)) {
     const label = rule.figure.boxes[id];
@@ -113,14 +177,12 @@ export function figureOverflows(rule) {
   return out;
 }
 
-export function figSvg(rule, st, uid, flow) {
-  const route = new Set(st.route || []);
+export function gateSvg(rule, st, uid, flow) {
+  const route = new Set(st.route);
   const on = new Set();
-  for (const id of st.route || []) { if (ARROWS[id]) { on.add(ARROWS[id].from); on.add(ARROWS[id].to); } }
+  for (const id of st.route) { on.add(ARROWS[id].from); on.add(ARROWS[id].to); }
   const chips = Object.fromEntries((st.chips || []).map((c) => [c.box, c]));
-  let h = '<svg class="fg-svg" viewBox="0 0 740 328" role="img" aria-label="' + esc(rule.title) + '" style="--hot:' + HOT[st.tone] + '"><defs>' +
-    '<marker id="fg-h-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="fg-head"/></marker>' +
-    '<marker id="fg-hh-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="fg-head-hot"/></marker></defs>';
+  let h = figOpen(rule, st, uid, '');
   for (const [id, a] of Object.entries(ARROWS)) {
     const isOn = route.has(id);
     const d = a.p.map(([x, y], i) => (i ? 'L' : 'M') + x + ' ' + y).join(' ');
@@ -139,23 +201,291 @@ export function figSvg(rule, st, uid, flow) {
     const isGate = id === 'gate';
     const lay = layoutBoxLabel(rule.figure.boxes[id], g.w - 16, !!c);
     const two = lay.lines.length === 2;
-    const lh = lay.fs * 1.18;
     const cx = g.x + g.w / 2;
     let y0;
-    if (!c) y0 = g.y + g.h / 2 + lay.fs * 0.35 - (two ? lh / 2 : 0);
+    if (!c) y0 = g.y + g.h / 2 + lay.fs * 0.35 - (two ? lay.fs * 1.18 / 2 : 0);
     else if (isGate) y0 = two ? g.y + 28 : g.y + 39;
     else y0 = two ? g.y + 21 : g.y + 30;
-    const text = lay.lines.map((ln, i) => '<tspan x="' + cx + '" y="' + (y0 + i * lh).toFixed(1) + '">' + esc(ln) + '</tspan>').join('');
-    let chipSvg = '';
-    if (c) {
-      const cfs = fitFontSize(c.text, FS.chip, g.w - 26, FS.chipMin);
-      const cw = Math.min(g.w - 14, textW(c.text, cfs) + 18);
-      const cy = isGate ? (two ? g.y + 58 : g.y + 54) : (two ? g.y + 46 : g.y + 42);
-      chipSvg = '<g class="fg-chip chip-' + c.tone + '"><rect x="' + (cx - cw / 2).toFixed(1) + '" y="' + cy + '" width="' + cw.toFixed(1) + '" height="25" rx="12.5"/>' +
-        '<text x="' + cx + '" y="' + (cy + 17.2).toFixed(1) + '" text-anchor="middle" font-size="' + cfs + '">' + esc(c.text) + '</text></g>';
-    }
-    h += '<g data-box="' + id + '" class="fg-box tone-' + TONES[id] + ' ' + cls + '"><rect x="' + g.x + '" y="' + g.y + '" width="' + g.w + '" height="' + g.h + '" rx="10"/>' +
-      '<text class="fg-blabel" text-anchor="middle" font-size="' + lay.fs + '">' + text + '</text>' + chipSvg + '</g>';
+    const chip = c ? chipSvg(c, cx, isGate ? (two ? g.y + 58 : g.y + 54) : (two ? g.y + 46 : g.y + 42), g.w - 14) : '';
+    h += '<g data-box="' + id + '" class="fg-box tone-' + TONES[id] + ' ' + cls + '"><rect' + (id === st.here ? ' data-anchor="1"' : '') + ' x="' + g.x + '" y="' + g.y + '" width="' + g.w + '" height="' + g.h + '" rx="10"/>' +
+      blabel(lay, cx, y0) + chip + '</g>';
   }
   return h + '</svg>';
+}
+
+// ---- sequence: actors with lifelines and ordered steps (TLA+ / Quint races, TOCTOU) ----
+
+export const SEQ = {
+  laneX: { 2: [185, 555], 3: [130, 370, 610] },
+  laneW: { 2: 220, 3: 200 },
+  head: { y: 6, h: 50 },
+  chipY: 62,
+  lifeEnd: 322,
+  rowY: { 2: [156, 262], 3: [136, 210, 284], 4: [124, 182, 240, 298], 5: [116, 162, 208, 254, 300] },
+  badge: 11,
+  loop: 28,
+};
+
+// Fixed geometry: lane centers by lane count, row baselines by step count. A step between lanes
+// is a horizontal arrow from the numbered badge on its source lifeline; a step on one lane is a
+// small loop beside it (to the left on the last lane), with its pill next to the loop.
+export function seqLayout(rule) {
+  const { lanes, steps } = rule.figure;
+  const n = lanes.length;
+  const xs = SEQ.laneX[n];
+  const lw = SEQ.laneW[n];
+  const ys = SEQ.rowY[steps.length];
+  const B = SEQ.badge;
+  const at = {};
+  lanes.forEach((l, i) => { at[l.id] = i; });
+  return {
+    lw,
+    lanes: lanes.map((l, i) => ({ id: l.id, label: l.label, x: xs[i], box: { x: xs[i] - lw / 2, y: SEQ.head.y, w: lw, h: SEQ.head.h } })),
+    steps: steps.map((s, i) => {
+      const a = at[s.from];
+      const b = at[s.to];
+      const xa = xs[a];
+      const y = ys[i];
+      if (a === b) {
+        const sd = a === n - 1 ? -1 : 1;
+        const x1 = xa + sd * (B + 2 + SEQ.loop);
+        const room = Math.abs(xs[a + sd] - xa) - (B + SEQ.loop + 10) - 14;
+        const fit = pillFit(s.label, room);
+        const cx = x1 + sd * (8 + fit.pw / 2);
+        return { id: s.id, label: s.label, xa, y, room, fit, cx, right: Math.max(xa + B, cx + fit.pw / 2),
+          d: 'M' + (xa + sd * (B + 2)) + ' ' + (y - 10) + ' H' + x1 + ' V' + (y + 10) + ' H' + (xa + sd * (B + 4)) };
+      }
+      const dir = b > a ? 1 : -1;
+      const x1 = xa + dir * (B + 3);
+      const x2 = xs[b] - dir * 2;
+      const room = Math.abs(x2 - x1) - 28;
+      return { id: s.id, label: s.label, xa, y, room, fit: pillFit(s.label, room), cx: (x1 + x2) / 2, right: Math.max(x1, x2), d: 'M' + x1 + ' ' + y + ' H' + x2 };
+    }),
+  };
+}
+
+export function seqOverflows(rule) {
+  const out = [];
+  const g = seqLayout(rule);
+  g.lanes.forEach((l, i) => {
+    if (layoutBoxLabel(l.label, l.box.w - 16, false).overflow) out.push({ where: `figure.lanes[${i}].label`, text: l.label, room: 'its lane header, even on two lines at the minimum font size' });
+  });
+  g.steps.forEach((s, i) => {
+    if (textW(s.label, FS.labelMin) > s.room - 12) out.push({ where: `figure.steps[${i}].label`, text: s.label, room: 'the space beside its lane' });
+  });
+  for (const [sk, st] of Object.entries(rule.states)) {
+    (st.chips || []).forEach((c, ci) => {
+      if (textW(c.text, FS.chipMin) > g.lw - 26) out.push({ where: `states.${sk}.chips[${ci}].text`, text: c.text, room: 'its lane at the minimum chip size' });
+    });
+  }
+  return out;
+}
+
+export function seqSvg(rule, st, uid, flow) {
+  const g = seqLayout(rule);
+  const act = new Set(st.activeSteps);
+  const chips = {};
+  for (const c of st.chips || []) chips[c.lane] = c;
+  let h = figOpen(rule, st, uid, '');
+  for (const l of g.lanes) h += '<line class="fg-life" x1="' + l.x + '" y1="' + (l.box.y + l.box.h) + '" x2="' + l.x + '" y2="' + SEQ.lifeEnd + '"/>';
+  for (const l of g.lanes) {
+    const b = l.box;
+    const lay = layoutBoxLabel(l.label, b.w - 16, false);
+    h += '<g data-lane="' + l.id + '" class="fg-box tone-source is-on"><rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" rx="10"/>' + blabel(lay, l.x, midY(lay, b.y, b.h)) + '</g>';
+    if (chips[l.id]) h += chipSvg(chips[l.id], l.x, SEQ.chipY, b.w - 14);
+  }
+  let k = 0;
+  let focus = g.steps[0];
+  for (const s of g.steps) {
+    const isOn = act.has(s.id);
+    if (s.id === st.focusStep) focus = s;
+    const badge = isOn
+      ? '<g class="fg-badge"><circle cx="' + s.xa + '" cy="' + s.y + '" r="' + SEQ.badge + '"/><text x="' + s.xa + '" y="' + (s.y + 4.6).toFixed(1) + '" text-anchor="middle" font-size="13">' + (++k) + '</text></g>'
+      : '<circle class="fg-dot" cx="' + s.xa + '" cy="' + s.y + '" r="4"/>';
+    h += edgeSvg('data-step="' + s.id + '"', (isOn ? 'is-on' : 'is-dim') + (s.id === st.focusStep ? ' is-here' : ''), s.d, (isOn ? 'fg-hh-' : 'fg-h-') + uid, isOn && flow, s.label, s.cx, s.y, s.fit, badge);
+  }
+  if (focus.right + 16 < 728) h += '<path class="fg-lead" d="M' + (focus.right + 8).toFixed(1) + ' ' + focus.y + ' H728"/>';
+  return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="' + focus.y + '" r="4.5"/></svg>';
+}
+
+// ---- relation: entities and directed relations (Alloy structures, RBAC, ownership) ----
+
+export const REL = {
+  w: 168,
+  h: 80,
+  bend: 22,
+  loop: 48,
+  slots: {
+    3: [[18, 22, 'below'], [554, 22, 'below'], [286, 226, 'right']],
+    4: [[18, 22, 'below'], [554, 22, 'below'], [18, 226, 'above'], [554, 226, 'above']],
+    5: [[18, 22, 'below'], [554, 22, 'below'], [286, 124, 'right'], [18, 226, 'above'], [554, 226, 'above']],
+  },
+};
+
+export function bez(p, t) {
+  const u = 1 - t;
+  return [0, 1].map((i) => u * u * u * p[0][i] + 3 * u * u * t * p[1][i] + 3 * u * t * t * p[2][i] + t * t * t * p[3][i]);
+}
+
+// Nodes sit in fixed slots by node count, in array order. An edge runs between box borders; the
+// two edges of a bidirectional pair bow apart; a self-loop leaves its node on the slot's free side.
+// Every path is a cubic Bezier [p0, c1, c2, p3]; (cx, cy) is the center of its label pill.
+export function relLayout(rule) {
+  const { nodes, edges } = rule.figure;
+  const W = REL.w;
+  const H = REL.h;
+  const ph = FS.label * 1.2 + 5;
+  const N = {};
+  nodes.forEach((nd, i) => {
+    const [x, y, side] = REL.slots[nodes.length][i];
+    N[nd.id] = { x, y, w: W, h: H, cx: x + W / 2, cy: y + H / 2, side };
+  });
+  const pairs = new Set(edges.map((e) => e.from + '>' + e.to));
+  return {
+    nodes: N,
+    edges: edges.map((e) => {
+      const a = N[e.from];
+      if (e.from === e.to) {
+        const U = { below: [0, 1], above: [0, -1], right: [1, 0], left: [-1, 0] }[a.side];
+        const T = [Math.abs(U[1]), Math.abs(U[0])];
+        const m = [a.cx + U[0] * W / 2, a.cy + U[1] * H / 2];
+        const at = (t, u) => [m[0] + T[0] * t + U[0] * u, m[1] + T[1] * t + U[1] * u];
+        const reach = REL.loop * 0.75 + 6;
+        const room = U[0] > 0 ? 736 - m[0] - reach : U[0] < 0 ? m[0] - reach - 4 : 200;
+        const fit = pillFit(e.label, room);
+        const off = reach + (U[0] ? fit.pw : ph) / 2;
+        return { e, p: [at(-12, 0), at(-30, REL.loop), at(30, REL.loop), at(12, 0)], fit, room, cx: m[0] + U[0] * off, cy: m[1] + U[1] * off };
+      }
+      const b = N[e.to];
+      const dx = b.cx - a.cx;
+      const dy = b.cy - a.cy;
+      const len = Math.hypot(dx, dy);
+      const t = Math.min(dx ? (W / 2 + 2) / Math.abs(dx) : 1, dy ? (H / 2 + 2) / Math.abs(dy) : 1);
+      const bend = pairs.has(e.to + '>' + e.from) ? REL.bend : 0;
+      const nx = (dy / len) * bend;
+      const ny = (-dx / len) * bend;
+      const s = bend ? 8 / bend : 0;
+      const k = bend ? (bend - 8) / 0.75 / bend : 0;
+      const p0 = [a.cx + dx * t + nx * s, a.cy + dy * t + ny * s];
+      const p3 = [b.cx - dx * t + nx * s, b.cy - dy * t + ny * s];
+      const p = [p0, [p0[0] + (p3[0] - p0[0]) / 3 + nx * k, p0[1] + (p3[1] - p0[1]) / 3 + ny * k], [p0[0] + (p3[0] - p0[0]) * 2 / 3 + nx * k, p0[1] + (p3[1] - p0[1]) * 2 / 3 + ny * k], p3];
+      const vis = len * (1 - 2 * t);
+      const cos = Math.abs(dx) / len;
+      const room = cos > 0.05 ? Math.min(200, (vis - 24 - ph * Math.abs(dy) / len) / cos) : vis - 24 >= ph ? 200 : 0;
+      const mid = bez(p, 0.5);
+      return { e, p, fit: pillFit(e.label, room), room, cx: mid[0], cy: mid[1] };
+    }),
+  };
+}
+
+// Text layout inside a node box: optional role caption, the label, an optional chip.
+export function nodeLayout(nd, hasChip) {
+  const lay = layoutBoxLabel(nd.label, REL.w - 16, hasChip);
+  const two = lay.lines.length === 2;
+  if (!nd.role) return { lay, y0: hasChip ? (two ? 21 : 30) : midY(lay, 0, REL.h), chipY: two ? 46 : 42, overflow: lay.overflow };
+  if (!hasChip) return { lay, roleY: 22, y0: midY(lay, 28, REL.h - 28), overflow: lay.overflow || textW(nd.role, FS.chipMin) > REL.w - 16 };
+  return { lay, roleY: 19, y0: 40, chipY: 49, overflow: two || lay.overflow || textW(nd.role, FS.chipMin) > REL.w - 16 };
+}
+
+export function relOverflows(rule) {
+  const out = [];
+  const { nodes, edges } = rule.figure;
+  const g = relLayout(rule);
+  const chipped = new Set();
+  for (const [sk, st] of Object.entries(rule.states)) {
+    (st.chips || []).forEach((c, ci) => {
+      chipped.add(c.node);
+      if (textW(c.text, FS.chipMin) > REL.w - 26) out.push({ where: `states.${sk}.chips[${ci}].text`, text: c.text, room: 'its node at the minimum chip size' });
+    });
+  }
+  nodes.forEach((nd, i) => {
+    if (nodeLayout(nd, false).overflow || (chipped.has(nd.id) && nodeLayout(nd, true).overflow)) {
+      out.push({ where: `figure.nodes[${i}]`, text: nd.role ? nd.role + ' / ' + nd.label : nd.label, room: 'its node box (with a chip, the label must fit on one line under a role)' });
+    }
+  });
+  const inside = (pt, r, m) => pt[0] > r.x - m && pt[0] < r.x + r.w + m && pt[1] > r.y - m && pt[1] < r.y + r.h + m;
+  const meets = (r, q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h;
+  const samples = (p) => Array.from({ length: 33 }, (_, i) => bez(p, i / 32));
+  const pills = g.edges.map((x) => pillBox(x.cx, x.cy, x.fit));
+  g.edges.forEach((x, i) => {
+    const where = `figure.edges[${i}].label`;
+    const say = (msg) => out.push({ where, text: x.e.label, msg: `"${x.e.label}" ${msg}; shorten it or reorder the nodes` });
+    const pb = pills[i];
+    if (textW(x.e.label, FS.labelMin) > x.room - 12) out.push({ where, text: x.e.label, room: 'the free length of its line' });
+    if (pb.x < 2 || pb.y < 2 || pb.x + pb.w > 738 || pb.y + pb.h > 326) say('leaves the figure');
+    for (const [id, nb] of Object.entries(g.nodes)) {
+      if (meets(pb, nb)) say(`overlaps node "${id}"`);
+      if (id !== x.e.from && id !== x.e.to && samples(x.p).some((pt) => inside(pt, nb, -2))) say(`has a line that crosses node "${id}"`);
+    }
+    g.edges.forEach((y, j) => {
+      if (j === i) return;
+      if (j < i && meets(pb, pills[j])) say(`overlaps the label of edge "${y.e.id}"`);
+      if (samples(y.p).some((pt) => inside(pt, pb, 1))) say(`is crossed by edge "${y.e.id}"`);
+    });
+  });
+  return out;
+}
+
+// Relations are structure, not flow: no moving dots, so dashed forbidden edges stay distinct.
+export function relSvg(rule, st, uid) {
+  const g = relLayout(rule);
+  const act = new Set(st.activeEdges);
+  const foc = new Set(st.focusNodes || []);
+  const on = new Set(foc);
+  const chips = {};
+  for (const c of st.chips || []) chips[c.node] = c;
+  const mk = (id, cls, d, size) => '<marker id="' + id + '-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="' + size + '" markerHeight="' + size + '" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="' + d + '" class="' + cls + '"/></marker>';
+  let h = figOpen(rule, st, uid, mk('fg-hb', 'fg-head-bad', 'M0 0 L10 5 L0 10 z', 11) + mk('fg-hs', 'fg-stop', 'M8 0 L8 10', 18));
+  for (const x of g.edges) {
+    const e = x.e;
+    const isOn = act.has(e.id);
+    if (isOn) { on.add(e.from); on.add(e.to); }
+    const blocked = isOn && e.forbidden === true && st.tone === 'safe';
+    const marker = !isOn ? 'fg-h-' : blocked ? 'fg-hs-' : e.forbidden ? 'fg-hb-' : 'fg-hh-';
+    const xy = (pt) => pt[0].toFixed(1) + ' ' + pt[1].toFixed(1);
+    const d = 'M' + xy(x.p[0]) + ' C' + xy(x.p[1]) + ', ' + xy(x.p[2]) + ', ' + xy(x.p[3]);
+    h += edgeSvg('data-rel="' + e.id + '"', (e.forbidden ? 'is-forbid ' : '') + (isOn ? 'is-on' : 'is-dim') + (blocked ? ' is-blocked' : ''), d, marker + uid, false, e.label, x.cx, x.cy, x.fit, '');
+  }
+  for (const nd of rule.figure.nodes) {
+    const b = g.nodes[nd.id];
+    const c = chips[nd.id];
+    const L = nodeLayout(nd, !!c);
+    const cls = foc.has(nd.id) ? 'is-here is-on' : on.has(nd.id) ? 'is-on' : 'is-dim';
+    h += '<g data-node="' + nd.id + '" class="fg-box tone-source ' + cls + '"><rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" rx="10"/>' +
+      (nd.role ? '<text class="fg-brole" x="' + b.cx + '" y="' + (b.y + L.roleY) + '" text-anchor="middle" font-size="' + FS.chipMin + '">' + esc(nd.role) + '</text>' : '') +
+      blabel(L.lay, b.cx, b.y + L.y0) + (c ? chipSvg(c, b.cx, b.y + L.chipY, b.w - 14) : '') + '</g>';
+  }
+  return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="164" r="4.5"/></svg>';
+}
+
+// ---- registry ----
+
+// figSvg and figureOverflows dispatch on figure.kind through FIGURES. figureRuntime injects the
+// constants and functions of the kinds a board uses, plus a FIGURES table of their builders.
+export const FIGURES = {
+  gate: { svg: gateSvg, overflows: gateOverflows, fns: [gateSvg], consts: { GEOM, TONES, ARROWS } },
+  sequence: { svg: seqSvg, overflows: seqOverflows, fns: [midY, pillBox, pillFit, edgeSvg, seqLayout, seqSvg], consts: { SEQ } },
+  relation: { svg: relSvg, overflows: relOverflows, fns: [midY, pillBox, pillFit, edgeSvg, bez, relLayout, nodeLayout, relSvg], consts: { REL } },
+};
+export const FIGURE_KINDS = Object.keys(FIGURES);
+const COMMON_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figKind, figOpen, blabel, chipSvg, figSvg];
+
+export function figSvg(rule, st, uid, flow) {
+  return FIGURES[figKind(rule)].svg(rule, st, uid, flow);
+}
+
+// Label overflow and collision report for one rule: [{ where, text, room } | { where, text, msg }].
+export function figureOverflows(rule) {
+  return FIGURES[figKind(rule)].overflows(rule);
+}
+
+export function figureRuntime(kinds) {
+  const used = FIGURE_KINDS.filter((k) => kinds.includes(k));
+  const consts = Object.assign({ FS, HOT }, ...used.map((k) => FIGURES[k].consts));
+  const fns = [...new Set([...COMMON_FNS, ...used.flatMap((k) => FIGURES[k].fns)])];
+  return [
+    ...Object.entries(consts).map(([name, v]) => 'const ' + name + ' = ' + JSON.stringify(v) + ';'),
+    'const FIGURES = {' + used.map((k) => k + ': { svg: ' + FIGURES[k].svg.name + ' }').join(', ') + '};',
+    ...fns.map((f) => f.toString()),
+  ].join('\n');
 }
