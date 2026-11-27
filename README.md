@@ -264,6 +264,10 @@ boards never need Python or Playwright.
 
 ```
 plugin.json           Antigravity and Agent Plugins manifest
+SECURITY.md           responsible disclosure policy and threat-model scope
+CONTRIBUTING.md       contribution rules, zero-dependency policy, and local checks
+.github/workflows/
+  ci.yml              Node 22/24 CI running npm test and bundled example validation
 assets/
   logo.png            plugin icon for Antigravity and Agent Plugins
 .claude-plugin/
@@ -277,8 +281,9 @@ assets/
 .cursor-plugin/
   plugin.json         Cursor plugin manifest
 skills/proof-canvas/
-  SKILL.md            agent instructions, board schema, and commands
+  SKILL.md            agent instructions, quick schema index, and commands
   references/
+    schema.md         full board JSON schema (Board, run, rules[], 5 figure kinds, states, evidence, flow)
     evidence.md       spec hashing, per-checker log rules, and the JSON receipt format
 scripts/
   render_board.mjs    board JSON -> single-file HTML
