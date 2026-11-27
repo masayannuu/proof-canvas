@@ -232,5 +232,5 @@ Formats and refusals: [`references/evidence.md`](references/evidence.md#mutant-l
 
 ## 6. Scale benchmark
 
-`node "$PLUGIN_ROOT/scripts/bench_scale.mjs"` (add `--no-browser` without `uv`) renders and measures
-3 to 100-rule boards; results and stress-board commands are in [`BENCHMARK.md`](../../BENCHMARK.md).
+`node "$PLUGIN_ROOT/scripts/bench_scale.mjs"` (add `--no-browser` for Node-only metrics without `uv`)
+renders and validates 3 to 100-rule boards and writes measurements to `out/bench/`.
