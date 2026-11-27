@@ -595,8 +595,8 @@ const CSS = `
 .fl-stage > .fl-st-s { flex: none; margin-top: 0.25em; height: 2.833em; line-height: 1.4166; color: var(--pc-ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .fl-stage > .fl-st-b { flex: none; align-self: flex-start; margin-top: 0.695em; height: 1.739em; padding: 0 0.7em; font-size: calc(11.5 * var(--u)); }
 .fl-chips { list-style: none; margin: 0.666em 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.333em; }
-.fl-chip { width: 100%; height: 2.08em; display: flex; align-items: center; gap: 0.48em; padding: 0 0.64em 0 0.32em; border: 1px solid var(--pc-bd); border-radius: 0.56em; background: var(--pc-surface); color: var(--pc-ink-2); font-size: calc(12.5 * var(--u)); text-align: left; }
-.fl-chip:hover { border-color: var(--pc-control); color: var(--pc-ink); }
+.fl-stage .fl-chip { width: 100%; height: 2.08em; display: flex; align-items: center; gap: 0.48em; padding: 0 0.64em 0 0.32em; border: 1px solid var(--pc-bd); border-radius: 0.56em; background: var(--pc-surface); color: var(--pc-ink-2); font-size: calc(12.5 * var(--u)); text-align: left; }
+.fl-stage .fl-chip:hover { border-color: var(--pc-control); color: var(--pc-ink); }
 .fl-chip.is-cp { border-color: var(--tn); box-shadow: 0 0 0 0.16em var(--tn-bd); color: var(--pc-ink); font-weight: 600; }
 .fl-chip-no { display: inline-grid; place-items: center; min-width: 2em; height: 1.636em; padding: 0 0.36em; border-radius: 0.45em; font-size: 0.88em; font-weight: 650; font-variant-numeric: tabular-nums; background: var(--pc-hover); }
 .fl-chip.st-verified .fl-chip-no { background: var(--pc-good-bg); color: var(--pc-good); }
@@ -607,7 +607,7 @@ const CSS = `
 .fl-foot { margin-top: 14px; min-height: 36px; padding-top: 12px; border-top: 1px solid var(--pc-bd); }
 .fl-sum { flex: 1 1 320px; font-size: 14px; font-weight: 600; color: var(--tn); text-wrap: pretty; }
 .fl-hint { font-size: 12.5px; color: var(--pc-ink-3); }
-.fl-cta { margin-left: auto; font-size: 13px; font-weight: 600; padding: 7px 14px; min-height: 34px; border-radius: 8px; border: 0; background: var(--pc-control); color: #fff; white-space: nowrap; }
+.fl-foot .fl-cta { margin-left: auto; font-size: 13px; font-weight: 600; padding: 7px 14px; min-height: 34px; border-radius: 8px; border: 0; background: var(--pc-control); color: #fff; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .fl-run { animation: none; } }
 /*@end*/
 

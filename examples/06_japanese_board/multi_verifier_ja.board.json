@@ -49,7 +49,7 @@
         "id": "approved",
         "from": "access",
         "to": "escrow",
-        "label": "承認された払い出し"
+        "label": "承認された送金"
       },
       {
         "id": "posting",
