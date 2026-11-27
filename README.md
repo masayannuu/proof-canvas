@@ -8,8 +8,8 @@ knowing the spec language, and a validator proves the file is safe to share.
 
 Each rule is drawn as one of three figures, picked to match what the checker proved, with three
 switchable states: **normal**, **bug** (what happens without the rule) and **fixed**. A linked
-screen preview shows what a user would see, and an evidence panel says what was checked, how, and
-within which bounds.
+screen preview shows what a user would see, and a **Proof & log** panel says what was checked, how,
+and within which bounds. An optional flow map shows how the checked parts of a system connect.
 
 | Figure | Draws | Fits |
 |---|---|---|
@@ -25,20 +25,28 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
 | **Alloy `relation`: delegation cycle (Spec & log verified 6/6)** | **TLA+ `sequence`: period-close race (Spec & log verified 6/6)** |
 |---|---|
 | ![Alloy NoCyclicDelegation rule as a relation graph in the bug state, with the delegation_rbac.als excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![TLC ClosedPeriodImmutable rule as a three-lane sequence diagram in the bug state, with the period_lock.tla excerpt](docs/images/02-sequence-race.png) |
-| **Failed rule with a TLA+ counterexample (12 rules, sample)** | **Japanese board copy, same renderer (Spec & log verified 3/3)** |
-| ![Failed escrow payout rule in the bug state with the full TLA+ counterexample trace and evidence panel](docs/images/03-failed-counterexample.png) | ![Japanese-language board with gate, relation and sequence rules bound to the example 05 specs and logs](docs/images/04-japanese-board.png) |
+| **Failed rule with a TLA+ counterexample (12 rules, sample)** | **Japanese board and UI (`"lang": "ja"`, Spec & log verified 3/3)** |
+| ![Failed escrow payout rule in the bug state with the full TLA+ counterexample trace and Proof & log panel](docs/images/03-failed-counterexample.png) | ![Japanese board with the period-close sequence rule in the bug state and the Japanese Proof & log panel, bound to the example 05 specs and logs](docs/images/04-japanese-board.png) |
 | **Module overview with search and status filters (20 rules)** | **Embed mode (`--mode embed`, 900×700)** |
 | ![20-rule multi-module overview with search and status filters](docs/images/05-overview-20rules.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
+| **Flow map: one journey highlighted, with its checkpoint rule** | **Flow map with Japanese UI** |
+| ![Flow map of three stages with the self-approved release journey highlighted, the other stage dimmed, and an Inspect this rule button](docs/images/07-flow-map.png) | ![Japanese flow map with the posting-after-close journey highlighted and a button that opens the checkpoint rule](docs/images/08-flow-map-ja.png) |
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same board and evidence files render to the same bytes.
 - **Evidence binding.** Supply spec files and checker logs to check rule names, file hashes,
-  and reported verdicts. The badge and Evidence panel show which files were checked.
+  and reported verdicts. The badge and Proof & log panel show which files were checked.
 - **Visualization.** You run the checker. proof-canvas renders its results and can compare
   those results with the board JSON.
 - **Scales from 1 to 100+ rules.** Up to 6 rules get a compact pill bar; larger apps get
   modules, a rule index, search, a status filter (All / Failed / Verified / Not checked) and a
   module overview.
+- **Flow map.** An optional `flow` draws 2-6 stages with their rules, labeled arrows between
+  them, and up to 5 journeys. Picking a journey dims the rest and offers a button that opens
+  the rule deciding it in the right state. The map says that arrows show connections and each
+  rule's status comes from its own proof.
+- **English or Japanese UI.** `"lang": "ja"` switches the renderer's own text to Japanese;
+  only the chosen language is written into the HTML.
 - **Embeddable.** All CSS is scoped to the board, nothing uses `100vh`, SVG ids are unique, and
   `--mode embed` drops page-level styles, so a board can sit inside an `<iframe>` or a host page.
 
@@ -61,8 +69,8 @@ in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, search, filters, module overview |
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
-| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures |
-| `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy |
+| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures and a flow map |
+| `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy, Japanese UI and a flow map |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`.
 
@@ -80,7 +88,7 @@ node scripts/validate_board.mjs --in "$example.board.json" --spec "$example.qnt"
   --log "$example.quint.log" out/04_refund_guard.html
 ```
 
-The board shows **Spec & log verified (2/2)**. Open **Evidence** for the exact source and
+The board shows **Spec & log verified (2/2)**. Open **Proof & log** for the exact source and
 line range of each invariant. Repeat `--spec` and `--log` for additional files. Use the
 same set of files on both commands to verify the embedded evidence against disk.
 
@@ -124,16 +132,16 @@ node scripts/validate_board.mjs --in "$example/multi_verifier.board.json" "${fla
   out/05_multi_verifier.html
 ```
 
-The board shows **Spec & log verified (6/6)**. Each **Evidence** card shows the
+The board shows **Spec & log verified (6/6)** and opens on its flow map. Each **Proof & log** card shows the
 rule's checker, log hash, and source excerpt. The footer lists the three checkers
 and the combined log hash. The Quint rules use `gate`, the Alloy rules use `relation`,
 and the TLC period-lock rule uses `sequence`.
 
 The [Japanese board](examples/06_japanese_board/) binds to the same files. Its labels,
-states and evidence text come from the board JSON, so they render in Japanese while the
-renderer's own labels stay in English. Pass the same flags with
+states and evidence text come from the board JSON, and `"lang": "ja"` renders the
+renderer's own labels in Japanese too. Pass the same flags with
 `--in examples/06_japanese_board/multi_verifier_ja.board.json` to get
-**Spec & log verified (3/3)**.
+**実ログ検証済み (3/3)** (Spec & log verified).
 
 ## Install
 
@@ -173,12 +181,12 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 73.4 KB | JSON | 2.2 ms | 27 ms* | 200 | 3.0 ms | 0 | 0 |
-| 12 / 3 | index | 117.1 KB | JSON | 4.8 ms | 46-54 ms | 313 | 3.0 ms | 0 | 0 |
-| 20 / 4 | index | 143.2 KB | JSON | 4.9 ms | 36-46 ms | 365 | 4.8 ms | 0 | 0 |
-| 50 / 10 | index | 250.2 KB | JSON | 8.0 ms | 36-47 ms | 549 | 7.3 ms | 0 | 0 |
-| 100 / 20 | index | 123.5 KB | gzip | 31.4 ms | 37-43 ms | 858 | 8.2 ms | 0 | 0 |
-| 20 / 4, embed at 900x700 | index | 143.1 KB | JSON | 3.8 ms | 34 ms | 358 | 3.2 ms | 0 | 0 |
+| 3 / none | compact | 75.0 KB | JSON | 1.8 ms | 26 ms* | 200 | 4.1 ms | 0 | 0 |
+| 12 / 3 | index | 118.7 KB | JSON | 3.0 ms | 36-42 ms | 313 | 3.3 ms | 0 | 0 |
+| 20 / 4 | index | 144.8 KB | JSON | 3.2 ms | 35-47 ms | 365 | 5.3 ms | 0 | 0 |
+| 50 / 10 | index | 251.7 KB | JSON | 8.9 ms | 34-37 ms | 549 | 6.9 ms | 0 | 0 |
+| 100 / 20 | index | 125.0 KB | gzip | 32.6 ms | 38-57 ms | 858 | 8.9 ms | 0 | 0 |
+| 20 / 4, embed at 900x700 | index | 144.7 KB | JSON | 3.6 ms | 33 ms | 358 | 2.2 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
 connector pills overlapping a card, clipped labels and horizontal page overflow.
@@ -221,13 +229,15 @@ scripts/
   validate_board.mjs  gates: size, structure, offline, svg-markers, embed-safety, provenance, sync, binding
   evidence.mjs        spec hashes, source excerpts, and checker log verdicts
   schema.mjs          board schema, layout and provenance rules
+  flow.mjs            flow map geometry and markup (shared with the browser)
+  i18n.mjs            English and Japanese UI text
   figure.mjs          gate / sequence / relation geometry, text fitting and SVG builders (shared with the browser)
   payload.mjs         JSON / gzip + base64 payload codec
   synth_board.mjs     deterministic synthetic boards for stress tests
   test_validator.mjs  self-tests
   bench_scale.mjs     scale benchmark driver
   bench_browser.py    headless Chromium metrics (development only)
-  sweep_figures.py    headless Chromium layout sweep and screenshots (development only)
+  sweep_figures.py    headless Chromium layout sweep, flow click sweep and screenshots (development only)
 examples/
   00-03               sample boards
   04_refund_guard/    Quint spec and log

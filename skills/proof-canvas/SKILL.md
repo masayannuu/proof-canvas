@@ -36,8 +36,8 @@ Start from an example:
 | `examples/02_escrow_payout.board.json` | 12 | 3 | Index layout, TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with search, filters and the module overview |
 | `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
-| `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board; `gate`, `relation` and `sequence` figures |
-| `examples/06_japanese_board/` | 3 | none | The 05 specs and logs with Japanese board copy, one rule per figure kind |
+| `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board; `gate`, `relation` and `sequence` figures; a three-stage flow map that opens first |
+| `examples/06_japanese_board/` | 3 | none | The 05 specs and logs with `"lang": "ja"`: Japanese board copy and UI, one rule per figure kind, a flow map built from `ruleIds` |
 
 Examples 00 through 03 are illustrative and declare `"provenance": "sample"`: their statuses and
 counterexamples were written by hand, and no checker was run.
@@ -117,6 +117,10 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `generatedAt` | string | ISO 8601 timestamp. |
 | `provenance` | optional `verified \| mixed \| sample \| unverified` | Declared provenance. Use `sample` for illustrative data. See section 5. |
 | `provenanceNote` | optional string | Adds a board note after the computed footer note. |
+| `lang` | optional `en \| ja` | Language of the renderer's UI text and `<html lang>`; default `en`. Only that language ships. |
+| `labels` | optional object | `{ moduleSingular?, modulePlural?, overview? }` rename "module(s)" (e.g. `stage` / `stages`) and the hub button (default `Flow` with a flow map, else `Overview`). Warns above 24 characters. |
+| `defaultView` | optional `rule \| flow` | The first screen; default `rule`. `flow` requires `flow`. |
+| `flow` | optional object | A system flow map across modules (see **`flow`** below). |
 | `run` | object | The checker run (below). |
 | `modules` | optional array | `{ id, title, summary? }`. When present, every rule needs a `moduleId`. |
 | `rules` | array, 1..N | One entry per checked rule (below). |
@@ -170,7 +174,7 @@ relation label collides with another element, shorten it or reorder `nodes`.
 
 **`states.<normal | bug | fixed>`**
 
-One rule is one card. The **Scenario** switch on that card moves the diagram and the screen
+One rule is one card. The **Compare** switch on that card moves the diagram and the screen
 preview together, so put the whole comparison inside one rule: `normal` is the everyday case,
 `bug` is what happens with the rule switched off, and `fixed` is the rule doing its job. Never
 split one rule into two rules or modules ("with rule" and "without rule"): the reader then
@@ -216,6 +220,22 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 | `sourceQuote` | optional string | Verbatim text of the source the rule comes from. |
 | `counterexample` | optional string | Checker trace. On a failed or not-checked rule it shows under **Counterexample** ("No counterexample recorded" when absent). On a verified rule, use it for the trace of the rule switched off (for example a killed mutant); it shows under **Counterexample without this rule**. When a verified rule has none, the section is left out. |
 
+**`flow`** (optional)
+
+Stages are cards listing their rules as clickable chips with verifier status; labeled arrows
+join them; a journey highlights one path and links to the rule that decides it. A fixed caption
+says arrows show connections and each rule's status comes from its own proof, so the map never
+claims the connections were verified. Say in `note` how the checkers ran.
+
+| Field | Type | Notes |
+|---|---|---|
+| `title`, `note` | optional string | Map heading (default "System flow") and a note after the caption. |
+| `steps` | array, 2..6 | `{ id, label, summary?, moduleId?, ruleIds? }`: `ruleIds`, or every rule of `moduleId` (with both, the rules must be in that module); at least one rule. 2-3 stages draw in one row, 4-6 in two. |
+| `edges` | array, 1..9 | `{ id, from, to, label, kind? }` between two different steps, one per direction. `kind`: `normal` (solid), `bypass` (dashed), `handoff` (dotted). |
+| `journeys` | optional array, 1..5 | `{ id, label, tone, summary, stepIds, edgeIds?, checkpointRuleId?, checkpointFocus? }`. `tone`: `normal`, `bug`, `safe`. Both ends of each `edgeIds` edge must be in `stepIds`. `checkpointRuleId` adds a button that opens that rule in `checkpointFocus` (needs `checkpointRuleId`; default by tone: bug → `bug`, safe → `fixed`, else `normal`). |
+
+Ids are unique `[a-zA-Z0-9_-]` strings. Text that does not fit or labels that collide warn.
+
 ## 2. Render
 
 ```bash
@@ -227,7 +247,9 @@ node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
   layout: a floating pill bar (`1. ... | 2. ... | Overview`). Anything larger gets the *index*
   layout: module selector, rule index, search (`/`), a status filter (All / Failed / Verified /
   Not checked, with counts) and a module overview with numbered rule chips colored by status.
-- **Evidence.** Repeat `--spec <path>` and `--log <path>` to bind files. See section 5.
+  A board with `flow` replaces the index toolbar's Overview button with **Flow** and puts a
+  **Flow** pill first in the compact bar; the flow code is left out of boards without `flow`.
+- **Proof & log.** Repeat `--spec <path>` and `--log <path>` to bind files. See section 5.
 - **Payload.** `auto` embeds readable JSON up to 192 KB and gzip + base64 above that, decoded
   by the browser's built-in `DecompressionStream`. The decoded board may not exceed 4 MiB.
 - **Embedding.** `--mode embed` drops page-level CSS (`html`, `body`) so the board can sit inside
@@ -236,7 +258,7 @@ node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
   never uses `100vh`). All CSS is scoped to `.pc-root`.
 - **Warnings.** The renderer prints validator warnings (long labels, text that cannot fit, unknown
   keys) to stderr and still renders; errors stop it with a non-zero exit code.
-- **Keys.** `o` overview, `e` evidence; compact: `1`-`9` jump to a rule; index: `/` search,
+- **Keys.** `o` the flow map (index layout with `flow`) or the overview, `e` proof & log; compact: `1`-`9` jump to a rule; index: `/` search,
   `j` / `k` next / previous rule, `Esc` clears the search.
 
 ## 3. Validate (required)
@@ -277,6 +299,10 @@ rules in one click.
 For a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.html>` shows every
 rule in every state in headless Chromium and fails on figure text outside its box, colliding
 labels, clipped text, page overflow, console errors, or external requests.
+`scripts/sweep_figures.py flow <board.html>` real-clicks a flow map: every journey, its
+checkpoint button (it must land on the exact `checkpointRuleId` and `checkpointFocus`), every
+rule chip, the way back to Flow, and a chip clicked while filters hide its rule. It fails on
+overlapping stages or labels, text outside a stage, page overflow, or console errors.
 
 ## 5. Honesty rules
 

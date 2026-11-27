@@ -58,12 +58,12 @@ benchmark measures the renderer, not a verification.
 
 | Tier | Rules / modules | Layout | Mode | Badge | HTML (budget) | Payload | bytes/rule | Render ms | Validate ms | Deterministic | Validator |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| tier1_3rules | 3 / 0 | compact | standalone | sample | 73.4 KB (128 KB) | JSON | 3293 | 2.21 | 29.54 | yes | PASS |
-| tier1b_escrow | 12 / 3 | index | standalone | failed | 117.1 KB (200 KB) | JSON | 3027 | 4.84 | 2.54 | yes | PASS |
-| tier2_20rules | 20 / 4 | index | standalone | sample | 143.2 KB (200 KB) | JSON | 3101 | 4.86 | 15.84 | yes | PASS |
-| tier3_50rules | 50 / 10 | index | standalone | sample | 250.2 KB (350 KB) | JSON | 3370 | 7.97 | 10.89 | yes | PASS |
-| tier4_100rules | 100 / 20 | index | standalone | sample | 123.5 KB (512 KB) | gzip+base64 | 3380 | 31.4 | 20.84 | yes | PASS |
-| embed_20rules | 20 / 4 | index | embed | sample | 143.1 KB (200 KB) | JSON | 3101 | 3.75 | 7.75 | yes | PASS |
+| tier1_3rules | 3 / 0 | compact | standalone | sample | 75 KB (128 KB) | JSON | 3293 | 1.77 | 2.82 | yes | PASS |
+| tier1b_escrow | 12 / 3 | index | standalone | failed | 118.7 KB (200 KB) | JSON | 3027 | 2.96 | 2.94 | yes | PASS |
+| tier2_20rules | 20 / 4 | index | standalone | sample | 144.8 KB (200 KB) | JSON | 3101 | 3.19 | 4.09 | yes | PASS |
+| tier3_50rules | 50 / 10 | index | standalone | sample | 251.7 KB (350 KB) | JSON | 3370 | 8.92 | 6.48 | yes | PASS |
+| tier4_100rules | 100 / 20 | index | standalone | sample | 125 KB (512 KB) | gzip+base64 | 3380 | 32.57 | 13.93 | yes | PASS |
+| embed_20rules | 20 / 4 | index | embed | sample | 144.7 KB (200 KB) | JSON | 3101 | 3.63 | 7.87 | yes | PASS |
 
 `bytes/rule` is the raw JSON size of the rules divided by their count. Every tier passes the
 validator with zero warnings.
@@ -72,17 +72,17 @@ validator with zero warnings.
 
 | Tier | Viewport | DOMContentLoaded ms | App ready ms | DOM nodes | JS heap MB | Views swept | Min SVG text units (px) | SVG text overflow | Connector overlap px | Clipped labels | Page overflow px | Toolbar rows | Index open at load | Errors (console / page) | External requests | CJK chars |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| tier1_3rules | 1280x800 | 189.3 | 189.1 | 200 | 2.01 | 9 | 13.9 (13.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier1_3rules | 1440x900 | 26.8 | 26.7 | 200 | 2.01 | 9 | 13.9 (13.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier1b_escrow | 1280x800 | 65.5 | 53.8 | 313 | 2.06 | 36 | 13.1 (9.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier1b_escrow | 1440x900 | 46.1 | 45.8 | 313 | 2.06 | 36 | 13.1 (11.4) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier2_20rules | 1280x800 | 46.6 | 46.4 | 365 | 2.19 | 60 | 13.2 (10) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier2_20rules | 1440x900 | 36.2 | 36.1 | 365 | 2.19 | 60 | 13.2 (11.5) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier3_50rules | 1280x800 | 47.1 | 46.8 | 549 | 2.33 | 150 | 13 (9.8) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier3_50rules | 1440x900 | 36.4 | 35.9 | 549 | 2.33 | 150 | 13 (11.3) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier4_100rules | 1280x800 | 11 | 43 | 858 | 2.4 | 300 | 13 (9.8) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| tier4_100rules | 1440x900 | 9.6 | 36.8 | 858 | 2.42 | 300 | 13 (11.3) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
-| embed_20rules | 900x700 | 34.3 | 33.8 | 358 | 2.18 | 60 | 13.2 (13.2) | 0 | 0 | 0 | 0 | 1 | false | 0 / 0 | 0 | 0 |
+| tier1_3rules | 1280x800 | 58.1 | 57.9 | 200 | 2.02 | 9 | 13.9 (13.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier1_3rules | 1440x900 | 26.1 | 25.9 | 200 | 2.02 | 9 | 13.9 (13.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier1b_escrow | 1280x800 | 36.4 | 36.1 | 313 | 2.07 | 36 | 13.1 (9.9) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier1b_escrow | 1440x900 | 42.2 | 42 | 313 | 2.07 | 36 | 13.1 (11.4) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier2_20rules | 1280x800 | 47.4 | 47.2 | 365 | 2.2 | 60 | 13.2 (10) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier2_20rules | 1440x900 | 35.5 | 35.3 | 365 | 2.2 | 60 | 13.2 (11.5) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier3_50rules | 1280x800 | 37.1 | 36.8 | 549 | 2.34 | 150 | 13 (9.8) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier3_50rules | 1440x900 | 34.4 | 34.2 | 549 | 2.34 | 150 | 13 (11.3) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier4_100rules | 1280x800 | 10.2 | 56.6 | 858 | 2.42 | 300 | 13 (9.8) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| tier4_100rules | 1440x900 | 9.3 | 38.1 | 858 | 2.39 | 300 | 13 (11.3) | 0 | 0 | 0 | 0 | 1 | true | 0 / 0 | 0 | 0 |
+| embed_20rules | 900x700 | 32.9 | 32.6 | 358 | 2.19 | 60 | 13.2 (13.2) | 0 | 0 | 0 | 0 | 1 | false | 0 / 0 | 0 | 0 |
 
 "Index open at load" is `true` for the compact tier because the flag is simply unused there.
 
@@ -100,17 +100,17 @@ Pages built only for these checks (`out/bench/check_*.html`).
 
 | Tier | Viewport | switch rule | toggle normal/bug/fixed | toggle Evidence | toggle Overview | switch module | filter failed only | search keyword |
 |---|---|---|---|---|---|---|---|---|
-| tier1_3rules | 1280x800 | 3 (frame 16) | 2.2 (frame 10.2) | 1.8 (frame 10.3) | 2.7 (frame 18.3) | n/a | n/a | n/a |
-| tier1_3rules | 1440x900 | 1.6 (frame 6.6) | 1.6 (frame 12.6) | 1.6 (frame 13.3) | 2.6 (frame 16.4) | n/a | n/a | n/a |
-| tier1b_escrow | 1280x800 | 2 (frame 12.7) | 2.1 (frame 14.2) | 2.4 (frame 10.7) | 2 (frame 12.6) | 2.3 (frame 8.3) | 1.9 (frame 13.7) | 1.9 (frame 10.1) |
-| tier1b_escrow | 1440x900 | 2.4 (frame 12.7) | 2.8 (frame 11.3) | 2.2 (frame 13) | 1.7 (frame 11.4) | 3 (frame 11) | 1.9 (frame 12.3) | 2 (frame 12.8) |
-| tier2_20rules | 1280x800 | 3 (frame 11.6) | 4.8 (frame 10.6) | 2.6 (frame 12.2) | 3.1 (frame 12.8) | 4.1 (frame 13.5) | 3.3 (frame 10.8) | 2 (frame 12.4) |
-| tier2_20rules | 1440x900 | 2.2 (frame 11.1) | 2.5 (frame 12.1) | 2.7 (frame 11) | 2.3 (frame 10.3) | 2.2 (frame 11.2) | 2 (frame 10.6) | 2.4 (frame 8.5) |
-| tier3_50rules | 1280x800 | 4.3 (frame 14.2) | 3.7 (frame 8.9) | 2.8 (frame 8.5) | 7.3 (frame 11.5) | 4 (frame 11.8) | 3.6 (frame 11.8) | 2.9 (frame 11.3) |
-| tier3_50rules | 1440x900 | 4.6 (frame 11.8) | 4 (frame 11.4) | 5 (frame 10.9) | 3.1 (frame 14.4) | 2.3 (frame 11.6) | 2 (frame 11.4) | 2.8 (frame 10.2) |
-| tier4_100rules | 1280x800 | 4 (frame 13.6) | 4.9 (frame 9.5) | 4.3 (frame 9.1) | 8.2 (frame 14) | 2.1 (frame 12.5) | 4.7 (frame 11.3) | 2.6 (frame 15.1) |
-| tier4_100rules | 1440x900 | 4.2 (frame 12.4) | 4.9 (frame 12.4) | 3.5 (frame 11.6) | 6 (frame 14) | 2.7 (frame 9.7) | 2.6 (frame 11.7) | 2.5 (frame 11.3) |
-| embed_20rules | 900x700 | 2 (frame 12.2) | 2.1 (frame 11.4) | 2.2 (frame 12.6) | 1.7 (frame 12.7) | 2.5 (frame 12.7) | 2.3 (frame 12.8) | 3.2 (frame 13.4) |
+| tier1_3rules | 1280x800 | 2.8 (frame 11.9) | 2.9 (frame 10.8) | 2.7 (frame 13.5) | 4.1 (frame 13.9) | n/a | n/a | n/a |
+| tier1_3rules | 1440x900 | 1.7 (frame 11.7) | 1.6 (frame 16.3) | 1.8 (frame 12.7) | 3 (frame 14.8) | n/a | n/a | n/a |
+| tier1b_escrow | 1280x800 | 2.1 (frame 15.8) | 2.1 (frame 11) | 2.6 (frame 14) | 1.5 (frame 11.5) | 1.9 (frame 11.8) | 1.8 (frame 11.7) | 1.9 (frame 13) |
+| tier1b_escrow | 1440x900 | 2.1 (frame 13.6) | 2.7 (frame 17.7) | 2 (frame 17.4) | 2.1 (frame 15.2) | 3.3 (frame 13.9) | 1.7 (frame 13.1) | 1.8 (frame 11.8) |
+| tier2_20rules | 1280x800 | 2.3 (frame 13.8) | 2.4 (frame 14.4) | 2.4 (frame 12.3) | 2 (frame 15) | 2.9 (frame 14.1) | 2 (frame 13.3) | 1.9 (frame 13.9) |
+| tier2_20rules | 1440x900 | 2.1 (frame 13.3) | 3.8 (frame 8.3) | 5.3 (frame 9.2) | 2.1 (frame 14) | 2.6 (frame 12) | 2.9 (frame 8.1) | 2 (frame 11.1) |
+| tier3_50rules | 1280x800 | 3 (frame 11.7) | 3.3 (frame 12.7) | 2.8 (frame 5) | 6.9 (frame 11.2) | 2 (frame 10.2) | 1.9 (frame 12.1) | 2.1 (frame 11.2) |
+| tier3_50rules | 1440x900 | 2.6 (frame 10.2) | 3 (frame 8.4) | 2.9 (frame 10.6) | 4 (frame 11.7) | 2.1 (frame 9.3) | 1.9 (frame 7.6) | 2 (frame 10.8) |
+| tier4_100rules | 1280x800 | 4.9 (frame 11.3) | 7.2 (frame 11.6) | 3.6 (frame 12.6) | 8.9 (frame 13.6) | 2 (frame 8.3) | 2.2 (frame 9.4) | 2.9 (frame 8) |
+| tier4_100rules | 1440x900 | 3.7 (frame 9.3) | 4.8 (frame 11.8) | 4.6 (frame 11.9) | 5.8 (frame 12.6) | 4.6 (frame 14.8) | 2.1 (frame 12.2) | 2.6 (frame 7.7) |
+| embed_20rules | 900x700 | 1.6 (frame 13.5) | 2.2 (frame 11.5) | 2.1 (frame 9.7) | 1.6 (frame 7.5) | 1.9 (frame 14.1) | 1.6 (frame 10.8) | 1.7 (frame 12.2) |
 
 ## Screenshots
 
@@ -127,37 +127,57 @@ Pages built only for these checks (`out/bench/check_*.html`).
 | `out/bench/tier4_100rules_failed_overview.png` | 1440x900 | Overview filtered to failed rules |
 | `out/bench/embed_20rules_900.png` | 900x700 | Embed mode: one-row toolbar, index closed, stacked cards |
 
+## Flow map boards (examples 05 and 06)
+
+The tiers above have no `flow`. Examples 05 and 06 do, and open on their flow map. Measured on
+the same machine with the commands in `README.md`, bound to the example 05 specs and logs
+(`--spec` / `--log`).
+
+| Board | Standalone | Embed | Budget |
+|---|---|---|---|
+| 05 multi-verifier (6 rules, 3 stages, 3 journeys) | 130,576 B (127.5 KB) | 130,488 B (127.4 KB) | 128 KB |
+| 06 Japanese (3 rules, 3 stages, 3 journeys, `"lang": "ja"`) | 107,854 B (105.3 KB) | 107,766 B (105.2 KB) | 128 KB |
+
+- **Cost.** The flow code and CSS are written only into boards that have `flow`. Against the
+  previous release (commit `d65cade`), boards without `flow` grow by 1,596-1,612 B, almost all
+  of it the per-language UI text; example 05 grows by 21.2 KB with its flow map.
+- **Click sweep.** `scripts/sweep_figures.py flow` over examples 00-06, standalone and embed, at
+  1440x900 and 900x700: 188 real clicks (every journey, every checkpoint button, every stage
+  rule chip, the way back to Flow, and a chip clicked under active filters on the index layout),
+  0 failures: no stage or label overlap, no text outside a stage, no page overflow, no console
+  errors. The figure sweep (`sweep`) over the same 14 files: 564 views, 0 failures.
+
 ## Analysis
 
 ### What scales well
 
-- **Load.** Every page is interactive in under 55 ms, except the very first page this browser
-  process opened (tier1 at 1280x800: 189 ms in this run, 253 ms in an earlier one), which
-  looks like a cold start. Plain-JSON boards are ready when DOMContentLoaded fires; the gzip
-  board adds about 27-32 ms for `DecompressionStream` and `JSON.parse` (tier4: DOMContentLoaded
-  9.6-11 ms, App ready 36.8-43 ms).
+- **Load.** Every page is interactive in under 60 ms in this run. The slowest is the very first
+  page this browser process opened (tier1 at 1280x800: 57.9 ms here; earlier runs measured
+  189-253 ms for that cold start). Plain-JSON boards are ready when DOMContentLoaded fires; the
+  gzip board adds about 29-46 ms for `DecompressionStream` and `JSON.parse` (tier4:
+  DOMContentLoaded 9.3-10.2 ms, App ready 38.1-56.6 ms).
 - **DOM and memory.** Nodes grow roughly linearly with rules (200 -> 858) and the heap stays at
   2.0-2.4 MB.
 - **Layout.** Across 1,170 swept views (every rule in every state, every viewport) no figure
   text leaves its box, no connector pill touches a card, no label is clipped, the page never
   scrolls sideways and the toolbar stays on one row, including at 900x700 in embed mode.
-- **Latency.** The worst sync median is 8.2 ms (Overview at 100 rules, 1280x800). "frame"
-  values (about 7-18 ms) are dominated by waiting for the next animation frame, not by work.
+- **Latency.** The worst sync median is 8.9 ms (Overview at 100 rules, 1280x800). "frame"
+  values (about 5-18 ms) are dominated by waiting for the next animation frame, not by work.
 
 ### Bottlenecks
 
 1. **Payload dominates file size beyond about 15 rules.** At tier4 the HTML is 37.1 KB payload
-   (gzip + base64), 39.9 KB JS, 34.0 KB CSS and 6.5 KB `<noscript>` text; the compact layout
-   ships 32.2 KB JS and 24.7 KB CSS. The same 100-rule board as plain JSON is 420.8 KB, under
-   the 512 KB limit; 200 rules are 754.9 KB as plain JSON and 182.8 KB with gzip, which is why
+   (gzip + base64), 41.5 KB JS, 34.0 KB CSS and 6.5 KB `<noscript>` text; the compact layout
+   ships 33.8 KB JS and 24.7 KB CSS. The same 100-rule board as plain JSON is 422.3 KB, under
+   the 512 KB limit; 200 rules are 756.5 KB as plain JSON and 184.2 KB with gzip, which is why
    `auto` switches to gzip above 192 KB (covered by a self-test).
 2. **Full re-render of the index.** The index is rebuilt with `innerHTML` on every state
-   change, so its cost is linear in rule count: switch rule and Overview go from about 2-3 ms at
-   20 rules to 4-8 ms at 100. That is fine up to a few hundred rules; above about 1,000 rules
+   change, so its cost is linear in rule count: switch rule and Overview go from about 2 ms at
+   20 rules to 4-9 ms at 100. That is fine up to a few hundred rules; above about 1,000 rules
    the index would need virtualization or keyed updates. This is an extrapolation: 1,000+ rules
    were not measured.
-3. **Node render time is gzip.** tier4 renders in 31.4 ms (22-38 ms in earlier runs) against
-   2.2-8.0 ms for the JSON tiers; most of the difference is `gzipSync` at level 9.
+3. **Node render time is gzip.** tier4 renders in 32.6 ms (22-38 ms in earlier runs) against
+   1.8-8.9 ms for the JSON tiers; most of the difference is `gzipSync` at level 9.
 4. **Small text at 1280 wide.** With the rule index open at 1280x800, the focus figure is drawn
    at about 75% scale, so its smallest text (13 units) is 9.8-10 px on screen. At 1440x900 it
    is 11.3 px or more. A layout that keeps the figure larger at 1280 was not attempted.
@@ -173,8 +193,8 @@ compress far better:
 | Synthetic (tier4, 100 rules) | 3380 | 0.083 |
 
 Projection for 100 rules at hand-written density: about 310 KB raw JSON -> about 55 KB gzip ->
-about 74 KB base64, plus about 86 KB of shell (JS, CSS, `<noscript>` and markup) = about
-**160 KB**, well below 512 KB. This is a projection, not a measurement.
+about 74 KB base64, plus about 88 KB of shell (JS, CSS, `<noscript>` and markup) = about
+**162 KB**, well below 512 KB. This is a projection, not a measurement.
 
 ## Caveats
 
