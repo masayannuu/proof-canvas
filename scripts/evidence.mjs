@@ -347,13 +347,19 @@ function tlcLog(text, specs) {
     ...(hasSteps(statesGenerated) ? { statesGenerated } : {}) };
 }
 
+// An Alloy `check` row: "00. check Name 1/1 SAT", with Alloy 6.2.0's optional " expects=<n>" suffix.
+const ALLOY_CHECK = /^[ \t]*\d+\.[ \t]+(?:\w+[ \t]*:[ \t]*)?check[ \t]+(?:\w+[ \t]*:[ \t]*)?([A-Za-z_]\w*)\b[^\n]*?\b(UNSAT|SAT)(?:[ \t]+expects=\d+)?[ \t]*$/;
+const alloyChecks = (text) => text.split('\n').flatMap((line) => {
+  const m = ALLOY_CHECK.exec(line);
+  return m ? [{ line, property: m[1], sat: m[2] === 'SAT' }] : [];
+});
+
 function textLog(text, specs) {
   const plain = cleanLog(text);
   const quint = quintLog(plain);
   if (quint) return quint;
 
-  const alloy = [...plain.matchAll(/^[ \t]*\d+\.[ \t]+(?:\w+[ \t]*:[ \t]*)?check[ \t]+(?:\w+[ \t]*:[ \t]*)?([A-Za-z_]\w*)\b[^\n]*\b(UNSAT|SAT)[ \t]*$/gm)]
-    .map((m) => resultFor(m[2] === 'UNSAT' ? 'verified' : 'failed', m[1]));
+  const alloy = alloyChecks(plain).map((c) => resultFor(c.sat ? 'failed' : 'verified', c.property));
   if (alloy.length) return { checker: 'Alloy', results: alloy };
 
   const tlc = tlcLog(plain, specs);
@@ -453,7 +459,10 @@ const STEP_CHARS = 180;
 const VALUE_CHARS = 60;
 const MUTANT_CHECKERS = ['Quint', 'Apalache', 'TLC', 'Alloy'];
 const ABSOLUTE_PATHS = /\bfile:\/\/\S*|(?<![\w.@+~-])(?:\/(?:Users|home|var|tmp|private|etc|opt|usr|root|Volumes|proc|sys|mnt|srv|Library|Applications|System|nix)\/|~\/|[a-z]:[\\/]|\\\\)[^\s"'<>|,;()[\]{}]*/gi;
-const stripPaths = (text) => text.replace(ABSOLUTE_PATHS, (path) => '…/' + (path.split(/[/\\]/).filter(Boolean).at(-1) ?? ''));
+// A quoted path may contain spaces ("/Users/Example Person/model.qnt"): the quotes bound it.
+const QUOTED_PATHS = /(["'])(?:file:\/\/|\/(?:Users|home|var|tmp|private|etc|opt|usr|root|Volumes|proc|sys|mnt|srv|Library|Applications|System|nix)\/|~\/|[a-z]:[\\/]|\\\\)[^"'\r\n]*\1/gi;
+const lastSegment = (path) => '…/' + (path.split(/[/\\]/).filter(Boolean).at(-1) ?? '');
+const stripPaths = (text) => text.replace(QUOTED_PATHS, (m, q) => q + lastSegment(m.slice(1, -1)) + q).replace(ABSOLUTE_PATHS, lastSegment);
 const clip = (text, max) => [...text].length > max ? [...text].slice(0, max - 1).join('') + '…' : text;
 const squash = (text) => stripPaths(String(text)).replace(/\s+/g, ' ').replace(/([([{]) /g, '$1').replace(/ ([)\]}])/g, '$1').trim();
 // A changed value is shown from a little before its first difference to the previous value,
@@ -569,6 +578,54 @@ function alloyInstanceLines(command) {
   ];
 }
 
+// A Quint ITF trace (`quint run --out-itf`): `#meta.status` carries the verdict, `vars` the
+// variable names, and every state holds exactly those variables. Apalache's ITF writer omits
+// `#meta.status`, so its verdict must come from the checker's stdout log instead.
+function quintItf(file, json) {
+  const where = `ITF --mutant-log "${file}"`;
+  const status = json['#meta'].status;
+  if (status === undefined) {
+    fail(`${where} records no "#meta.status": only a Quint ITF trace with "status": "violation" binds on its own (an Apalache ITF trace omits the verdict, so bind Apalache's stdout log instead)`);
+  }
+  const vars = json.vars;
+  if (!Array.isArray(vars) || !vars.length || !vars.every((v) => typeof v === 'string' && v.length > 0 && !v.startsWith('#')) || new Set(vars).size !== vars.length) {
+    fail(`${where} needs a non-empty "vars" array of distinct variable names`);
+  }
+  const keys = new Set([...vars, '#meta']);
+  if (!Array.isArray(json.states) || !json.states.length
+    || !json.states.every((st) => isObject(st) && vars.every((v) => Object.hasOwn(st, v)) && Object.keys(st).every((k) => keys.has(k)))) {
+    fail(`${where} needs a non-empty "states" array whose states hold exactly the variables in "vars"`);
+  }
+  return { checker: 'Quint', killed: status === 'violation', violated: [], named: false, ...traceSteps(itfStates(json)) };
+}
+
+// A log may hold several runs (each starts at a quint or tlc2.TLC command line, or at a TLC banner
+// that no command line precedes). Returns the non-blank runs in order.
+function runBlocks(text) {
+  const lines = text.split('\n');
+  const starts = [];
+  let content = false;
+  lines.forEach((line, i) => {
+    const command = QUINT_COMMAND.test(line) || /\btlc2\.TLC\b/.test(line);
+    const banner = /^[ \t]*TLC2 Version\b/.test(line);
+    if (command || (banner && (!starts.length || content))) { starts.push(i); content = false; }
+    else if (line.trim()) content = true;
+  });
+  if (!starts.length || starts[0] > 0) starts.unshift(0);
+  return starts.map((at, n) => lines.slice(at, starts[n + 1]).join('\n')).filter((block) => block.trim());
+}
+
+// The states of one counterexample are numbered without a gap; a restart means two traces.
+function oneTrace(file, states) {
+  const numbers = states.map(({ label }) => Number(/^State (\d+)/.exec(label)[1]));
+  if (numbers.some((n, i) => i > 0 && n !== numbers[i - 1] + 1)) {
+    fail(`--mutant-log "${file}" holds more than one trace in its failing run; split the log so each file holds one run`);
+  }
+  return traceSteps(states);
+}
+
+const PASS_MARKER = /^[ \t]*\[ok\][ \t]+No violation found\b|^[ \t]*Model checking completed\. No error has been found\.|The outcome is:\s*NoError|Checker reports no error/im;
+
 // { checker, killed, violated: names the log reports as violated, named: false when the format
 // cannot name a property (ITF), stepCount, steps }.
 function readMutantLog(file, text) {
@@ -576,11 +633,7 @@ function readMutantLog(file, text) {
     let json;
     try { json = JSON.parse(text); }
     catch { fail(`invalid JSON in --mutant-log "${file}"`); }
-    if (isObject(json?.['#meta']) && Array.isArray(json.states)) {
-      const meta = json['#meta'];
-      return { checker: /\bApalache\b/.test(String(meta.description)) ? 'Apalache' : 'Quint', killed: meta.status === 'violation',
-        violated: [], named: false, ...traceSteps(itfStates(json)) };
-    }
+    if (isObject(json?.['#meta'])) return quintItf(file, json);
     if (isObject(json?.commands)) {
       const checks = Object.entries(json.commands).filter(([, c]) => isObject(c) && c.type === 'check');
       const sat = checks.filter(([, c]) => Array.isArray(c.solution) && c.solution.length);
@@ -591,16 +644,25 @@ function readMutantLog(file, text) {
     }
     fail(`unrecognized --mutant-log JSON "${file}" (expected an ITF trace or an Alloy receipt.json)`);
   }
-  const plain = cleanLog(text);
-  const quint = quintStates(plain);
-  const tlc = quint.length ? [] : tlcStates(plain);
-  const alloy = plain.split('\n').filter((line) => /^[ \t]*\d+\.[ \t]+(?:\w+[ \t]*:[ \t]*)?check\b.*\bSAT[ \t]*$/.test(line) && !/\bUNSAT[ \t]*$/.test(line));
-  const pass = /^[ \t]*\[ok\][ \t]+No violation found\b|^[ \t]*Model checking completed\. No error has been found\.|The outcome is:\s*NoError|Checker reports no error/im.test(plain);
-  const { checker, results } = /\[violation\]/i.test(plain) || !pass ? textLog(plain, []) : { checker: null, results: [] };
-  const failed = results.filter((r) => r.status === 'failed');
-  const trace = quint.length ? traceSteps(quint) : tlc.length ? traceSteps(tlc)
-    : { stepCount: alloy.length, steps: alloy.slice(0, MAX_TRACE_STEPS).map((line) => clip(line.trim().replace(/\s+/g, ' '), STEP_CHARS)) };
-  return { checker, pass, killed: failed.length > 0, violated: unique(failed.map((r) => r.property)), named: true, ...trace };
+  // Verdict and trace come from the same run, so a passing run before the failing one never
+  // leaks its states into the counterexample.
+  const runs = runBlocks(cleanLog(text)).map((block) => {
+    const pass = PASS_MARKER.test(block);
+    const { checker, results } = /\[violation\]/i.test(block) || !pass ? textLog(block, []) : { checker: null, results: [] };
+    return { block, pass, checker, failed: results.filter((r) => r.status === 'failed') };
+  });
+  const failing = runs.filter((run) => run.failed.length);
+  if (failing.length > 1) fail(`--mutant-log "${file}" holds ${failing.length} failing runs; split the log so each file holds one run`);
+  if (!failing.length) {
+    return { checker: runs.find((run) => run.checker)?.checker ?? null, pass: runs.some((run) => run.pass), killed: false, violated: [], named: true, stepCount: 0, steps: [] };
+  }
+  const { block, checker, failed } = failing[0];
+  const quint = quintStates(block);
+  const tlc = quint.length ? [] : tlcStates(block);
+  const alloy = alloyChecks(block).filter((c) => c.sat).map((c) => c.line);
+  const trace = quint.length ? oneTrace(file, quint) : tlc.length ? oneTrace(file, tlc)
+    : { stepCount: alloy.length, steps: alloy.slice(0, MAX_TRACE_STEPS).map((line) => clip(stripPaths(line.trim()).replace(/\s+/g, ' '), STEP_CHARS)) };
+  return { checker, pass: false, killed: true, violated: unique(failed.map((r) => r.property)), named: true, ...trace };
 }
 
 function mutantCounterexample(rule, { file, hash, text }) {
@@ -633,7 +695,7 @@ function bindMutantLogs(board, mutantLogs) {
 function validCounterexample(rule, c) {
   return exactKeys(c, ['file', 'sha256', 'checker', 'violatedProperty', 'stepCount', 'steps']) && safeFile(c.file)
     && typeof c.sha256 === 'string' && SHA256.test(c.sha256) && MUTANT_CHECKERS.includes(c.checker)
-    && (c.violatedProperty === rule.property || (c.violatedProperty === null && /\.json$/i.test(c.file) && ['Quint', 'Apalache'].includes(c.checker)))
+    && (c.violatedProperty === rule.property || (c.violatedProperty === null && /\.json$/i.test(c.file) && c.checker === 'Quint'))
     && Number.isSafeInteger(c.stepCount) && c.stepCount >= 1 && Array.isArray(c.steps) && c.steps.length === Math.min(c.stepCount, MAX_TRACE_STEPS)
     && c.steps.every((s) => typeof s === 'string' && s.trim() === s && s.length > 0 && [...s].length <= STEP_CHARS && !/[\r\n]/.test(s) && !absolutePath.test(s));
 }

@@ -10,7 +10,7 @@
   "run": {
     "tool": "Quint / TLA+ TLC",
     "status": "verified",
-    "bounds": "Quint ランダム探索 2000 本 × 最大 12〜16 ステップ · TLC 深さ 5（138 状態）"
+    "bounds": "Quint ランダム探索 2000 本 × 最大 12〜16 ステップ · TLC 205 生成 / 115 固有状態・深さ 5"
   },
   "outOfScope": [
     {
@@ -585,9 +585,9 @@
         "ifEnforced": "漏れたコードで先に交換した攻撃者のトークンも無効になる。",
         "ifNotEnforced": "攻撃者が先に得たトークンを使い続けられる。",
         "checkerSummary": "TLC: 深さ 5 の全状態で違反なし",
-        "scope": "TLC · 深さ 5（115 状態）",
+        "scope": "TLC · 205 生成 / 115 固有状態・深さ 5",
         "method": "TLC 全状態探索（幅優先）",
-        "witness": "再交換→失効に到達（TLC 138 生成 / 89 状態）"
+        "witness": "正常モデルの証人 WitnessNoGhostReplayRevoke が深さ 5 で再交換→失効に到達"
       }
     }
   ]

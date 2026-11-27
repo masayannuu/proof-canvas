@@ -281,6 +281,7 @@ const CSS = `
 /*@trace*/
 .tr-steps { list-style: none; margin: 8px 0 0; padding: 2px 0 2px 12px; border-left: 2px solid var(--pc-bd-strong); font: 11.5px/1.6 var(--pc-mono); color: var(--pc-ink-2); }
 .tr-steps li { overflow-wrap: anywhere; }
+.tp.tp-unnamed { color: var(--pc-warn); border-color: var(--pc-warn-bd); }
 /*@end*/
 /*@oos*/
 /* Out of scope: a calm note under the main view */
@@ -784,8 +785,12 @@ ${SHARED_FNS}
   const focusOf = (r) => S.focusByRule[r.id] || r.defaultFocus;
   const hasTrace = (r) => !!BINDING.counterexamples && Object.hasOwn(BINDING.counterexamples, r.id);
   const kv = (k, v, code) => '<span>' + esc(k) + '</span>' + (code ? '<code>' + esc(v) + '</code>' : '<span>' + esc(v) + '</span>');
-  // Honest label for a bug story: bound to a real mutant counterexample, or a drawing only.
-  const tracePill = (r) => '<span class="tp tp-' + (hasTrace(r) ? 'bound">' + esc(L.traceBound) : 'illus">' + esc(L.traceIllus)) + '</span>';
+  // Honest label for a bug story: a mutant kill matched to the rule's property, a trace whose format
+  // names no property (Quint ITF), or a drawing only.
+  const tracePill = (r) => {
+    const k = !hasTrace(r) ? 'Illus' : BINDING.counterexamples[r.id].violatedProperty === null ? 'Unnamed' : 'Bound';
+    return '<span class="tp tp-' + k.toLowerCase() + '">' + esc(L['trace' + k]) + '</span>';
+  };
   let traceHtml = () => '';
   /*@trace*/
   // Read-only machine evidence from __binding.counterexamples, never from board prose.

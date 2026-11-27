@@ -349,13 +349,12 @@ format: [`references/evidence.md`](references/evidence.md).
 ### Mutant logs
 
 `--mutant-log <ruleId>=<path>` binds the log of a mutant run (the rule switched off) to one
-rule. It reads Quint stdout and ITF `.itf.json`, TLC stdout, and Alloy stdout or a receipt JSON.
-The log must report a violation: `[ok]`, `No error has been found` and `UNSAT` are refused. A
-named violated property must equal the rule's `property`; a log naming another invariant or
-several is refused. ITF traces name no property and are shown as unnamed. The board keeps the
-file name, SHA-256, checker, property and up to 12 extracted steps, and shows **Trace-bound
-mutant kill** with those steps under **Proof & log**. A bug state without one says
-**Illustrative only (no trace bound)**.
+rule. The log must report a violation (`[ok]`, `No error has been found` and `UNSAT` are
+refused), and a named violated property must equal the rule's `property`. **Proof & log** pairs
+your bug drawing with the file name, SHA-256 and up to 12 steps extracted from the one failing
+run. A property-matched kill shows **Trace-bound mutant kill**; a Quint ITF trace, which names no
+property, **Trace attached (property unnamed)**; no log, **Illustrative only (no trace bound)**.
+Formats and refusals: [`references/evidence.md`](references/evidence.md#mutant-logs).
 
 ## 6. Scale benchmark
 

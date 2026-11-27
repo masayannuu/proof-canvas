@@ -1928,6 +1928,61 @@ test('bounds and witness: run.bounds is one escaped line above every view, tree-
   assert.deepEqual(validateBoardData(b).warnings, []);
 });
 
+test('mutant-log: a passing run before the failing one never leaks into the trace; two failing runs or a restarted trace fail closed', () => {
+  const pass = '$ quint run m.qnt --invariant=NonNegative\nAn example execution:\n\n[State 0] { n: 0 }\n\n[State 1] { n: 1 }\n\n[State 2] { n: 2 }\n\n[ok] No violation found (18ms).\n';
+  const kill = '$ quint run m.qnt --invariant=NoOverlappingBookings\nAn example execution:\n\n[State 0] { n: 0 }\n\n[State 1] { n: 7 }\n\n[violation] Found an issue (66ms).\nerror: Invariant violated\n';
+  const t = traceOf(MUT('quint_concat.log', pass + kill));
+  assert.deepEqual([t.violatedProperty, t.stepCount, t.steps], ['NoOverlappingBookings', 2, ['State 0: n = 0', 'State 1: n = 7']]);
+  const tlcPass = '$ java tlc2.TLC -config P.cfg M.tla\nTLC2 Version 2.19\nModel checking completed. No error has been found.\n9 states generated, 5 distinct states found.\n';
+  assert.deepEqual(traceOf(MUT('tlc_concat.log', tlcPass + tlc('NoOverlappingBookings'))).steps, traceOf(TLC_KILL).steps);
+  bindErr(() => bindOne(MUT('quint_two_kills.log', kill + kill)), /holds 2 failing runs; split the log/);
+  bindErr(() => bindOne(MUT('quint_restart.log', kill.replace('[violation]', '[State 0] { n: 0 }\n\n[violation]'))), /more than one trace in its failing run; split the log/);
+});
+
+test('mutant-log: ITF binds only as a well-formed Quint trace; Apalache ITF and malformed traces are refused', () => {
+  const base = JSON.parse(itf('violation'));
+  const bad = (name, edit) => { const j = clone(base); edit(j); return MUT(name, JSON.stringify(j)); };
+  bindErr(() => bindOne(bad('apalache.itf.json', (j) => { delete j['#meta'].status; j['#meta'].description = 'Created by Apalache'; })), /records no "#meta.status".*bind Apalache's stdout log/);
+  bindErr(() => bindOne(bad('novars.itf.json', (j) => { delete j.vars; })), /non-empty "vars" array/);
+  bindErr(() => bindOne(bad('blankvar.itf.json', (j) => { j.vars = ['']; })), /non-empty "vars" array/);
+  bindErr(() => bindOne(bad('nostates.itf.json', (j) => { j.states = []; })), /"states" array whose states hold exactly/);
+  bindErr(() => bindOne(bad('missing.itf.json', (j) => { delete j.states[1].s; })), /"states" array whose states hold exactly/);
+  bindErr(() => bindOne(bad('extra.itf.json', (j) => { j.states[0].ghost = 1; })), /"states" array whose states hold exactly/);
+  bindErr(() => bindOne(bad('scalar.itf.json', (j) => { j.states[0] = 3; })), /"states" array whose states hold exactly/);
+  const forged = bindOne(ITF_KILL);
+  forged.counterexamples.no_double_booking.checker = 'Apalache';
+  assert.throws(() => validateBinding(EX1, forged), /invalid embedded mutant counterexample metadata/);
+});
+
+test('trace UI: only a property-matched kill earns the trace-bound pill; a property-less ITF trace says "Trace attached (property unnamed)"', () => {
+  const pillOf = (board, mutantLogs, id) => {
+    const html = renderBoardHtml(board, { mutantLogs });
+    const binding = bindEvidence(board, { mutantLogs });
+    const code = [/const hasTrace = [^\n]*/.exec(html)[0], /const tracePill = \(r\) => \{[\s\S]*?\n\s*\};/.exec(html)[0]].join('\n');
+    const ctx = { BINDING: binding, L: uiFor(board, binding), esc: (x) => x };
+    runInNewContext(code + '\nthis.out = tracePill({ id: ' + JSON.stringify(id) + ' });', ctx);
+    return ctx.out;
+  };
+  const itfLog = [{ ruleId: 'no_double_booking', path: ITF_KILL }];
+  assert.equal(pillOf(EX1, itfLog, 'no_double_booking'), '<span class="tp tp-unnamed">Trace attached (property unnamed)</span>');
+  assert.equal(pillOf(EX1, itfLog, EX1.rules[1].id), '<span class="tp tp-illus">Illustrative only (no trace bound)</span>');
+  assert.equal(pillOf(EX1, [{ ruleId: 'no_double_booking', path: TLC_KILL }], 'no_double_booking'), '<span class="tp tp-bound">Trace-bound mutant kill</span>');
+  assert.equal(pillOf(EX6, [{ ruleId: 'refund_cap', path: ITF_KILL }], 'refund_cap'), '<span class="tp tp-unnamed">反例添付（性質名なし）</span>');
+  assert.equal(renderBoardHtml(EX1, { mutantLogs: itfLog }).includes('.tp.tp-unnamed{'), true);
+  assert.equal(renderBoardHtml(EX1).includes('tp-unnamed'), false, 'boards without traces do not carry the unnamed pill');
+});
+
+test('mutant-log: Alloy 6.2.0 "SAT expects=0" binds, "UNSAT expects=0" is not a kill; quoted paths with spaces keep only their last segment', () => {
+  const a = traceOf(MUT('alloy_expects.log', '00. check NoOverlappingBookings   1/1     SAT expects=0\n'));
+  assert.deepEqual([a.checker, a.violatedProperty, a.steps], ['Alloy', 'NoOverlappingBookings', ['00. check NoOverlappingBookings 1/1 SAT expects=0']]);
+  bindErr(() => bindOne(MUT('alloy_expects_unsat.log', '00. check NoOverlappingBookings   1/1     UNSAT expects=0\n')), /reports no violation/);
+  const states = (n) => `[State ${n}] { log: "/Users/foo/Library/Application Support/x/run.log", model: "/Users/Example Person/private/model.qnt", n: ${n} }\n\n`;
+  const q = traceOf(MUT('quint_space.log', '$ quint run m.qnt --invariant=NoOverlappingBookings\n' + states(0) + states(1) + '[violation] Found an issue.\n'));
+  assert.deepEqual(q.steps, ['State 0: log = "…/run.log"; model = "…/model.qnt"; n = 0', 'State 1: n = 1']);
+  const t = traceOf(MUT('tlc_space.log', tlc('NoOverlappingBookings').replaceAll('"C:\\\\work\\\\run.txt"', "'C:\\\\Users\\\\Example Person\\\\run log.txt'")));
+  assert.equal(t.steps[0], "State 1 · Initial predicate: bookings = {}; log = '…/run log.txt'");
+});
+
 // ---------------------------------------------------------------------------------------------
 // state and timeline figures (example 07)
 // ---------------------------------------------------------------------------------------------
@@ -2047,6 +2102,12 @@ test('timeline: two events on one tick stack upward, the pin joins them, a fourt
   const wide = clone(worst);
   wide.rules[TL_RULE].figure.ticks[1].label = 'renewal requested by the client application after expiry';
   assert.ok(validateBoardData(wide).warnings.some((w) => w.startsWith(`$.rules[${TL_RULE}].figure.ticks[1].label`)));
+});
+
+test('timeline: an event label wider than its box even at the minimum font size warns', () => {
+  const wide = editRule(TL_RULE, (x) => { x.figure.events[0].label = 'Authorization code issued to the client'; });
+  assert.ok(hasWarning(validateBoardData(wide), `$.rules[${TL_RULE}].figure.events[0].label: "Authorization code issued to the client" does not fit its 220-unit box`));
+  assert.deepEqual(validateBoardData(EX7).warnings, []);
 });
 
 test('timeline: invalid ticks, bars, events and state references are errors', () => {

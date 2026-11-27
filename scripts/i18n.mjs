@@ -24,7 +24,7 @@ export function uiEn(o) {
     compare: 'Compare',
     evTitle: 'Proof & log', evOpen: 'Show details', evClose: 'Hide details',
     rule: 'Rule', ifOn: 'If enforced', ifOff: 'If not enforced', quote: 'Source text', meta: 'Verification metadata',
-    scope: 'Scope', method: 'Method', tool: 'Tool', binding: 'Evidence binding', specHash: 'Spec hash', logHash: 'Log hash',
+    scope: 'Scope', method: 'Method', tool: 'Tool', binding: 'Spec & log binding', specHash: 'Spec hash', logHash: 'Log hash',
     steps: 'Steps checked', specSource: 'Spec source', witness: 'Witness hits', bounds: 'Bounded check', scopeChip: 'Scope',
     traceBound: 'Trace-bound mutant kill', traceIllus: 'Illustrative only (no trace bound)',
     cexTitle: 'Counterexample', cexOff: 'Counterexample without this rule', noCex: 'No counterexample recorded',
@@ -75,7 +75,7 @@ export function uiJa(o) {
     compare: '動きを比べる',
     evTitle: '根拠と実ログ', evOpen: '詳細を表示', evClose: '詳細を閉じる',
     rule: 'ルール', ifOn: '守られているとき', ifOff: '守られないとき', quote: '元の文書', meta: '検証の情報',
-    scope: '確認した範囲', method: '検証の方法', tool: '検証器', binding: '根拠の照合', specHash: '仕様のハッシュ', logHash: 'ログのハッシュ',
+    scope: '確認した範囲', method: '検証の方法', tool: '検証器', binding: '仕様・本体ログ照合', specHash: '仕様のハッシュ', logHash: 'ログのハッシュ',
     steps: '確認したステップ数', specSource: '仕様の該当箇所', witness: '到達の確認', bounds: '探索の境界', scopeChip: '範囲',
     traceBound: '実反例ログ突合済み', traceIllus: '図解のみ（反例ログ未突合）',
     cexTitle: '反例', cexOff: 'このルールがないときの反例', noCex: '反例は記録されていません',
@@ -141,14 +141,14 @@ export function flowUiJa(o) {
 export function traceUiEn() {
   return {
     trTitle: 'Machine-extracted mutant trace', trFile: 'Mutant log', trProp: 'Violated property',
-    trUnnamed: 'Not named by the trace format', trLen: 'Extracted steps', trShown: (n) => ' (' + n + ' shown)',
+    trUnnamed: 'Not named by the trace format', traceUnnamed: 'Trace attached (property unnamed)', trLen: 'Extracted steps', trShown: (n) => ' (' + n + ' shown)',
   };
 }
 
 export function traceUiJa() {
   return {
     trTitle: '機械抽出した変異体の反例', trFile: '変異体のログ', trProp: '違反した性質',
-    trUnnamed: 'トレース形式に性質名なし', trLen: '抽出したステップ', trShown: (n) => '（' + n + ' 件を表示）',
+    trUnnamed: 'トレース形式に性質名なし', traceUnnamed: '反例添付（性質名なし）', trLen: '抽出したステップ', trShown: (n) => '（' + n + ' 件を表示）',
   };
 }
 

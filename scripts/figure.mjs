@@ -561,7 +561,7 @@ export function stmSvg(rule, st, uid) {
 // ---- timeline: time points, lifetime windows and events (TTLs, leases, == boundaries) ----
 
 export const TL = {
-  x0: 80, x1: 660, axisY: 244, labelY: 268, barY: [208, 172, 136], barH: 26, rowY: [92, 58, 24], tickFs: 14.5, gap: 8,
+  x0: 80, x1: 660, axisY: 244, labelY: 268, barY: [208, 172, 136], barH: 26, rowY: [92, 58, 24], tickFs: 14.5, gap: 8, evW: 220,
 };
 
 // Ticks spread evenly on the axis; each label gets the room between its neighbours (and the edge).
@@ -595,11 +595,11 @@ export function tlLayout(rule) {
   const E = [];
   for (const { e, t } of order) {
     const x = T[t].x;
-    const fit = pillFit(e.label, 220);
+    const fit = pillFit(e.label, TL.evW);
     const cx = Math.min(Math.max(x, fit.pw / 2 + 4), 736 - fit.pw / 2);
     let row = 0;
     while (row < TL.rowY.length && placed.some((q) => q.row === row && Math.abs(q.cx - cx) < (q.fit.pw + fit.pw) / 2 + TL.gap)) row++;
-    const ev = { e, x, row, cx, cy: TL.rowY[Math.min(row, TL.rowY.length - 1)], fit, overflow: row >= TL.rowY.length };
+    const ev = { e, x, row, cx, cy: TL.rowY[Math.min(row, TL.rowY.length - 1)], fit, overflow: row >= TL.rowY.length, wide: textW(e.label, fit.fs) > TL.evW - 12 };
     placed.push(ev);
     E[events.indexOf(e)] = ev;
   }
@@ -618,6 +618,7 @@ export function tlOverflows(rule) {
   const boxes = g.events.map((ev) => pillBox(ev.cx, ev.cy, ev.fit));
   g.events.forEach((ev, i) => {
     const say = (msg) => out.push({ where: `figure.events[${i}].label`, text: ev.e.label, msg: `"${ev.e.label}" ${msg}; shorten it or move the event` });
+    if (ev.wide) say(`does not fit its ${TL.evW}-unit box even at the minimum font size`);
     if (ev.overflow) say('needs a fourth row above its tick');
     boxes.forEach((q, j) => {
       const other = g.events[j];

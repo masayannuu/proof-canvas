@@ -36,12 +36,13 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
 
 - **Zero dependencies.** Node 22 or later. No `npm install`, no CDN, no network at view time.
 - **Deterministic.** The same board and evidence files render to the same bytes.
-- **Evidence binding.** Supply spec files and checker logs to check rule names, file hashes,
+- **Spec & log binding.** Supply spec files and checker logs to check rule names, file hashes,
   and reported verdicts. The badge and Proof & log panel show which files were checked.
 - **Trace-bound mutant kills.** `--mutant-log <ruleId>=<path>` binds the log of a killed mutant
-  to a rule. Logs that report no violation, or a different property, are refused; the board
-  shows the extracted steps and **Trace-bound mutant kill**. Without one, a bug state says
-  **Illustrative only (no trace bound)**.
+  to a rule. Logs that report no violation, or a different property, are refused. The bug
+  diagram stays the one you drew; **Proof & log** pairs it with the machine-extracted steps, and
+  the bug state says **Trace-bound mutant kill**. A Quint ITF trace names no property and says
+  **Trace attached (property unnamed)**; without a log it says **Illustrative only (no trace bound)**.
 - **Bounds in view.** `run.bounds` is a line above every view, and each figure carries its
   `evidence.scope` as a chip next to the property.
 - **Visualization.** You run the checker. proof-canvas renders its results and can compare
@@ -80,7 +81,7 @@ in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
 | `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, status filter, module overview |
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
-| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures and a flow map |
+| `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with `gate`, `relation` and `sequence` figures and a flow map |
 | `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy, Japanese UI and a flow map |
 | `examples/07_state_timeline/` | 3 / none | `state` and `timeline` figures, `run.bounds`, and three real Quint and TLC mutant logs bound with `--mutant-log` |
 
@@ -158,8 +159,9 @@ renderer's own labels in Japanese too. Pass the same flags with
 ### Bind killed mutants
 
 A verified rule says the property holds. The mutant run, with the rule switched off, says the
-property can fail, and its trace is what the bug state draws. Bind that trace with
-`--mutant-log <ruleId>=<path>` on both commands:
+property can fail. The bug state is your drawing of that failure; binding the mutant log pairs
+it with the machine-extracted trace under **Proof & log**. Use `--mutant-log <ruleId>=<path>` on
+both commands:
 
 ```bash
 example=examples/07_state_timeline
@@ -174,10 +176,13 @@ node scripts/validate_board.mjs --in "$example/state_timeline_ja.board.json" "${
   out/07_state_timeline.html
 ```
 
-Quint stdout and ITF (`.itf.json`), TLC stdout, and Alloy stdout or receipt JSON are read. A log
-is refused when it reports no violation (`[ok]`, `No error has been found`, `UNSAT`), names a
-violated property other than the rule's `property`, or names several. ITF traces do not name a
-property and are shown as unnamed. The board keeps each log's name, SHA-256, checker, property
+Quint stdout, Quint ITF (`.itf.json` with `"#meta": { "status": "violation" }`), TLC and Apalache
+stdout, and Alloy stdout or receipt JSON are read. A log is refused when it reports no violation
+(`[ok]`, `No error has been found`, `UNSAT`), names a violated property other than the rule's
+`property`, or names several. An ITF trace names no property, so it is not matched to the rule
+and says **Trace attached (property unnamed)** instead of **Trace-bound mutant kill**. Apalache's
+ITF omits the verdict: bind its stdout log instead. When a log concatenates runs, the trace comes
+from the one failing run; with two failing runs, split the log. The board keeps each log's name, SHA-256, checker, property
 and up to 12 extracted steps (long traces keep the first 6 and the last 5); the validator
 extracts them again and fails when anything differs. The three logs in example 07 are real
 `quint run` and TLC 2.19 output, with host paths removed from the TLC log.
@@ -220,11 +225,11 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 75.5 KB | JSON | 1.0 ms | 24 ms* | 203 | 4.3 ms | 0 | 0 |
-| 12 / 3 | index | 114.7 KB | JSON | 1.4 ms | 28-36 ms | 300 | 2.0 ms | 0 | 0 |
-| 20 / 4 | index | 140.8 KB | JSON | 1.9 ms | 29-30 ms | 351 | 2.2 ms | 0 | 0 |
-| 50 / 10 | index | 247.8 KB | JSON | 3.2 ms | 23-26 ms | 529 | 2.8 ms | 0 | 0 |
-| 100 / 20 | index | 121.1 KB | gzip | 9.2 ms | 25-38 ms | 828 | 4.6 ms | 0 | 0 |
+| 3 / none | compact | 75.6 KB | JSON | 1.0 ms | 24 ms* | 203 | 4.3 ms | 0 | 0 |
+| 12 / 3 | index | 114.8 KB | JSON | 1.4 ms | 28-36 ms | 300 | 2.0 ms | 0 | 0 |
+| 20 / 4 | index | 140.9 KB | JSON | 1.9 ms | 29-30 ms | 351 | 2.2 ms | 0 | 0 |
+| 50 / 10 | index | 247.9 KB | JSON | 3.2 ms | 23-26 ms | 529 | 2.8 ms | 0 | 0 |
+| 100 / 20 | index | 121.2 KB | gzip | 9.2 ms | 25-38 ms | 828 | 4.6 ms | 0 | 0 |
 | 20 / 4, embed at 900x700 | index | 140.8 KB | JSON | 1.7 ms | 21 ms | 344 | 1.9 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,

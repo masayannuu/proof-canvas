@@ -101,7 +101,8 @@ DRAWER_PROBE_JS = """(rid) => {
   const ev = root.querySelector('.ev');
   const out = { overflowX: de.scrollWidth - de.clientWidth, wrongPill: 0, wrongTrace: 0, spill: 0, clipped: 0 };
   const pill = bar && bar.querySelector('.tp');
-  if (!pill || pill.classList.contains(c ? 'tp-illus' : 'tp-bound')) out.wrongPill += 1;
+  const want = !c ? 'tp-illus' : c.violatedProperty === null ? 'tp-unnamed' : 'tp-bound';
+  if (!pill || !pill.classList.contains(want)) out.wrongPill += 1;
   const steps = [...ev.querySelectorAll('.tr-steps li')].map((li) => li.textContent);
   if (c ? JSON.stringify(steps) !== JSON.stringify(c.steps) : steps.length) out.wrongTrace += 1;
   if (bar && bar.getBoundingClientRect().right > card.right + 0.5) out.spill += 1;

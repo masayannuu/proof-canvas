@@ -1,7 +1,7 @@
-# Evidence files: spec and checker log details
+# Evidence files: spec, checker log and mutant log details
 
-Detail for section 5 of [`SKILL.md`](../SKILL.md): how `--spec` and `--log` files are hashed,
-matched to rules, and read.
+Detail for section 5 of [`SKILL.md`](../SKILL.md): how `--spec`, `--log` and `--mutant-log` files
+are hashed, matched to rules, and read.
 
 ## Spec files
 
@@ -58,3 +58,31 @@ The log producer supplies the record of what the checker ran. In the
 `refund_guard.quint.log` records the Quint command followed by its verbatim output.
 See the [README](../../../README.md#check-a-spec-and-checker-log) for the commands and the
 combined native-log example.
+
+## Mutant logs
+
+`--mutant-log <ruleId>=<path>` reads one of these formats:
+
+| Format | Killed when | Property |
+|---|---|---|
+| Quint stdout (`quint run` / `quint verify`) | `[violation]` | The named invariant, or the single `--invariant` |
+| Quint ITF (`--out-itf`, `.itf.json`) | `"#meta": { "status": "violation" }` | None: shown as **Trace attached (property unnamed)** |
+| TLC stdout | `Error: Invariant X is violated.` | `X` |
+| Apalache stdout | an error outcome naming the invariant | The named invariant, or the single `--inv` |
+| Alloy 6 stdout | a `check` row ending in `SAT` (Alloy 6.2.0 may add ` expects=<n>`) | The check's name |
+| Alloy receipt JSON | a `check` command with a non-empty `solution` | The check's name |
+
+- A log is refused when it reports no violation (`[ok]`, `No error has been found`, `UNSAT`),
+  names a property other than the rule's, or names several.
+- An ITF trace must have a `vars` array of variable names and a non-empty `states` array whose
+  states hold exactly those variables. Apalache's ITF writer omits `#meta.status`, so an Apalache
+  ITF file is refused: bind Apalache's stdout log instead.
+- A log may concatenate runs, each starting at its `quint` or `tlc2.TLC` command line. The verdict
+  and the steps come from the one failing run, so a passing run before it never leaks into the
+  trace. Two failing runs, or a failing run whose states restart, are refused: split the log so
+  each file holds one run.
+- Steps keep the first state in full and then only the variables that change, clipped to 180
+  characters. A trace longer than 12 states keeps the first 6 and the last 5. Absolute paths,
+  quoted ones with spaces included, are cut to their last segment.
+- The validator extracts the steps again from the same files and fails when the file name,
+  SHA-256, checker, property or steps differ.
