@@ -30,11 +30,11 @@ const DESKTOP = [[1280, 800], [1440, 900]];
 const unsample = (b) => { const c = structuredClone(b); delete c.provenance; delete c.provenanceNote; return c; };
 const TIERS = [
   { name: 'tier1_3rules', label: 'Tier 1: 3 rules, no modules (example 01)', source: 'examples/01_room_booking.board.json' },
-  { name: 'tier1b_escrow', label: 'Tier 1b: 12 rules / 3 modules (example 02, sample declaration removed)', source: 'examples/02_escrow_payout.board.json', transform: unsample, searchKeyword: 'dispute' },
-  { name: 'tier2_20rules', label: 'Tier 2: 20 rules / 4 modules (example 03)', source: 'examples/03_multi_module_20rules.board.json', searchKeyword: 'overlap' },
-  { name: 'tier3_50rules', label: 'Tier 3: 50 rules / 10 modules (synthetic)', synth: { rules: 50, modules: 10, failed: 2, unverified: 8, seed: 50 }, searchKeyword: 'expired' },
-  { name: 'tier4_100rules', label: 'Tier 4: 100 rules / 20 modules (synthetic)', synth: { rules: 100, modules: 20, failed: 5, unverified: 20, seed: 100 }, searchKeyword: 'expired' },
-  { name: 'embed_20rules', label: 'Embed: example 03 in embed mode at 900x700', source: 'examples/03_multi_module_20rules.board.json', mode: 'embed', viewports: [[900, 700]], searchKeyword: 'overlap' },
+  { name: 'tier1b_escrow', label: 'Tier 1b: 12 rules / 3 modules (example 02, sample declaration removed)', source: 'examples/02_escrow_payout.board.json', transform: unsample },
+  { name: 'tier2_20rules', label: 'Tier 2: 20 rules / 4 modules (example 03)', source: 'examples/03_multi_module_20rules.board.json' },
+  { name: 'tier3_50rules', label: 'Tier 3: 50 rules / 10 modules (synthetic)', synth: { rules: 50, modules: 10, failed: 2, unverified: 8, seed: 50 } },
+  { name: 'tier4_100rules', label: 'Tier 4: 100 rules / 20 modules (synthetic)', synth: { rules: 100, modules: 20, failed: 5, unverified: 20, seed: 100 } },
+  { name: 'embed_20rules', label: 'Embed: example 03 in embed mode at 900x700', source: 'examples/03_multi_module_20rules.board.json', mode: 'embed', viewports: [[900, 700]] },
 ];
 
 const SCREENSHOTS = [
@@ -44,7 +44,6 @@ const SCREENSHOTS = [
   { tier: 'tier2_20rules', file: 'tier2_20rules_detail.png', state: { ruleId: 'calendar_sync' } },
   { tier: 'tier2_20rules', file: 'tier2_20rules_detail_evidence.png', state: { ruleId: 'cleaning_buffer', evOpen: true } },
   { tier: 'tier3_50rules', file: 'tier3_50rules_filtered.png', state: { status: 'failed' } },
-  { tier: 'tier3_50rules', file: 'tier3_50rules_empty_search.png', state: { q: 'zzzz-no-match' } },
   { tier: 'tier4_100rules', file: 'tier4_100rules_overview.png', state: { view: 'overview' } },
   { tier: 'tier4_100rules', file: 'tier4_100rules_failed_overview.png', state: { view: 'overview', status: 'failed' } },
   { tier: 'embed_20rules', file: 'embed_20rules_900.png', w: 900, h: 700 },
@@ -134,32 +133,23 @@ function nodeStage(outDir) {
       htmlSha256: [...hashes][0],
       validator: { ok: v.ok, errors: v.errors, warnings: v.warnings },
       ids: board.rules.slice(0, 2).map((r) => r.id),
-      moduleIds: (board.modules || []).map((m) => m.id),
       filterStatus: statuses.failed > 0 ? 'failed' : 'verified',
-      searchKeyword: t.searchKeyword || null,
     });
   }
   return tiers;
 }
 
-// Pages for behavior checks that the tiers cannot show: a corrupted payload, a module whose id is
-// "all" (must not collide with the all-modules filter), and a standalone page narrower than 1100 px.
+// Pages for behavior checks that the tiers cannot show: a corrupted payload and a standalone page
+// narrower than 1100 px.
 function checkPages(outDir) {
   const ex = (f) => JSON.parse(readFileSync(join(REPO_ROOT, 'examples', f), 'utf8'));
   const write = (name, html) => { const p = join(outDir, name); writeFileSync(p, html); return rel(p); };
   const gz = renderBoardHtml(ex('01_room_booking.board.json'), { payload: 'gzip' });
   const [p] = findPayloads(gz);
   const corrupt = write('check_corrupt_payload.html', gz.replace(p.text, () => p.text.replace(/[+/]/g, '-')));
-  const allBoard = ex('03_multi_module_20rules.board.json');
-  const firstId = allBoard.modules[0].id;
-  allBoard.modules[0].id = 'all';
-  for (const r of allBoard.rules) if (r.moduleId === firstId) r.moduleId = 'all';
-  const inAll = allBoard.rules.filter((r) => r.moduleId === 'all').length;
-  const moduleAll = write('check_module_all.html', renderBoardHtml(allBoard));
   const narrow = write('check_standalone_1024.html', renderBoardHtml(ex('03_multi_module_20rules.board.json')));
   return [
     { name: 'corrupted payload shows the error box', kind: 'error-box', html: corrupt, w: 1280, h: 800 },
-    { name: 'module id "all" vs the all-modules filter', kind: 'module-all', html: moduleAll, w: 1440, h: 900, expectRows: [inAll, allBoard.rules.length] },
     { name: 'standalone below 1100 px starts with the index closed', kind: 'index-closed', html: narrow, w: 1024, h: 768 },
   ];
 }
@@ -167,7 +157,7 @@ function checkPages(outDir) {
 function browserStage(outDir, tiers) {
   const manifest = {
     checks: checkPages(outDir),
-    tiers: tiers.map((t) => ({ name: t.name, html: t.html, layout: t.layout, viewports: t.viewports, ids: t.ids, moduleIds: t.moduleIds, filterStatus: t.filterStatus, searchKeyword: t.searchKeyword })),
+    tiers: tiers.map((t) => ({ name: t.name, html: t.html, layout: t.layout, viewports: t.viewports, ids: t.ids, filterStatus: t.filterStatus })),
     screenshots: SCREENSHOTS.map((s) => ({ file: s.file, html: tiers.find((t) => t.name === s.tier).html, state: s.state || null, w: s.w || 1440, h: s.h || 900 })),
   };
   const manifestPath = join(outDir, 'manifest.json');

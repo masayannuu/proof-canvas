@@ -16,7 +16,7 @@ import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decode
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
 import { checkpointFocus, flowLayout, flowOverflows, flowRuntime, flowView } from './flow.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
-import { ALL_MODULES, footerMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
+import { ALL_JOURNEYS, footerMarkup, oosMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, ruleStatus, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
 import { validateHtmlContent } from './validate_board.mjs';
@@ -341,8 +341,8 @@ test('schema: modules — unknown moduleId and moduleId without modules[] fail',
   c.rules[0].moduleId = 'booking';
   schemaErr(c, '$.rules[0].moduleId');
 });
-test('schema: a module whose id is "all" is legal and never collides with the all-modules filter', () => {
-  assert.equal(SAFE_ID.test(ALL_MODULES), false);
+test('schema: a module whose id is "all" is legal, and "*" (all journeys) can never be a journey id', () => {
+  assert.equal(SAFE_ID.test(ALL_JOURNEYS), false);
   const b = clone(EX3);
   b.modules[0].id = 'all';
   for (const r of b.rules) if (r.moduleId === 'booking') r.moduleId = 'all';
@@ -1487,10 +1487,12 @@ test('flow: stage, edge and journey ids such as constructor, toString and __prot
 test('flow: the injected runtime renders every journey exactly like the server, and the SSR opens on it', () => {
   for (const b of [EX5, EX6]) {
     const ctx = { B: b };
-    runInNewContext([figureRuntime(FIGURE_KINDS), ruleStatus.toString(), uiSource(b), flowRuntime(), 'this.out = (j) => flowView(B, UI(uiOptions(B)), j);'].join('\n'), ctx);
-    for (const jid of JOURNEY_IDS(b)) assert.equal(ctx.out(jid), flowView(b, uiFor(b), jid), `${b.runId} / ${jid}`);
+    runInNewContext([figureRuntime(FIGURE_KINDS), ruleStatus.toString(), uiSource(b), flowRuntime(), 'this.out = (j, sf) => flowView(B, UI(uiOptions(B)), j, sf);'].join('\n'), ctx);
+    for (const jid of JOURNEY_IDS(b)) {
+      for (const sf of ['all', 'failed', 'verified', 'pending']) assert.equal(ctx.out(jid, sf), flowView(b, uiFor(b), jid, sf), `${b.runId} / ${jid} / ${sf}`);
+    }
     const html = renderBoardHtml(b, ex5Evidence());
-    assert.ok(html.includes('<div class="pc-wrap pc-main">' + flowView(b, uiFor(b), '*') + '</div></main>'), 'the SSR shell is not the runtime flow markup');
+    assert.ok(html.includes('<div class="pc-wrap pc-main">' + flowView(b, uiFor(b), '*') + oosMarkup(b, uiFor(b), true) + '</div></main>'), 'the SSR shell is not the runtime flow markup plus the out-of-scope note');
     assert.match(html, /<div class="pc-root" id="proof-canvas-root" data-mode="standalone" data-layout="[a-z]+" data-view="flow" [^>]*data-journey="\*">/);
     assert.equal(html.includes('id="fg-h-focus-'), false, 'a flow-first board still server-renders the first rule');
   }
@@ -1618,10 +1620,10 @@ test('flow: boards without a flow ship no flow code, styles or copy', () => {
 test('lang: Japanese boards get <html lang="ja"> and Japanese chrome; English boards stay CJK-free', () => {
   const ja = renderBoardHtml(EX6, ex5Evidence());
   assert.match(ja, /<html lang="ja">/);
-  for (const s of ['実ログ検証済み (3/3)', 'このボードは実ファイルと突合済みです。', '動きを比べる', '根拠と実ログ', 'このルールがないときの反例', '反例は記録されていません', 'ルールを検索...', 'ルール一覧', '全体の流れ', '全体を見る', 'このルールの詳細を見る →', 'ルールをクリックして詳細を開く', '見本データ', '一部未検証']) {
+  for (const s of ['実ログ検証済み (3/3)', 'このボードは実ファイルと突合済みです。', '動きを比べる', '根拠と実ログ', 'このルールがないときの反例', '反例は記録されていません', 'ルール一覧', '全体の流れ', '全体を見る', 'このルールの詳細を見る →', 'ルールをクリックして詳細を開く', '見本データ', '一部未検証']) {
     assert.ok(ja.includes(s), `missing Japanese chrome "${s}"`);
   }
-  for (const s of ["'Proof & log'", "'Compare'", 'Spec &amp; log verified', "'Search rules…'"]) assert.equal(ja.includes(s), false, `English chrome "${s}" leaked into a Japanese board`);
+  for (const s of ["'Proof & log'", "'Compare'", 'Spec &amp; log verified', "'Filter rules'"]) assert.equal(ja.includes(s), false, `English chrome "${s}" leaked into a Japanese board`);
   const en = renderBoardHtml(EX5, ex5Evidence());
   assert.match(en, /<html lang="en">/);
   assert.equal(CJK.test(en), false, 'an English flow board carries CJK text');
@@ -1630,11 +1632,12 @@ test('lang: Japanese boards get <html lang="ja"> and Japanese chrome; English bo
 });
 
 test('labels: module wording and the overview button follow labels, then the language default', () => {
-  assert.equal(uiFor(EX5).allModules(3), 'All stages (3)');
-  assert.equal(uiFor(EX5).hubOpen, 'Filter to this stage');
-  assert.equal(uiFor(EX3).allModules(4), 'All modules (4)');
-  assert.equal(uiFor(EX6).allModules(3), 'すべての工程 (3)');
-  assert.equal(uiFor({ lang: 'ja' }).allModules(2), 'すべてのグループ (2)');
+  assert.equal(uiFor(EX5).flowAll, 'All stages');
+  assert.equal(uiFor(EX5).hubOpen, 'Open the first rule of this stage');
+  assert.equal(uiFor(EX3).modulesN, 'modules');
+  assert.equal(uiFor(EX3).hubOpen, 'Open the first rule of this module');
+  assert.equal(uiFor(EX6).hubOpen, 'この工程の最初のルールを開く');
+  assert.equal(uiFor({ lang: 'ja' }).modulesN, 'グループ');
   assert.equal(uiFor(EX5).overview, 'Flow');
   assert.equal(uiFor(EX1).overview, 'Overview');
   assert.equal(uiFor(EX6).overview, '全体の流れ');
@@ -1673,8 +1676,82 @@ test('examples 05 and 06: the flow boards bind to real specs and logs with 0 err
       const validated = node('validate_board.mjs', ['--in', input, ...ex5Flags(), output]);
       assert.equal(validated.status, 0, validated.stdout + validated.stderr);
       assert.equal(/WARN|ERR/.test(validated.stdout), false, validated.stdout);
-      assert.ok(readFileSync(output).length < 128 * 1024, `${name} ${mode} is over the 128 KB budget`);
+      assert.ok(readFileSync(output).length <= 128 * 1024, `${name} ${mode} is over the 128 KB budget`);
+      assert.equal((readFileSync(output, 'utf8').match(/<details class="pc-oos" open>/g) || []).length, 1, `${name} ${mode} has no out-of-scope note`);
     }
+  }
+});
+
+// A flow board with one failed and one unchecked rule, so a status filter has hits and misses.
+const MIXED = withFlowEdit(EX5, (b) => {
+  b.rules.find((r) => r.id === 'refund_cap').status = 'failed';
+  delete b.rules.find((r) => r.id === 'period_closed').status;
+  b.run.status = 'failed';
+});
+const chipTags = (html) => Object.fromEntries([...html.matchAll(/class="fl-chip st-([a-z]+)( is-cp)?( is-hit| is-off)?" data-act="flow-rule" data-v="([^"]+)"/g)].map((m) => [m[4], (m[3] || '').trim()]));
+const stageOff = (html) => Object.fromEntries([...html.matchAll(/<section class="fl-stage([^"]*)" data-step="([^"]+)"/g)].map((m) => [m[2], / is-off/.test(m[1])]));
+
+test('toolbar: no board ships a search box, a module select or their shortcut', () => {
+  for (const [name, b] of [...Object.entries(NO_FLOW), ['04_refund_guard', refund], ['05', EX5], ['06', EX6], ['mixed', MIXED]]) {
+    const html = renderBoardHtml(b);
+    for (const s of ['<input', '<select', 'pc-q', 'pc-module', 'pc-search', 'pc-select', 'pc-kbd', "e.key === '/'", 'compositionend', 'data-act="module"', "act === 'module'"]) {
+      assert.equal(html.includes(s), false, `${name} still carries ${s}`);
+    }
+  }
+});
+
+test('flow: a status filter highlights matching chips and dims the rest and stages with no match', () => {
+  const L = uiFor(MIXED);
+  const all = flowView(MIXED, L, '*');
+  assert.deepEqual(Object.values(chipTags(all)), ['', '', '', '', '', '']);
+  assert.equal(/is-hit|is-off/.test(all), false);
+  assert.equal(flowView(MIXED, L, '*', 'all'), all);
+  const failed = flowView(MIXED, L, '*', 'failed');
+  assert.deepEqual(chipTags(failed), { delegation_cycle: 'is-off', self_approval: 'is-off', refund_cap: 'is-hit', nonnegative: 'is-off', period_closed: 'is-off', draft_budget: 'is-off' });
+  assert.deepEqual(stageOff(failed), { access: true, escrow: false, period: true });
+  const verified = flowView(MIXED, L, '*', 'verified');
+  assert.deepEqual(chipTags(verified), { delegation_cycle: 'is-hit', self_approval: 'is-hit', refund_cap: 'is-off', nonnegative: 'is-hit', period_closed: 'is-off', draft_budget: 'is-hit' });
+  assert.deepEqual(stageOff(verified), { access: false, escrow: false, period: false });
+  // A journey and a status filter combine: the journey still dims its stages.
+  const j = MIXED.flow.journeys[0];
+  const both = flowView(MIXED, L, j.id, 'pending');
+  assert.deepEqual(stageOff(both), { access: true, escrow: true, period: false });
+  assert.ok(both.includes('data-journey="' + j.id + '"'));
+  assert.match(both, /class="fl-stage is-(on|dim) is-off/);
+});
+
+test('schema: outOfScope is an optional list of 1 to 12 { area, reason } with non-empty strings', () => {
+  const ok = withFlowEdit(EX1, (b) => { b.outOfScope = [{ area: 'Clock skew', reason: 'Time is a counter in the model.' }]; });
+  assert.deepEqual(validateBoardData(ok).errors, []);
+  assert.deepEqual(validateBoardData(ok).warnings, []);
+  const item = { area: 'A', reason: 'R' };
+  for (const [v, path] of [
+    ['none', '$.outOfScope'], [{}, '$.outOfScope'], [[], '$.outOfScope'], [Array(13).fill(item), '$.outOfScope'],
+    [['x'], '$.outOfScope[0]'], [[{ reason: 'R' }], '$.outOfScope[0].area'], [[{ area: 'A', reason: ' ' }], '$.outOfScope[0].reason'],
+    [[item, { area: 3, reason: 'R' }], '$.outOfScope[1].area'],
+  ]) schemaErr(withFlowEdit(EX1, (b) => { b.outOfScope = v; }), path);
+  assert.deepEqual(validateBoardData(withFlowEdit(EX1, (b) => { b.outOfScope = Array(12).fill(item); })).errors, []);
+  assert.ok(hasWarning(validateBoardData(withFlowEdit(EX1, (b) => { b.outOfScope = [{ ...item, owner: 'x' }]; })), '$.outOfScope[0].owner'));
+});
+
+test('outOfScope: escaped, rendered under the main view in English and Japanese, absent when not given', () => {
+  const x = '<img src=x onerror=alert(1)>"';
+  for (const base of [EX1, EX3, EX5, EX6]) {
+    const b = withFlowEdit(base, (v) => { v.outOfScope = [{ area: x, reason: x + ' & more' }]; });
+    const html = renderBoardHtml(b);
+    expectPass(html);
+    assert.equal(html.includes('<img src=x'), false, b.runId);
+    const note = oosMarkup(b, uiFor(b), true);
+    assert.ok(note.includes('<li><b>&lt;img src=x onerror=alert(1)&gt;&quot;</b>&lt;img src=x onerror=alert(1)&gt;&quot; &amp; more</li>'), note);
+    assert.ok(html.includes(note + '</div></main>'), `${b.runId}: the server shell does not end the main view with the note`);
+    assert.ok(html.includes('function oosMarkup('), `${b.runId}: the runtime cannot redraw the note`);
+    assert.equal(oosMarkup(b, uiFor(b), false).startsWith('<details class="pc-oos"><summary>'), true);
+  }
+  assert.ok(oosMarkup(EX5, uiFor(EX5), true).startsWith('<details class="pc-oos" open><summary>Out of scope (not checked by these models)</summary><ul><li><b>Larger inputs</b>'));
+  assert.ok(oosMarkup(EX6, uiFor(EX6), true).startsWith('<details class="pc-oos" open><summary>モデル外・検証していない範囲</summary><ul><li><b>大きな入力</b>'));
+  for (const b of [EX0, EX1, EX2, EX3, refund]) {
+    const html = renderBoardHtml(b);
+    assert.equal(/pc-oos|oosMarkup|oosOpen/.test(html), false, `${b.runId} carries out-of-scope code without outOfScope`);
   }
 });
 

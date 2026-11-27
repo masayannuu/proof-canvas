@@ -14,9 +14,13 @@ horizontal page overflow, a figure with no measured elements, or a figure withou
 connector anchor. `--shots DIR` also saves the board of every view as a 2x PNG.
 `flow` real-clicks the flow map of each board at each viewport: every journey pill (dimming, summary,
 checkpoint CTA), the CTA (lands on the exact checkpoint rule and focus), every stage rule chip, the way
-back to the map, and, on index layouts, a chip clicked while filters hide its rule. It fails on stage
-or label overlap, text outside or clipped in a stage, horizontal overflow, or any console error. A
-board without a flow must show no flow controls and its overview button must still toggle.
+back to the map, and, on index layouts, every status filter on the map (matching chips highlighted, the
+rest and empty stages dimmed) followed by a matching and a non-matching chip. It fails on stage or
+label overlap, text outside or clipped in a stage, horizontal overflow, or any console error. A board
+without a flow must show no flow controls and its overview button must still toggle. No board may
+show a search box or a select. With `outOfScope`, the note must sit below the main view in every view
+checked, list exactly the JSON entries, fit its box, and keep its open/closed state across re-renders;
+without it there must be no note.
 `shot` saves one 2x screenshot of a board after applying a state.
 """
 
@@ -114,9 +118,9 @@ FLOW_SEEN_JS = """() => {
   const cls = (sel, attr) => Object.fromEntries([...root.querySelectorAll(sel)].map((el) => [el.getAttribute(attr), el.classList.contains('is-on') ? 'on' : el.classList.contains('is-dim') ? 'dim' : '']));
   const pressed = root.querySelector('.board [data-act="focus"][aria-pressed="true"]');
   const navOn = root.querySelector('.ix-row[aria-current="true"], .pc-float-bar [data-act="rule"][aria-pressed="true"]');
-  const q = root.querySelector('#pc-q');
+  const tag = (el) => (el.classList.contains('is-hit') ? 'hit' : el.classList.contains('is-off') ? 'off' : '');
   return {
-    view: S.view, ruleId: S.ruleId, journey: S.journey, status: S.status, module: S.module, q: S.q, focus: S.focusByRule[S.ruleId] || null,
+    view: S.view, ruleId: S.ruleId, journey: S.journey, status: S.status, focus: S.focusByRule[S.ruleId] || null,
     flow: fl ? fl.dataset.journey : null,
     stages: cls('.fl-stage', 'data-step'), edges: cls('.fl-edge', 'data-edge'),
     sum: fl && fl.querySelector('.fl-sum') ? fl.querySelector('.fl-sum').textContent : null,
@@ -125,7 +129,27 @@ FLOW_SEEN_JS = """() => {
     board: root.querySelector('.board[data-board^="focus-"]') ? root.querySelector('.board[data-board^="focus-"]').dataset.board : null,
     pressedFocus: pressed ? pressed.dataset.v : null,
     navOn: navOn ? navOn.dataset.v : null,
-    qValue: q ? q.value : null,
+    chips: fl ? Object.fromEntries([...fl.querySelectorAll('.fl-chip')].map((el) => [el.dataset.v, [[...el.classList].find((c) => c.startsWith('st-')).slice(3), tag(el)]])) : null,
+    stageOff: fl ? Object.fromEntries([...fl.querySelectorAll('.fl-stage')].map((el) => [el.dataset.step, el.classList.contains('is-off')])) : null,
+    fields: root.querySelectorAll('input, select, textarea, #pc-q, #pc-module, .pc-search, .pc-select').length,
+    ixCount: root.querySelector('.ix-count') ? root.querySelector('.ix-count').textContent : null,
+  };
+}"""
+
+# The out-of-scope note: where it sits, what it lists and whether anything in it overflows.
+OOS_PROBE_JS = """() => {
+  const root = document.getElementById('proof-canvas-root');
+  const el = root.querySelector('.pc-oos');
+  if (!el) return null;
+  const R = (e) => e.getBoundingClientRect();
+  const box = R(el);
+  let outside = 0;
+  for (const c of el.querySelectorAll('summary, li, b')) { const r = R(c); outside = Math.max(outside, box.left - r.left, r.right - box.right); }
+  const main = [...root.querySelectorAll('.pc-main > :not(.pc-oos)')].map(R);
+  return {
+    open: el.open, overflow: el.scrollWidth - el.clientWidth, outside: Math.round(outside * 10) / 10,
+    above: main.filter((r) => r.bottom > box.top + 0.5).length,
+    items: [...el.querySelectorAll('li')].map((li) => { const b = li.querySelector('b').textContent; return [b, li.textContent.slice(b.length)]; }),
   };
 }"""
 
@@ -175,7 +199,26 @@ def flow_sweep(browser, html, viewports, shots):
                 Path(shots).mkdir(parents=True, exist_ok=True)
                 page.locator("[data-flow]").screenshot(path=str(Path(shots) / f"{Path(html).stem}-{w}-{label}.png"))
 
+        def oos(label):
+            o = page.evaluate(OOS_PROBE_JS)
+            want = [[x["area"], x["reason"]] for x in board.get("outOfScope", [])]
+            if not want:
+                if o is not None:
+                    fail(f"{at} {label}", "out-of-scope note on a board without outOfScope")
+                return
+            if o is None:
+                fail(f"{at} {label}", "no out-of-scope note")
+                return
+            bad = [f"{k}={o[k]}" for k in ("overflow", "outside", "above") if o[k] > 0]
+            if o["items"] != want:
+                bad.append(f"items={o['items']}")
+            if bad:
+                fail(f"{at} {label} out-of-scope", ", ".join(bad))
+
         try:
+            if page.evaluate(FLOW_SEEN_JS)["fields"]:
+                fail(at, "a search box or select is on screen")
+            oos("first")
             flow = board.get("flow")
             if not flow:
                 # A board without a flow must not grow one; its overview button still toggles.
@@ -184,9 +227,28 @@ def flow_sweep(browser, html, viewports, shots):
                 s = click('.pc-float-bar [data-act="view"][data-v="overview"]', "overview")
                 if s["view"] != "overview":
                     fail(at, f"overview button opened view={s['view']}")
+                oos("overview")
                 s = click('.pc-float-bar [data-act="view"][data-v="overview"]', "overview-back")
                 if s["view"] != "focus":
                     fail(at, f"second overview click left view={s['view']}")
+                if layout == "index":
+                    # A module card opens that module's first rule the status filter shows; it never filters.
+                    rules = board["rules"]
+                    status = lambda r: r.get("status") if r.get("status") in ("verified", "failed") else "pending"
+                    for st in ["all"] + page.eval_on_selector_all('[data-act="status"]:not([disabled])', "(els) => els.map((e) => e.dataset.v)")[1:2]:
+                        click(f'[data-act="status"][data-v="{st}"]', f"status-{st}")
+                        for m in board["modules"]:
+                            first = next((r["id"] for r in rules if r["moduleId"] == m["id"] and st in ("all", status(r))), None)
+                            if first is None:
+                                continue
+                            click('.pc-float-bar [data-act="view"][data-v="overview"]', f"overview-{st}-{m['id']}")
+                            s = click(f'.hub-head[data-v="{m["id"]}"]', f"module-{st}-{m['id']}")
+                            shown = sum(1 for r in rules if st in ("all", status(r)))
+                            got = (s["view"], s["ruleId"], s["status"], s["ixCount"])
+                            want = ("focus", first, st, f"{shown} / {len(rules)}")
+                            if got != want:
+                                fail(f"{at} module card {m['id']} ({st})", f"landed on {got}, want {want}")
+                    click('[data-act="status"][data-v="all"]', "status-reset")
             else:
                 steps = {st["id"]: st for st in flow["steps"]}
                 s = page.evaluate(FLOW_SEEN_JS)
@@ -196,6 +258,20 @@ def flow_sweep(browser, html, viewports, shots):
                 if s["view"] != "flow":
                     s = click(hub_sel, "hub")
                 probe("all")
+                oos("flow")
+                if board.get("outOfScope"):
+                    # Closing the note must survive a re-render (a journey click), then reopen it.
+                    page.locator(".pc-oos > summary").click()
+                    clicks += 1
+                    jb = flow.get("journeys", [{"id": "*"}])[0]["id"]
+                    click(f'.fl-jbar [data-act="journey"][data-v="{jb}"]', "oos-rerender")
+                    if page.evaluate(OOS_PROBE_JS)["open"]:
+                        fail(at, "the out-of-scope note reopened after a re-render")
+                    page.locator(".pc-oos > summary").click()
+                    clicks += 1
+                    click('.fl-jbar [data-act="journey"][data-v="*"]', "oos-back")
+                    if not page.evaluate(OOS_PROBE_JS)["open"]:
+                        fail(at, "the out-of-scope note did not reopen")
                 for j in flow.get("journeys", []):
                     s = click(f'.fl-jbar [data-act="journey"][data-v="{j["id"]}"]', j["id"])
                     exp_st = {k: ("on" if k in j["stepIds"] else "dim") for k in steps}
@@ -231,29 +307,38 @@ def flow_sweep(browser, html, viewports, shots):
                     s = click(f'[data-flow] .fl-chip[data-v="{rid}"]', f"chip-{rid}")
                     if (s["view"], s["ruleId"], s["board"], s["navOn"]) != ("focus", rid, f"focus-{rid}", rid):
                         fail(f"{at} chip {rid}", f"view={s['view']} rule={s['ruleId']} board={s['board']} nav={s['navOn']}")
+                    oos(f"chip-{rid}")
                     s = click(hub_sel, f"chip-{rid}-back")
                     if s["view"] != "flow":
                         fail(f"{at} chip {rid} back", f"view={s['view']}")
                 if layout == "index":
-                    # Narrow the index until the target rule is filtered out, then open it from the map.
-                    rid = chips[-1]
-                    other = page.eval_on_selector_all('[data-act="status"]:not([disabled])', "(els) => els.map((e) => e.dataset.v)")
-                    pick = next((v for v in other if v != "all"), None)
-                    if pick:
-                        click(f'[data-act="status"][data-v="{pick}"]', "status")
-                    if page.locator("#pc-module").count():
-                        mods = page.eval_on_selector_all("#pc-module option", "(els) => els.map((e) => e.value)")
-                        page.locator("#pc-module").select_option(mods[1])
-                        clicks += 1
-                    page.locator("#pc-q").fill("zz-no-match")
-                    settle(page)
-                    if page.evaluate("window.__proofCanvas.getState().view") != "flow":
-                        click(hub_sel, "hub-filtered")
-                    s = click(f'[data-flow] .fl-chip[data-v="{rid}"]', "chip-filtered")
-                    got = (s["view"], s["ruleId"], s["status"], s["module"], s["q"], s["qValue"], s["navOn"])
-                    want = ("focus", rid, "all", "*", "", "", rid)
-                    if got != want:
-                        fail(f"{at} filtered chip {rid}", f"landed on {got}, want {want}")
+                    # Each status filter on the map: matching chips highlighted, the rest and stages with
+                    # no match dimmed; a matching chip keeps the filter, a non-matching one clears it.
+                    stat = {rid: v[0] for rid, v in page.evaluate(FLOW_SEEN_JS)["chips"].items()}
+                    picks = page.eval_on_selector_all('[data-act="status"]:not([disabled])', "(els) => els.map((e) => e.dataset.v)")
+                    for st in [v for v in picks if v != "all"]:
+                        s = click(f'[data-act="status"][data-v="{st}"]', f"status-{st}")
+                        exp_chips = {rid: [v, "hit" if v == st else "off"] for rid, v in stat.items()}
+                        exp_off = {k: not any(stat[r] == st for r in page.eval_on_selector_all(f'[data-flow] .fl-stage[data-step="{k}"] .fl-chip', "(els) => els.map((e) => e.dataset.v)")) for k in steps}
+                        if (s["view"], s["status"]) != ("flow", st) or s["chips"] != exp_chips or s["stageOff"] != exp_off:
+                            fail(f"{at} status {st}", f"view={s['view']} status={s['status']} chips={s['chips']} stageOff={s['stageOff']}")
+                        probe(f"status-{st}")
+                        for rid in [next((r for r in chips if stat[r] == st), None), next((r for r in chips if stat[r] != st), None)]:
+                            if rid is None:
+                                continue
+                            s = click(f'[data-flow] .fl-chip[data-v="{rid}"]', f"status-{st}-chip-{rid}")
+                            keep = st if stat[rid] == st else "all"
+                            got = (s["view"], s["ruleId"], s["status"], s["board"], s["navOn"])
+                            want = ("focus", rid, keep, f"focus-{rid}", rid)
+                            if got != want:
+                                fail(f"{at} status {st} chip {rid}", f"landed on {got}, want {want}")
+                            s = click(hub_sel, f"status-{st}-chip-{rid}-back")
+                            if s["status"] == st:
+                                continue
+                            s = click(f'[data-act="status"][data-v="{st}"]', f"status-{st}-again")
+                        s = click('[data-act="status"][data-v="all"]', f"status-{st}-clear")
+                        if s["status"] != "all" or any(v[1] for v in s["chips"].values()) or any(s["stageOff"].values()):
+                            fail(f"{at} status all", f"chips={s['chips']} stageOff={s['stageOff']}")
         except MissingControl as e:
             fail(at, f"no clickable control {e} (the previous step left the wrong screen)")
         for kind in ["console", "pageErrors", "external"]:
@@ -292,7 +377,7 @@ def sweep(browser, html, viewports, shots):
         for rid in rules:
             for k in ["normal", "bug", "fixed"]:
                 page.evaluate("(s) => window.__proofCanvas.setState(s)",
-                              {"view": "focus", "ruleId": rid, "module": "*", "status": "all", "q": "", "focusByRule": {rid: k}})
+                              {"view": "focus", "ruleId": rid, "status": "all", "focusByRule": {rid: k}})
                 settle(page)
                 p = page.evaluate(PROBE_JS)
                 views += 1

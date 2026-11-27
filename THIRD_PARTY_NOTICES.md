@@ -12,10 +12,10 @@ copied into `scripts/render_board.mjs` (`ICON`).
 | `chevron` | `chevron-down` | Feather | MIT |
 | `left` | `chevron-left` | Feather | MIT |
 | `right` | `chevron-right` | Feather | MIT |
-| `search` | `search` | Feather | MIT |
 | `panel` | `panel-left` (formerly `sidebar`) | Feather | MIT |
 | `shield` | `shield-check` | Lucide | ISC |
 | `grid` | `layout-grid` | Lucide | ISC |
+| `flow` | `workflow` | Lucide | ISC |
 
 The stroke width was changed to 1.5; the path data is identical to the Lucide `main` branch as of
 2026-11-27.

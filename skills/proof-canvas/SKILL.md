@@ -34,7 +34,7 @@ Start from an example:
 | `examples/00_minimal.board.json` | 1 | none | The smallest valid board (reproduced below) |
 | `examples/01_room_booking.board.json` | 3 | none | Compact layout: pill bar and overview |
 | `examples/02_escrow_payout.board.json` | 12 | 3 | Index layout, TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
-| `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with search, filters and the module overview |
+| `examples/03_multi_module_20rules.board.json` | 20 | 4 | Index layout with the status filter and the module overview |
 | `examples/04_refund_guard/` | 2 | none | Spec and real log from Quint 0.32.0 |
 | `examples/05_multi_verifier/` | 6 | 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board; `gate`, `relation` and `sequence` figures; a three-stage flow map that opens first |
 | `examples/06_japanese_board/` | 3 | none | The 05 specs and logs with `"lang": "ja"`: Japanese board copy and UI, one rule per figure kind, a flow map built from `ruleIds` |
@@ -121,6 +121,7 @@ validator warning (typos such as `counterExample` are caught), and top-level key
 | `labels` | optional object | `{ moduleSingular?, modulePlural?, overview? }` rename "module(s)" (e.g. `stage` / `stages`) and the hub button (default `Flow` with a flow map, else `Overview`). Warns above 24 characters. |
 | `defaultView` | optional `rule \| flow` | The first screen; default `rule`. `flow` requires `flow`. |
 | `flow` | optional object | A system flow map across modules (see **`flow`** below). |
+| `outOfScope` | optional array, 1..12 | `{ area, reason }`: what the models leave out; shown under the main view. |
 | `run` | object | The checker run (below). |
 | `modules` | optional array | `{ id, title, summary? }`. When present, every rule needs a `moduleId`. |
 | `rules` | array, 1..N | One entry per checked rule (below). |
@@ -245,10 +246,11 @@ node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
 
 - **Layout is automatic.** Up to 6 rules without modules (or with one module) get the *compact*
   layout: a floating pill bar (`1. ... | 2. ... | Overview`). Anything larger gets the *index*
-  layout: module selector, rule index, search (`/`), a status filter (All / Failed / Verified /
-  Not checked, with counts) and a module overview with numbered rule chips colored by status.
+  layout: a rule index grouped by module, a status filter (All / Failed / Verified / Not checked,
+  with counts; on the flow map it highlights matching rule chips) and a module overview with
+  rule chips colored by status.
   A board with `flow` replaces the index toolbar's Overview button with **Flow** and puts a
-  **Flow** pill first in the compact bar; the flow code is left out of boards without `flow`.
+  **Flow** pill first in the compact bar.
 - **Proof & log.** Repeat `--spec <path>` and `--log <path>` to bind files. See section 5.
 - **Payload.** `auto` embeds readable JSON up to 192 KB and gzip + base64 above that, decoded
   by the browser's built-in `DecompressionStream`. The decoded board may not exceed 4 MiB.
@@ -258,8 +260,8 @@ node "$PLUGIN_ROOT/scripts/render_board.mjs" --in board.json --out board.html
   never uses `100vh`). All CSS is scoped to `.pc-root`.
 - **Warnings.** The renderer prints validator warnings (long labels, text that cannot fit, unknown
   keys) to stderr and still renders; errors stop it with a non-zero exit code.
-- **Keys.** `o` the flow map (index layout with `flow`) or the overview, `e` proof & log; compact: `1`-`9` jump to a rule; index: `/` search,
-  `j` / `k` next / previous rule, `Esc` clears the search.
+- **Keys.** `o` the flow map (index layout with `flow`) or the overview, `e` proof & log; compact: `1`-`9` jump to a rule; index:
+  `j` / `k` next / previous rule.
 
 ## 3. Validate (required)
 
@@ -300,9 +302,9 @@ For a development checkout with `uv`, `scripts/sweep_figures.py sweep <board.htm
 rule in every state in headless Chromium and fails on figure text outside its box, colliding
 labels, clipped text, page overflow, console errors, or external requests.
 `scripts/sweep_figures.py flow <board.html>` real-clicks a flow map: every journey, its
-checkpoint button (it must land on the exact `checkpointRuleId` and `checkpointFocus`), every
-rule chip, the way back to Flow, and a chip clicked while filters hide its rule. It fails on
-overlapping stages or labels, text outside a stage, page overflow, or console errors.
+checkpoint button (it must open `checkpointRuleId` in `checkpointFocus`), every
+rule chip, the way back to Flow, each status filter on the map, and the `outOfScope` note. It
+fails on overlapping stages or labels, text outside a stage, page overflow, or console errors.
 
 ## 5. Honesty rules
 

@@ -174,8 +174,9 @@ export function flowOverflows(board) {
   return out;
 }
 
-// The whole flow view for one journey ('*' = all stages).
-export function flowView(board, L, jid) {
+// The whole flow view for one journey ('*' = all stages). With a status filter `sf` other than
+// 'all', chips of that status are highlighted and the rest (and stages with none) are dimmed.
+export function flowView(board, L, jid, sf = 'all') {
   const f = board.flow;
   const g = flowLayout(board);
   const J = (f.journeys || []).find((j) => j.id === jid) || null;
@@ -202,12 +203,12 @@ export function flowView(board, L, jid) {
     const bad = st.filter((s) => s === 'failed').length;
     const agg = bad ? 'failed' : v < st.length ? 'pending' : 'verified';
     const b = x.box;
-    const cls = J ? (onStep.has(x.step.id) ? ' is-on' : ' is-dim') : '';
+    const cls = (J ? (onStep.has(x.step.id) ? ' is-on' : ' is-dim') : '') + (sf !== 'all' && !st.includes(sf) ? ' is-off' : '');
     return '<section class="fl-stage' + cls + (bad ? ' has-fail' : '') + '" data-step="' + esc(x.step.id) + '" style="left:' + pct(b.x, g.W) + ';top:' + pct(b.y, g.H) + ';width:' + pct(b.w, g.W) + ';height:' + pct(b.h, g.H) + '">' +
       '<h3 class="fl-st-t" title="' + esc(x.step.label) + '">' + esc(x.step.label) + '</h3>' +
       (x.step.summary ? '<p class="fl-st-s">' + esc(x.step.summary) + '</p>' : g.hasSum ? '<p class="fl-st-s"></p>' : '') +
       '<span class="st-pill st-' + agg + ' fl-st-b">' + esc(L.stageBadge(v, st.length, bad)) + '</span><ul class="fl-chips">' +
-      x.rules.map((r, i) => '<li><button type="button" class="fl-chip st-' + st[i] + (r.id === cp ? ' is-cp' : '') + '" data-act="flow-rule" data-v="' + esc(r.id) + '" title="' + esc(r.no + '. ' + r.title) + '">' +
+      x.rules.map((r, i) => '<li><button type="button" class="fl-chip st-' + st[i] + (r.id === cp ? ' is-cp' : '') + (sf === 'all' ? '' : st[i] === sf ? ' is-hit' : ' is-off') + '" data-act="flow-rule" data-v="' + esc(r.id) + '" title="' + esc(r.no + '. ' + r.title) + '">' +
         '<span class="fl-chip-no">' + esc(r.no) + '</span><span class="fl-chip-t">' + esc(r.short) + '</span><span class="st-dot st-' + st[i] + '" role="img" aria-label="' + esc(L.status[st[i]]) + '"></span></button></li>').join('') +
       '</ul></section>';
   }).join('');

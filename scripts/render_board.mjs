@@ -17,8 +17,8 @@ import {
 import { layoutFor, resolveProvenance, ruleStatus, validateBoardData } from './schema.mjs';
 
 export const RENDER_MODES = ['standalone', 'embed'];
-// "All modules" filter value. "*" can never be a module id ([a-zA-Z0-9_-]), so it cannot collide.
-export const ALL_MODULES = '*';
+// "All journeys" value. "*" can never be a journey id ([a-zA-Z0-9_-]), so it cannot collide.
+export const ALL_JOURNEYS = '*';
 
 const USAGE = `Usage:
   node scripts/render_board.mjs --in <board.json> --out <board.html>
@@ -98,6 +98,12 @@ export function footerMarkup(p, board, binding, L, specHash = binding.specHash |
     '<code>tool: ' + esc(tool) + '</code></footer>';
 }
 
+// What the models behind this board do not cover (board.outOfScope), shown under the main view.
+export function oosMarkup(board, L, open) {
+  return '<details class="pc-oos"' + (open ? ' open' : '') + '><summary>' + esc(L.oosTitle) + '</summary><ul>' +
+    board.outOfScope.map((o) => '<li><b>' + esc(o.area) + '</b>' + esc(o.reason) + '</li>').join('') + '</ul></details>';
+}
+
 export function provLabel(p, L) {
   const v = p.verifiedCount;
   const t = p.total;
@@ -153,7 +159,7 @@ const STANDALONE_CSS = 'html, body { margin: 0; padding: 0; } body { background:
 
 const CSS = `
 .pc-root {
-  --pc-surface: #ffffff; --pc-bg: #fafafa; --pc-hover: #f4f4f5; --pc-active: #efeff1;
+  --pc-surface: #ffffff; --pc-bg: #fafafa; --pc-hover: #f4f4f5;
   --pc-ink: #09090b; --pc-ink-2: #52525b; --pc-ink-3: #71717a;
   --pc-bd: #e4e4e7; --pc-bd-strong: #d4d4d8; --pc-control: #18181b;
   --pc-good: #15803d; --pc-good-bg: #f0fdf4; --pc-good-bd: #bbf7d0;
@@ -180,7 +186,6 @@ const CSS = `
 .pc-root code, .pc-root pre { font-family: var(--pc-mono); }
 .pc-root :focus-visible { outline: 2px solid var(--pc-control); outline-offset: 2px; }
 .pc-root svg { flex: none; }
-.pc-root .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* Header */
 .pc-head { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 10px 20px; background: var(--pc-surface); border-bottom: 1px solid var(--pc-bd); }
@@ -215,25 +220,6 @@ const CSS = `
 .pc-float-bar svg { width: 13.5px; height: 13.5px; }
 
 /*@index*/
-/* Index-layout toolbar controls */
-.pc-select { position: relative; display: inline-flex; align-items: center; }
-.pc-select select {
-  appearance: none; -webkit-appearance: none; border: 1px solid var(--pc-bd); background: var(--pc-surface);
-  border-radius: 8px; min-height: 30px; padding: 4px 28px 4px 10px; font-size: 12.5px; font-weight: 500;
-  color: var(--pc-ink); max-width: clamp(140px, 18vw, 260px); text-overflow: ellipsis; cursor: pointer;
-}
-.pc-select select:hover { border-color: var(--pc-bd-strong); }
-.pc-select svg { position: absolute; right: 8px; width: 13px; height: 13px; pointer-events: none; color: var(--pc-ink-3); }
-.pc-search { position: relative; display: inline-flex; align-items: center; }
-.pc-search svg { position: absolute; left: 9px; width: 14px; height: 14px; color: var(--pc-ink-3); pointer-events: none; }
-.pc-search input {
-  width: clamp(120px, 16vw, 200px); min-height: 30px; padding: 4px 28px 4px 29px; border-radius: 8px;
-  border: 1px solid var(--pc-bd); background: var(--pc-surface); font-size: 12.5px; outline: none;
-}
-.pc-search input::placeholder { color: var(--pc-ink-3); }
-.pc-search input:focus { border-color: var(--pc-control); }
-.pc-search input::-webkit-search-cancel-button { display: none; }
-.pc-kbd { position: absolute; right: 7px; font: 600 10.5px/1 var(--pc-mono); color: var(--pc-ink-3); border: 1px solid var(--pc-bd); border-radius: 4px; padding: 2px 4px; pointer-events: none; }
 .pc-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border-radius: 9px; background: var(--pc-hover); }
 .pc-float-bar .pc-seg button { min-height: 26px; padding: 3px 9px; border-radius: 7px; }
 .pc-float-bar .pc-seg button[aria-pressed="true"] { background: var(--pc-surface); color: var(--pc-ink); box-shadow: 0 1px 2px rgb(9 9 11 / 0.10); }
@@ -252,6 +238,14 @@ const CSS = `
 .st-pill.st-verified { color: var(--pc-good); background: var(--pc-good-bg); border-color: var(--pc-good-bd); }
 .st-pill.st-failed { color: var(--pc-bad); background: var(--pc-bad-bg); border-color: var(--pc-bad-bd); }
 .st-pill.st-pending { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-bd); border-style: dashed; }
+/*@end*/
+
+/*@oos*/
+/* Out of scope: a calm note under the main view */
+.pc-oos { margin-top: 14px; padding: 10px 14px; border: 1px dashed var(--pc-bd-strong); border-radius: 12px; background: var(--pc-surface); font-size: 12.5px; line-height: 1.5; color: var(--pc-ink-2); overflow-wrap: anywhere; }
+.pc-oos summary { cursor: pointer; font-weight: 600; color: var(--pc-ink); }
+.pc-oos ul { margin: 6px 0 0; padding-left: 18px; }
+.pc-oos b { font-weight: 600; color: var(--pc-ink); margin-right: 0.6em; }
 /*@end*/
 
 /* Provenance pill */
@@ -284,9 +278,7 @@ const CSS = `
 .ix-head { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px 6px; font-size: 11.5px; font-weight: 600; color: var(--pc-ink-3); letter-spacing: 0.01em; }
 .ix-head .ix-count { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 500; }
 .ix-group + .ix-group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--pc-bd); }
-.ix-mod { width: 100%; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; border-radius: 7px; padding: 5px 8px; text-align: left; }
-.ix-mod:hover { background: var(--pc-hover); }
-.ix-mod[aria-pressed="true"] { background: var(--pc-active); }
+.ix-mod { display: flex; align-items: center; gap: 7px; padding: 5px 8px; }
 .ix-mod-title { flex: 1; min-width: 0; font-size: 12px; font-weight: 600; color: var(--pc-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ix-mod-c { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--pc-ink-3); white-space: nowrap; flex: none; }
 .ix-mod-c b { color: var(--pc-bad); font-weight: 600; }
@@ -298,9 +290,6 @@ const CSS = `
 .ix-row[aria-current="true"] .st-dot.st-pending { border-color: #fcd34d; }
 .ix-no { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--pc-ink-3); min-width: 20px; text-align: right; flex: none; }
 .ix-t { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.ix-empty { padding: 18px 10px; text-align: center; font-size: 12.5px; color: var(--pc-ink-3); display: flex; flex-direction: column; gap: 8px; align-items: center; }
-.pc-link-btn { border: 1px solid var(--pc-bd); background: var(--pc-surface); border-radius: 7px; padding: 3px 10px; font-size: 12px; font-weight: 500; color: var(--pc-ink-2); }
-.pc-link-btn:hover { border-color: var(--pc-bd-strong); color: var(--pc-ink); }
 
 /* Focus breadcrumb */
 .pc-crumb { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; min-height: 32px; font-size: 12.5px; color: var(--pc-ink-3); min-width: 0; }
@@ -311,7 +300,6 @@ const CSS = `
 .crumb-btn:hover:not(:disabled) { border-color: var(--pc-bd-strong); color: var(--pc-ink); }
 .crumb-btn:disabled { opacity: 0.4; }
 .crumb-btn svg { width: 15px; height: 15px; }
-.pc-empty-main { padding: 40px 20px; text-align: center; color: var(--pc-ink-3); font-size: 13px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
 /*@end*/
 
 /* Split board: figure card -> connector -> live preview. --pc-gap also caps the connector label width. */
@@ -598,6 +586,9 @@ const CSS = `
 .fl-stage .fl-chip { width: 100%; height: 2.08em; display: flex; align-items: center; gap: 0.48em; padding: 0 0.64em 0 0.32em; border: 1px solid var(--pc-bd); border-radius: 0.56em; background: var(--pc-surface); color: var(--pc-ink-2); font-size: calc(12.5 * var(--u)); text-align: left; }
 .fl-stage .fl-chip:hover { border-color: var(--pc-control); color: var(--pc-ink); }
 .fl-chip.is-cp { border-color: var(--tn); box-shadow: 0 0 0 0.16em var(--tn-bd); color: var(--pc-ink); font-weight: 600; }
+.fl-stage .fl-chip.is-hit { border-color: currentColor; font-weight: 600; }
+.fl-stage.is-off:not(.is-dim) { opacity: 0.45; }
+.fl-stage:not(.is-off) .fl-chip.is-off { opacity: 0.4; }
 .fl-chip-no { display: inline-grid; place-items: center; min-width: 2em; height: 1.636em; padding: 0 0.36em; border-radius: 0.45em; font-size: 0.88em; font-weight: 650; font-variant-numeric: tabular-nums; background: var(--pc-hover); }
 .fl-chip.st-verified .fl-chip-no { background: var(--pc-good-bg); color: var(--pc-good); }
 .fl-chip.st-failed { border-color: var(--pc-bad-bd); color: var(--pc-bad); }
@@ -688,7 +679,6 @@ ${SHARED_FNS}
   const BINDING = BOARD.__binding;
   const L = UI(uiOptions(BOARD));
   const TITLE = BOARD.__titleOverride || BOARD.title;
-  const ALL = ${JSON.stringify(ALL_MODULES)};
   const STATE_ORDER = ['normal', 'bug', 'fixed'];
   const STATUS_ORDER = ['all', 'failed', 'verified', 'pending'];
 
@@ -706,19 +696,16 @@ ${SHARED_FNS}
     flow: SV('<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>'),
     /*@end*/
     grid: SV('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'),
-    search: SV('<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>'),
     panel: SV('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'),
   };
 
 
-  const norm = (s) => String(s ?? '').normalize('NFKC').toLowerCase();
   const RULES = BOARD.rules;
   const BY_ID = Object.fromEntries(RULES.map((r) => [r.id, r]));
   const MODS = Array.isArray(BOARD.modules) && BOARD.modules.length ? BOARD.modules : [{ id: '__flat', title: TITLE, summary: '' }];
   const MOD_BY_ID = Object.fromEntries(MODS.map((m) => [m.id, m]));
   const modOf = (r) => r.moduleId || MODS[0].id;
   const STATUS = Object.fromEntries(RULES.map((r) => [r.id, ruleStatus(r)]));
-  const HAY = Object.fromEntries(RULES.map((r) => [r.id, norm([r.no, r.short, r.title, r.property, r.category || '', r.source, r.evidence.ruleSummary, MOD_BY_ID[modOf(r)].title].join(' '))]));
   const SPEC_HASH = BINDING.specHash || BOARD.run.specHash;
 
   const S = {
@@ -726,7 +713,7 @@ ${SHARED_FNS}
     focusByRule: Object.fromEntries(RULES.map((r) => [r.id, r.defaultFocus])),
     ovFocus: RULES[0].defaultFocus,
     view: 'focus', evOpen: false,
-    module: ALL, q: '', status: 'all',
+    status: 'all',
     indexOpen: MODE !== 'embed' && window.innerWidth >= 1100,
   };
   const activeRule = () => BY_ID[S.ruleId] || RULES[0];
@@ -734,32 +721,31 @@ ${SHARED_FNS}
   let HUB = 'overview';
   /*@flow*/
   HUB = 'flow';
-  S.journey = ALL;
+  S.journey = ${JSON.stringify(ALL_JOURNEYS)};
   if (BOARD.defaultView === 'flow') S.view = 'flow';
   const JOURNEY = Object.create(null);
   for (const j of BOARD.flow.journeys || []) JOURNEY[j.id] = j;
-  // Open a rule from the flow map: clear the filters so the index layout cannot swap it out.
+  // Open a rule from the flow map; drop the status filter only if it would hide that rule.
   function openFromFlow(id, focus) {
-    S.ruleId = id; S.view = 'focus'; S.module = ALL; S.status = 'all'; S.q = '';
+    S.ruleId = id; S.view = 'focus';
+    if (S.status !== STATUS[id]) S.status = 'all';
     if (focus) S.focusByRule[id] = focus;
   }
   /*@end*/
   const focusOf = (r) => S.focusByRule[r.id] || r.defaultFocus;
+  let oosHtml = () => '';
+  /*@oos*/
+  // Keep the out-of-scope note open or closed across re-renders.
+  S.oosOpen = true;
+  oosHtml = () => oosMarkup(BOARD, L, S.oosOpen);
+  root.addEventListener('toggle', (e) => { if (e.target.classList.contains('pc-oos')) S.oosOpen = e.target.open; }, true);
+  /*@end*/
 
   /*@index*/
-  // ---- filtering (index layout) ----
-  function matchBase(r) {
-    if (S.module !== ALL && modOf(r) !== S.module) return false;
-    if (!S.q) return true;
-    const hay = HAY[r.id];
-    return norm(S.q).split(' ').filter(Boolean).every((t) => hay.includes(t));
-  }
-  const visibleList = () => RULES.filter((r) => matchBase(r) && (S.status === 'all' || STATUS[r.id] === S.status));
-  function statusCounts() {
-    const c = { all: 0, failed: 0, verified: 0, pending: 0 };
-    for (const r of RULES) { if (matchBase(r)) { c.all += 1; c[STATUS[r.id]] += 1; } }
-    return c;
-  }
+  // ---- status filter (index layout) ----
+  const visibleList = () => RULES.filter((r) => S.status === 'all' || STATUS[r.id] === S.status);
+  const COUNTS = { all: RULES.length, failed: 0, verified: 0, pending: 0 };
+  for (const r of RULES) COUNTS[STATUS[r.id]] += 1;
   /*@end*/
 
   // ---- figure / preview / evidence (shared by both layouts) ----
@@ -869,7 +855,6 @@ ${SHARED_FNS}
     root.dataset.focus = focusOf(r);
     root.dataset.layout = LAYOUT;
     root.dataset.status = S.status;
-    root.dataset.module = S.module;
     /*@flow*/
     root.dataset.journey = S.journey;
     /*@end*/
@@ -906,20 +891,16 @@ ${SHARED_FNS}
     /*@flow*/
     if (S.view === 'flow') main = flowView(BOARD, L, S.journey);
     /*@end*/
-    root.innerHTML = headerHtml() + '<main class="pc-canvas">' + compactBar() + '<div class="pc-wrap pc-main">' + main + '</div></main>' + footerHtml();
+    root.innerHTML = headerHtml() + '<main class="pc-canvas">' + compactBar() + '<div class="pc-wrap pc-main">' + main + oosHtml() + '</div></main>' + footerHtml();
   }
   /*@end*/
 
   /*@index*/
   // ================= index layout (7+ rules or multiple modules) =================
   function toolbarHtml() {
-    const opts = '<option value="' + ALL + '">' + esc(L.allModules(MODS.length)) + '</option>' +
-      MODS.map((m) => { const mm = MOD_BY_ID[m.id]; return '<option value="' + esc(m.id) + '">' + esc(mm.title) + '</option>'; }).join('');
     const seg = STATUS_ORDER.map((k) => '<button type="button" data-act="status" data-v="' + k + '">' + (k === 'all' ? '' : '<span class="st-dot st-' + k + '" aria-hidden="true"></span>') + esc(L.status[k]) + ' <span class="n" data-count="' + k + '"></span></button>').join('');
     return '<div class="pc-float-wrap"><div class="pc-float-bar" role="toolbar" aria-label="' + esc(L.toolbar) + '">' +
       '<button type="button" class="pc-tb-icon" data-act="index" aria-label="' + esc(L.index) + '" title="' + esc(L.index) + '">' + ICON.panel + '</button>' +
-      (MODS.length > 1 ? '<label class="pc-select"><span class="sr">' + esc(L.module) + '</span><select id="pc-module" data-change="module">' + opts + '</select>' + ICON.chevron + '</label>' : '') +
-      '<label class="pc-search">' + ICON.search + '<span class="sr">' + esc(L.search) + '</span><input type="search" id="pc-q" placeholder="' + esc(L.searchPh) + '" autocomplete="off" spellcheck="false"><span class="pc-kbd" aria-hidden="true">/</span></label>' +
       '<div class="pc-seg" role="group" aria-label="' + esc(L.statusGroup) + '">' + seg + '</div>' +
       '<span class="pc-float-sep" aria-hidden="true"></span>' +
       '<button type="button" data-act="view" data-v="' + HUB + '">' + (HUB === 'flow' ? ICON.flow : ICON.grid) + esc(L.overview) + '</button></div></div>';
@@ -931,45 +912,32 @@ ${SHARED_FNS}
   }
 
   function syncToolbar() {
-    const c = statusCounts();
-    root.querySelectorAll('[data-count]').forEach((el) => { el.textContent = c[el.dataset.count]; });
+    root.querySelectorAll('[data-count]').forEach((el) => { el.textContent = COUNTS[el.dataset.count]; });
     root.querySelectorAll('[data-act="status"]').forEach((el) => {
       el.setAttribute('aria-pressed', String(S.status === el.dataset.v));
-      el.disabled = el.dataset.v !== 'all' && c[el.dataset.v] === 0 && S.status !== el.dataset.v;
+      el.disabled = COUNTS[el.dataset.v] === 0;
     });
-    const sel = root.querySelector('#pc-module');
-    if (sel) sel.value = S.module;
-    const q = root.querySelector('#pc-q');
-    if (q && q.value !== S.q) q.value = S.q;
     root.querySelector('[data-act="view"]').setAttribute('aria-pressed', String(S.view === HUB));
     root.querySelector('[data-act="index"]').setAttribute('aria-pressed', String(S.indexOpen));
     root.querySelector('.pc-split').dataset.index = S.indexOpen ? 'open' : 'closed';
-  }
-
-  function emptyState() {
-    return '<span>' + esc(L.noMatch) + '</span><button type="button" class="pc-link-btn" data-act="clear">' + esc(L.clear) + '</button>';
   }
 
   function renderIndex(vis) {
     const nav = root.querySelector('#pc-index');
     const visSet = new Set(vis.map((r) => r.id));
     let h = '<div class="ix-head"><span>' + esc(L.rules) + '</span><span class="ix-count">' + vis.length + ' / ' + RULES.length + '</span></div>';
-    if (!vis.length) {
-      h += '<div class="ix-empty">' + emptyState() + '</div>';
-    } else {
-      for (const m of MODS) {
-        const rules = RULES.filter((r) => modOf(r) === m.id);
-        const shown = rules.filter((r) => visSet.has(r.id));
-        if (!shown.length) continue;
-        const ok = rules.filter((r) => STATUS[r.id] === 'verified').length;
-        const bad = rules.filter((r) => STATUS[r.id] === 'failed').length;
-        const mm = MOD_BY_ID[m.id];
-        h += '<div class="ix-group">' + (MODS.length > 1
-          ? '<button type="button" class="ix-mod" data-act="module" data-v="' + esc(m.id) + '" aria-pressed="' + (S.module === m.id) + '" title="' + esc(L.hubOpen) + '"><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + esc(L.nFailed(bad)) + '</b> ' : '') + ok + '/' + rules.length + '</span></button>'
-          : '') + '<ul class="ix-list">' +
-          shown.map((r) => '<li><button type="button" class="ix-row" data-act="rule" data-v="' + esc(r.id) + '" aria-current="' + (S.view === 'focus' && r.id === S.ruleId) + '" title="' + esc(r.title) + '"><span class="ix-no">' + esc(r.no) + '</span><span class="ix-t">' + esc(r.title) + '</span><span class="st-dot st-' + STATUS[r.id] + '" aria-label="' + esc(L.status[STATUS[r.id]]) + '"></span></button></li>').join('') +
-          '</ul></div>';
-      }
+    for (const m of MODS) {
+      const rules = RULES.filter((r) => modOf(r) === m.id);
+      const shown = rules.filter((r) => visSet.has(r.id));
+      if (!shown.length) continue;
+      const ok = rules.filter((r) => STATUS[r.id] === 'verified').length;
+      const bad = rules.filter((r) => STATUS[r.id] === 'failed').length;
+      const mm = MOD_BY_ID[m.id];
+      h += '<div class="ix-group">' + (MODS.length > 1
+        ? '<div class="ix-mod"><span class="ix-mod-title">' + esc(mm.title) + '</span><span class="ix-mod-c">' + (bad ? '<b>' + esc(L.nFailed(bad)) + '</b> ' : '') + ok + '/' + rules.length + '</span></div>'
+        : '') + '<ul class="ix-list">' +
+        shown.map((r) => '<li><button type="button" class="ix-row" data-act="rule" data-v="' + esc(r.id) + '" aria-current="' + (S.view === 'focus' && r.id === S.ruleId) + '" title="' + esc(r.title) + '"><span class="ix-no">' + esc(r.no) + '</span><span class="ix-t">' + esc(r.title) + '</span><span class="st-dot st-' + STATUS[r.id] + '" aria-label="' + esc(L.status[STATUS[r.id]]) + '"></span></button></li>').join('') +
+        '</ul></div>';
     }
     nav.innerHTML = h;
     const cur = nav.querySelector('[aria-current="true"]');
@@ -1017,19 +985,17 @@ ${SHARED_FNS}
         '<ul class="hub-spokes">' + shown.map((r) => '<li><button type="button" class="spoke st-' + STATUS[r.id] + '" data-act="rule-open" data-v="' + esc(r.id) + '" title="' + esc(r.no + '. ' + r.title + ' (' + L.status[STATUS[r.id]] + ')') + '"><span class="spoke-no">' + esc(r.no) + '</span><span class="spoke-t">' + esc(r.short) + '</span></button></li>').join('') + '</ul></section>');
     }
     const lod = RULES.length > 120 ? ' lod-min' : '';
-    const body = cards.length ? '<div class="hv-grid' + lod + '">' + cards.join('') + '</div>' : '<div class="card pc-empty-main">' + emptyState() + '</div>';
-    return sum + body;
+    return sum + '<div class="hv-grid' + lod + '">' + cards.join('') + '</div>';
   }
 
   function renderMain(vis) {
-    const main = root.querySelector('#pc-main');
-    if (S.view === 'overview') { main.innerHTML = hubOverview(vis); return; }
+    const put = (h) => { root.querySelector('#pc-main').innerHTML = h + oosHtml(); };
+    if (S.view === 'overview') return put(hubOverview(vis));
     /*@flow*/
-    if (S.view === 'flow') { main.innerHTML = flowView(BOARD, L, S.journey); return; }
+    if (S.view === 'flow') return put(flowView(BOARD, L, S.journey, S.status));
     /*@end*/
-    if (!vis.length) { main.innerHTML = '<div class="card pc-empty-main" data-empty>' + emptyState() + '</div>'; return; }
     const r = activeRule();
-    main.innerHTML = crumbHtml(r, vis) + boardMarkup(r, focusOf(r), 'focus-' + r.id) + evCard(r);
+    put(crumbHtml(r, vis) + boardMarkup(r, focusOf(r), 'focus-' + r.id) + evCard(r));
   }
 
   function renderIndexLayout() {
@@ -1048,15 +1014,6 @@ ${SHARED_FNS}
     if (next) { S.ruleId = next.id; S.view = 'focus'; render(); }
   }
 
-  root.addEventListener('change', (e) => {
-    if (e.target && e.target.id === 'pc-module') { S.module = e.target.value; render(); }
-  });
-  root.addEventListener('input', (e) => {
-    if (e.target && e.target.id === 'pc-q' && !e.isComposing) { S.q = e.target.value; render(); }
-  });
-  root.addEventListener('compositionend', (e) => {
-    if (e.target && e.target.id === 'pc-q') { S.q = e.target.value; render(); }
-  });
   /*@end*/
 
   function render() {
@@ -1141,11 +1098,9 @@ ${SHARED_FNS}
     else if (act === 'view') { S.view = S.view === v ? 'focus' : v; }
     else if (act === 'ev') { S.evOpen = !S.evOpen; }
     else if (act === 'status') { S.status = v; }
-    else if (act === 'module') { S.module = S.module === v ? ALL : v; }
-    else if (act === 'module-open') { S.module = v; S.view = 'focus'; const first = visibleList()[0]; if (first) S.ruleId = first.id; }
+    else if (act === 'module-open') { const first = visibleList().find((r) => modOf(r) === v); if (!first) return; S.ruleId = first.id; S.view = 'focus'; }
     else if (act === 'index') { S.indexOpen = !S.indexOpen; }
     else if (act === 'step') { stepRule(Number(v)); return; }
-    else if (act === 'clear') { S.module = ALL; S.status = 'all'; S.q = ''; }
     /*@flow*/
     else if (act === 'journey') { S.journey = v; }
     else if (act === 'flow-rule') { openFromFlow(v); }
@@ -1157,21 +1112,10 @@ ${SHARED_FNS}
 
   // Standalone pages take shortcuts page-wide; an embedded board only while focus is inside it.
   (MODE === 'embed' ? root : document).addEventListener('keydown', (e) => {
-    const inField = e.target && e.target.closest && e.target.closest('input, textarea, select');
-    if (inField) {
-      if (e.key === 'Escape' && e.target.id === 'pc-q') {
-        if (e.target.value) { e.target.value = ''; S.q = ''; render(); } else e.target.blur();
-      }
-      return;
-    }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (LAYOUT === 'compact' && /^[1-9]$/.test(e.key)) {
       const r = RULES[Number(e.key) - 1];
       if (r) { S.ruleId = r.id; S.view = 'focus'; render(); }
-    } else if (LAYOUT === 'index' && e.key === '/') {
-      e.preventDefault();
-      const q = root.querySelector('#pc-q');
-      if (q) q.focus();
     } else if (LAYOUT === 'index' && (e.key === 'j' || e.key === 'k')) {
       stepRule(e.key === 'j' ? 1 : -1);
     } else if (e.key === 'o') {
@@ -1298,23 +1242,24 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
 
   // Pre-hydration shell: header, provenance badge and the first view (the flow map, or the first
   // rule's figure). The flow markup is the exact string the runtime renders for the same state.
-  const firstView = flowFirst ? flowView(board, L, '*')
+  const firstView = flowFirst ? flowView(board, L, ALL_JOURNEYS)
     : `<div class="board" data-board="focus-${esc(first.id)}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
     `<section class="card fig" data-fig><div class="fig-head"><span class="no">${esc(first.no)}</span><h2 class="fig-title">${esc(first.title)}</h2></div>` +
     `<div class="fg-wrap">${figSvg(first, firstSt, `focus-${first.id}`, false)}</div><p class="take take-${firstSt.tone}">${esc(firstSt.takeaway)}</p></section>` +
     `<section class="card pv pv-${firstSt.tone} link-target"><div class="pv-chrome"><span class="pv-title">${esc(first.previewTitle)}</span></div><div class="pv-body"><span class="pv-badge pv-badge-${firstSt.tone}">${esc(firstSt.preview.statusBadge)}</span></div></section>` +
     `<svg class="link-layer" aria-hidden="true"></svg></div>`;
-  const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="${flowFirst ? 'flow' : 'focus'}" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}"${board.flow ? ' data-journey="*"' : ''}>` +
+  const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="${flowFirst ? 'flow' : 'focus'}" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}"${board.flow ? ` data-journey="${ALL_JOURNEYS}"` : ''}>` +
     `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
     `<div class="pc-head-right">${provenanceBadge(prov, L)}</div></header>` +
-    `<main class="pc-canvas"><div class="pc-wrap pc-main">${firstView}</div></main>` +
+    `<main class="pc-canvas"><div class="pc-wrap pc-main">${firstView}${board.outOfScope ? oosMarkup(board, L, true) : ''}</div></main>` +
     `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding, L))}</span></footer>` +
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
     `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
-  const keep = board.flow ? [layout, 'flow'] : [layout];
+  const keep = [layout, ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : [])];
   const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
-  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board) + (board.flow ? '\n' + flowRuntime() : '');
+  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board) + (board.flow ? '\n' + flowRuntime() : '') +
+    (board.outOfScope ? '\n' + oosMarkup.toString() : '');
   return `<!doctype html>
 <html lang="${L.lang}">
 <head>

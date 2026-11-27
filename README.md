@@ -27,8 +27,8 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
 | ![Alloy NoCyclicDelegation rule as a relation graph in the bug state, with the delegation_rbac.als excerpt and SHA-256 spec and log hashes](docs/images/01-verified-multi.png) | ![TLC ClosedPeriodImmutable rule as a three-lane sequence diagram in the bug state, with the period_lock.tla excerpt](docs/images/02-sequence-race.png) |
 | **Failed rule with a TLA+ counterexample (12 rules, sample)** | **Japanese board and UI (`"lang": "ja"`, Spec & log verified 3/3)** |
 | ![Failed escrow payout rule in the bug state with the full TLA+ counterexample trace and Proof & log panel](docs/images/03-failed-counterexample.png) | ![Japanese board with the period-close sequence rule in the bug state and the Japanese Proof & log panel, bound to the example 05 specs and logs](docs/images/04-japanese-board.png) |
-| **Module overview with search and status filters (20 rules)** | **Embed mode (`--mode embed`, 900×700)** |
-| ![20-rule multi-module overview with search and status filters](docs/images/05-overview-20rules.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
+| **Module overview with the status filter (20 rules)** | **Embed mode (`--mode embed`, 900×700)** |
+| ![20-rule multi-module overview with the status filter and the rule index grouped by module](docs/images/05-overview-20rules.png) | ![Embed mode rendering of the multi-verifier board at a 900x700 viewport](docs/images/06-embed-900.png) |
 | **Flow map: one journey highlighted, with its checkpoint rule** | **Flow map with Japanese UI** |
 | ![Flow map of three stages with the self-approved release journey highlighted, the other stage dimmed, and an Inspect this rule button](docs/images/07-flow-map.png) | ![Japanese flow map with the posting-after-close journey highlighted and a button that opens the checkpoint rule](docs/images/08-flow-map-ja.png) |
 
@@ -38,13 +38,16 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
   and reported verdicts. The badge and Proof & log panel show which files were checked.
 - **Visualization.** You run the checker. proof-canvas renders its results and can compare
   those results with the board JSON.
-- **Scales from 1 to 100+ rules.** Up to 6 rules get a compact pill bar; larger apps get
-  modules, a rule index, search, a status filter (All / Failed / Verified / Not checked) and a
-  module overview.
+- **Scales from 1 to 100+ rules.** Up to 6 rules get a compact pill bar; larger apps get a
+  rule index grouped by module, a status filter (All / Failed / Verified / Not checked) and a
+  module overview. On the flow map, the status filter highlights the matching rules and dims
+  the rest.
 - **Flow map.** An optional `flow` draws 2-6 stages with their rules, labeled arrows between
   them, and up to 5 journeys. Picking a journey dims the rest and offers a button that opens
   the rule deciding it in the right state. The map says that arrows show connections and each
   rule's status is its reported check.
+- **Out of scope, stated.** An optional `outOfScope` lists what the models do not cover (for
+  example larger inputs, storage, sign-in). It is shown under the map or rule in every view.
 - **English or Japanese UI.** `"lang": "ja"` switches the renderer's own text to Japanese;
   only the chosen language is written into the HTML.
 - **Embeddable.** All CSS is scoped to the board, nothing uses `100vh`, SVG ids are unique, and
@@ -67,7 +70,7 @@ in [the proof-canvas skill](skills/proof-canvas/SKILL.md).
 | `examples/00_minimal.board.json` | 1 / none | The smallest valid board |
 | `examples/01_room_booking.board.json` | 3 / none | Compact layout |
 | `examples/02_escrow_payout.board.json` | 12 / 3 | TLA+ / TLC style: 9 verified, 1 failed with a counterexample, 2 not checked |
-| `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, search, filters, module overview |
+| `examples/03_multi_module_20rules.board.json` | 20 / 4 | Index layout, status filter, module overview |
 | `examples/04_refund_guard/` | 2 / none | Real spec and log from Quint 0.32.0 |
 | `examples/05_multi_verifier/` | 6 / 3 | Native Quint 0.32.0, Alloy 6.2.0, and TLC 2.19 verdicts on one board, with all three figures and a flow map |
 | `examples/06_japanese_board/` | 3 / none | The same specs and logs with Japanese board copy, Japanese UI and a flow map |
@@ -181,12 +184,12 @@ Apple M3, Node 24, headless Chromium 159. Full method, every viewport and the an
 
 | Rules / modules | Layout | HTML | Payload | Render | App ready | DOM nodes | Worst interaction (sync) | Layout defects in sweep | Errors |
 |---|---|---|---|---|---|---|---|---|---|
-| 3 / none | compact | 75.0 KB | JSON | 1.8 ms | 26 ms* | 200 | 4.1 ms | 0 | 0 |
-| 12 / 3 | index | 118.7 KB | JSON | 3.0 ms | 36-42 ms | 313 | 3.3 ms | 0 | 0 |
-| 20 / 4 | index | 144.8 KB | JSON | 3.2 ms | 35-47 ms | 365 | 5.3 ms | 0 | 0 |
-| 50 / 10 | index | 251.7 KB | JSON | 8.9 ms | 34-37 ms | 549 | 6.9 ms | 0 | 0 |
-| 100 / 20 | index | 125.0 KB | gzip | 32.6 ms | 38-57 ms | 858 | 8.9 ms | 0 | 0 |
-| 20 / 4, embed at 900x700 | index | 144.7 KB | JSON | 3.6 ms | 33 ms | 358 | 2.2 ms | 0 | 0 |
+| 3 / none | compact | 73.9 KB | JSON | 2.3 ms | 31 ms* | 200 | 2.6 ms | 0 | 0 |
+| 12 / 3 | index | 113.1 KB | JSON | 1.8 ms | 32-36 ms | 297 | 2.1 ms | 0 | 0 |
+| 20 / 4 | index | 139.2 KB | JSON | 2.3 ms | 33-38 ms | 348 | 2.3 ms | 0 | 0 |
+| 50 / 10 | index | 246.2 KB | JSON | 4.1 ms | 36-40 ms | 526 | 5.1 ms | 0 | 0 |
+| 100 / 20 | index | 119.5 KB | gzip | 19.6 ms | 37-40 ms | 825 | 7.7 ms | 0 | 0 |
+| 20 / 4, embed at 900x700 | index | 139.1 KB | JSON | 3.3 ms | 36 ms | 341 | 1.5 ms | 0 | 0 |
 
 "Layout defects in sweep" counts, over every rule in every state, figure text leaving its box,
 connector pills overlapping a card, clipped labels and horizontal page overflow.

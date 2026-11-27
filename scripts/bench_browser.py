@@ -22,8 +22,6 @@ MEASURE_JS = """async (spec) => {
   if (spec.sel && !el) return { missing: spec.sel };
   const t0 = performance.now();
   if (spec.kind === 'click') el.click();
-  else if (spec.kind === 'select') { el.value = spec.value; el.dispatchEvent(new Event('change', { bubbles: true })); }
-  else if (spec.kind === 'input') { el.value = spec.value; el.dispatchEvent(new Event('input', { bubbles: true })); }
   void document.body.offsetHeight;
   const t1 = performance.now();
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
@@ -103,7 +101,7 @@ SWEEP_JS = """async (probeSrc) => {
   const worst = { svgOverflow: 0, lkOverlap: 0, clipped: 0, overflowX: 0, minSvgFontPx: null, minSvgFontUnits: null, views: 0 };
   for (const r of pc.getBoard().rules) {
     for (const k of ['normal', 'bug', 'fixed']) {
-      pc.setState({ view: 'focus', ruleId: r.id, module: '*', status: 'all', q: '', focusByRule: { [r.id]: k } });
+      pc.setState({ view: 'focus', ruleId: r.id, status: 'all', focusByRule: { [r.id]: k } });
       await new Promise((res) => requestAnimationFrame(() => requestAnimationFrame(res)));
       const p = probe();
       worst.views += 1;
@@ -134,12 +132,9 @@ def interactions(tier):
         return [("switch rule", rule(1), rule(0))] + common
     filt = tier["filterStatus"]
     return [
-        ("switch module", {"kind": "select", "sel": "#pc-module", "value": tier["moduleIds"][1]},
-         {"kind": "select", "sel": "#pc-module", "value": "*"}),
         ("switch rule", rule(1), rule(0)),
         ("filter %s only" % filt, {"kind": "click", "sel": '[data-act="status"][data-v="%s"]' % filt},
          {"kind": "click", "sel": '[data-act="status"][data-v="all"]'}),
-        ("search keyword", {"kind": "input", "sel": "#pc-q", "value": tier["searchKeyword"]}, {"kind": "input", "sel": "#pc-q", "value": ""}),
     ] + common
 
 
@@ -229,15 +224,7 @@ def run_check(browser, check):
         detail = text or "no error box"
     else:
         page.wait_for_function("window.__proofCanvas && window.__proofCanvas.readyAt")
-        if kind == "module-all":
-            rows = lambda: page.evaluate("() => document.querySelectorAll('.ix-row').length")
-            page.select_option("#pc-module", "all")
-            one = (page.evaluate("window.__proofCanvas.getState().module"), rows())
-            page.select_option("#pc-module", "*")
-            every = (page.evaluate("window.__proofCanvas.getState().module"), rows())
-            ok = one == ("all", check["expectRows"][0]) and every == ("*", check["expectRows"][1]) and not errors
-            detail = "module 'all' -> %d rows, all modules '*' -> %d rows" % (one[1], every[1])
-        elif kind == "index-closed":
+        if kind == "index-closed":
             open_ = page.evaluate("window.__proofCanvas.getState().indexOpen")
             ok = open_ is False and not errors
             detail = "indexOpen at load = %s" % open_

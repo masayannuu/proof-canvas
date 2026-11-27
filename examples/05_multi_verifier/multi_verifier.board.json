@@ -14,6 +14,20 @@
     "specHash": "sha256:55cb9e26947178c2cefc6f816df4b25e71685891134084d0374e5bfa5c759309",
     "status": "verified"
   },
+  "outOfScope": [
+    {
+      "area": "Larger inputs",
+      "reason": "Checked only within small bounds: one two-unit escrow over 5 transitions, Alloy scope 5 with 4-bit integers, and one period with a two-unit budget."
+    },
+    {
+      "area": "Storage and concurrency",
+      "reason": "Each model step is atomic. Database transactions, retries, partial failures and message delivery are not modeled."
+    },
+    {
+      "area": "Identity and sign-in",
+      "reason": "Requester and approver identities are given as inputs. Authentication, sessions and token signing are not checked."
+    }
+  ],
   "rules": [
     {
       "id": "refund_cap",

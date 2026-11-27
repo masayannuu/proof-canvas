@@ -28,7 +28,7 @@ export const SHORT_WARN_CHARS = 20;
 export const EDGE_WARN_CHARS = 12;
 
 const KEYS = {
-  board: ['version', 'runId', 'title', 'subtitle', 'generatedAt', 'provenance', 'provenanceNote', 'lang', 'labels', 'defaultView', 'run', 'modules', 'flow', 'rules'],
+  board: ['version', 'runId', 'title', 'subtitle', 'generatedAt', 'provenance', 'provenanceNote', 'lang', 'labels', 'defaultView', 'run', 'modules', 'flow', 'outOfScope', 'rules'],
   labels: ['moduleSingular', 'modulePlural', 'overview'],
   flow: ['title', 'note', 'steps', 'edges', 'journeys'],
   flowStep: ['id', 'label', 'summary', 'moduleId', 'ruleIds'],
@@ -41,6 +41,7 @@ const KEYS = {
   preview: ['statusBadge', 'rows', 'bars', 'logLines', 'alert', 'buttonLabel', 'buttonKind'],
   row: ['k', 'v', 'tone'],
   bar: ['label', 'value', 'limit', 'max', 'unit', 'ok'],
+  outOfScope: ['area', 'reason'],
   evidence: ['ruleSummary', 'ifEnforced', 'ifNotEnforced', 'checkerSummary', 'scope', 'method', 'sourceQuote', 'counterexample'],
 };
 
@@ -398,6 +399,20 @@ export function validateBoardData(board, { checkHash = true } = {}) {
           warn(`$.labels.${k}`, `length ${[...board.labels[k]].length} exceeds the recommended ${LABEL_WARN_CHARS} characters`);
         }
       }
+    }
+  }
+  if (board.outOfScope !== undefined) {
+    // What the models behind the board do not cover; shown as-is under the main view.
+    if (!Array.isArray(board.outOfScope) || board.outOfScope.length < 1 || board.outOfScope.length > 12) {
+      err('$.outOfScope', 'must be an array of 1 to 12 items when present');
+    } else {
+      board.outOfScope.forEach((o, i) => {
+        const op = `$.outOfScope[${i}]`;
+        if (!isPlainObject(o)) { err(op, 'must be an object'); return; }
+        keys(o, KEYS.outOfScope, op);
+        reqStr(o, 'area', op);
+        reqStr(o, 'reason', op);
+      });
     }
   }
   if (board.defaultView !== undefined && !DEFAULT_VIEWS.includes(board.defaultView)) err('$.defaultView', `must be one of ${DEFAULT_VIEWS.join(', ')} when present`);
