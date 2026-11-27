@@ -25,15 +25,17 @@ export function hlRef(r) {
 }
 
 // Everything but comments, shared by all spec languages: strings, numbers, words, TLA+ backslash
-// operators, then operators longest first. An unterminated string stops at the end of its line and an
-// unterminated block comment runs to the end of the excerpt (excerpts are cut at 10 lines with "…"),
-// and no alternative nests a quantifier, so tokenizing is linear in the excerpt length.
-const SPEC_TOKENS = /"(?:[^"\\\n]|\\.)*"?|\d+(?:\.\d+)?|[A-Za-z_]\w*|\\[A-Za-z]+|\/\\|\\\/|<=>|\|->|=>|->|==|!=|\/=|<=|>=|[#'~^*\\]/;
+// operators, then operators longest first. An unterminated string, like a line comment, stops before
+// "\r" or "\n" (a CRLF break never lands inside a span); an unterminated block comment runs to the end
+// of the excerpt (excerpts are cut at 10 lines with "…"). No alternative nests an ambiguous
+// quantifier, so tokenizing is linear in the excerpt length.
+const SPEC_TOKENS = /"(?:[^"\\\r\n]|\\.)*"?|\d+(?:\.\d+)?|[A-Za-z_]\w*|\\[A-Za-z]+|\/\\|\\\/|<=>|\|->|=>|->|==|!=|\/=|<=|>=|[#'~^*\\]/;
 
 // A trace step: "State N[ · label]:" prefix, the "… N more states …" elision, "no change", strings
 // (stopping at a "…" clip so a cut value cannot pair quotes across the rest of the step; "…/" is a
-// removed path prefix inside the string), booleans, "key =" variable names, numbers and arrows.
-export const TRACE_RE = /(^State \d+[^:]*:|^… \d+ more states …$|no change|"(?:[^"\\…]|\\.|…(?=\/))*"?|\b(?:TRUE|FALSE|true|false)\b|\b[A-Za-z_]\w*(?= = )|\b\d+\b|\|->|-->|->|=>)/;
+// removed path prefix inside the string), booleans, "key =" variable names (dotted ones whole), numbers
+// and arrows.
+export const TRACE_RE = /(^State \d+[^:]*:|^… \d+ more states …$|no change|"(?:[^"\\…]|\\.|…(?=\/))*"?|\b(?:TRUE|FALSE|true|false)\b|\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*(?= = )|\b\d+\b|\|->|-->|->|=>)/;
 
 // Keywords (k) and built-in types (t) per spec language; true/false/TRUE/FALSE are literals by shape.
 const WORDS = {
@@ -47,7 +49,7 @@ for (const ext of LANGUAGES.keys()) if (!WORDS[ext]) throw new Error(`highlight.
 
 const reEsc = (s) => s.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&');
 // The comment syntax of one language, from the same table evidence.mjs masks comments with.
-const commentRe = ({ line, block }) => [...line.map((m) => reEsc(m) + '[^\\n]*'), reEsc(block[0]) + '[\\s\\S]*?(?:' + reEsc(block[1]) + '|$)'].join('|');
+const commentRe = ({ line, block }) => [...line.map((m) => reEsc(m) + '[^\\r\\n]*'), reEsc(block[0]) + '[\\s\\S]*?(?:' + reEsc(block[1]) + '|$)'].join('|');
 
 // Browser source for a binding, or '' when it has neither excerpts nor traces.
 export function hlSource(binding) {

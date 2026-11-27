@@ -2214,6 +2214,14 @@ test('highlight: Quint, TLA+, Alloy, Lean and Dafny excerpts get their own comme
   assert.deepEqual(tokens(specHl('m.lean', 'theorem t : True := by -- c\n/- b -/')), ['k:theorem', 'k:by', 'c:-- c', 'c:/- b -/']);
   assert.deepEqual(tokens(specHl('m.dfy', 'method M() requires x > 0 // c')), ['k:method', 'k:requires', 'l:0', 'c:// c']);
   assert.deepEqual(tokens(specHl('m.qnt', '/* cut at ten lines …')), ['c:/* cut at ten lines …']);
+  // CRLF excerpts: the "\r" stays outside every span, so browsers do not show a doubled line break.
+  for (const [file, text, toks] of [['m.qnt', 'val x = 1 // c\r\nval y = "open\r\nval z = 2', ['k:val', 'l:1', 'c:// c', 'k:val', 'l:"open', 'k:val', 'l:2']],
+    ['m.tla', 'A == 1 \\* c\r\nB == 2', ['o:==', 'l:1', 'c:\\* c', 'o:==', 'l:2']], ['m.als', 'fact { 1 } -- c\r\nfact {}', ['k:fact', 'l:1', 'c:-- c', 'k:fact']]]) {
+    const out = specHl(file, text);
+    assert.deepEqual(tokens(out), toks, file);
+    assert.equal(/<span[^>]*>[^<]*\r/.test(out), false, file + ': a span holds \\r');
+    assertHlSafe(out, text);
+  }
   assert.deepEqual(tokens(specHl('m.tla', 'Init == q = <<>> /\\ s = <<1>>')), ['o:==', 'o:/\\', 'l:1'], 'tuple brackets stay plain');
   assert.deepEqual(tokens(specHl('m.qnt', 'val some = 1', [['n.als', 'some x: X | x in Y']])), ['k:val', 'l:1'], 'an Alloy keyword is not a Quint keyword');
   assert.deepEqual(tokens(specHl('x1.qnt', 'val x1 = 2')), ['k:val', 'l:2'], 'digits inside a name are not a number');
@@ -2226,6 +2234,7 @@ test('highlight: a trace step marks its state, variables, literals, arrows and e
   assert.deepEqual(tokens(traceHl('… 4 more states …')), ['c:… 4 more states …']);
   assert.deepEqual(tokens(traceHl('State 0: s = Set("Read", "Writ…; fam = Map(1 -> "x")')), ['t:State 0:', 'k:s', 'l:"Read"', 'l:"Writ', 'k:fam', 'l:1', 'o:->', 'l:"x"']);
   assert.deepEqual(tokens(traceHl('State 0: log = "…/run.log"; n = 0')), ['t:State 0:', 'k:log', 'l:"…/run.log"', 'k:n', 'l:0']);
+  assert.deepEqual(tokens(traceHl('State 4: s.minutes = 5; cfg.a.b = TRUE; x = 1')), ['t:State 4:', 'k:s.minutes', 'l:5', 'k:cfg.a.b', 'l:TRUE', 'k:x', 'l:1']);
 });
 
 test('highlight: tokenizing stays linear on long adversarial input (no catastrophic backtracking)', () => {

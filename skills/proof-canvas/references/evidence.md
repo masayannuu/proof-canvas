@@ -106,4 +106,3 @@ compare:
    described as an unbounded proof, and `sourceQuote` matches the primary source verbatim.
 4. **Fresh eyes for high-risk specs.** Have a separate session or model compare `board.json`, the
    specs and the real mutant logs once before you lock the board.
-

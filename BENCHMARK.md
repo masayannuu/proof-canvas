@@ -235,17 +235,17 @@ first "/", and the runtime has no template literals).
 | Board | Standalone before (`f84de93`) | Standalone after | Budget |
 |---|---|---|---|
 | 00 minimal | 68,685 B | 65,580 B | 128 KB |
-| 04 refund guard (`--spec`, `--log`) | 72,057 B | 69,988 B | 128 KB |
-| 05 multi-verifier (`--spec`, `--log`) | 129,516 B | 124,366 B | 128 KB |
-| 05 with one mutant log, as the budget test renders it | 131,053 B | 126,232 B | 128 KB |
-| 06 Japanese | 111,817 B | 107,184 B | 128 KB |
-| 07 state and timeline (3 mutant logs) | 96,883 B | 93,470 B | 128 KB |
-| 16-rule OAuth board (8 specs, 7 logs, 13 mutant logs, gzip payload) | 169,521 B | 163,712 B | 200 KB |
+| 04 refund guard (`--spec`, `--log`) | 72,057 B | 69,992 B | 128 KB |
+| 05 multi-verifier (`--spec`, `--log`) | 129,516 B | 124,376 B | 128 KB |
+| 05 with one mutant log, as the budget test renders it | 131,053 B | 126,261 B | 128 KB |
+| 06 Japanese | 111,817 B | 107,194 B | 128 KB |
+| 07 state and timeline (3 mutant logs) | 96,883 B | 93,489 B | 128 KB |
+| 16-rule OAuth board (8 specs, 7 logs, 13 mutant logs, gzip payload) | 169,521 B | 163,741 B | 200 KB |
 
-- **Cost.** Without the squeeze the highlighter adds 1,077 B (04, one language) to 1,230 B (05,
-  three languages) and 1,645 B to 05 with a mutant log, which had 19 B of headroom; boards without
-  excerpts or traces (00-03) carry none of it. With the squeeze every example shrinks, by 2,069 B
-  (04) to 5,150 B (05). A self-test keeps 05 with one mutant log under 128 KB in both modes.
+- **Cost.** Without the squeeze the highlighter adds 1,081 B (04, one language) to 1,240 B (05,
+  three languages) and 1,674 B to 05 with a mutant log, which had 19 B of headroom; boards without
+  excerpts or traces (00-03) carry none of it. With the squeeze every example shrinks, by 2,065 B
+  (04) to 5,140 B (05). A self-test keeps 05 with one mutant log under 128 KB in both modes.
 - **Checks.** `npm test` adds XSS round trips (every slice escaped, only `span.h[kotlc]` added, the
   text unchanged) for each language and trace steps, per-language token tests, 100,000-character
   adversarial inputs, the tree-shaking, the last-state mark, WCAG AA contrast of the five colours on
