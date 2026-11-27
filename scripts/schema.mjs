@@ -288,7 +288,6 @@ function checkFlow(board, moduleIds, c) {
   const f = board.flow;
   const fp = '$.flow';
   if (!isPlainObject(f)) { c.err(fp, 'must be an object when present'); return; }
-  const before = c.count();
   c.keys(f, KEYS.flow, fp);
   c.optStr(f, 'title', fp);
   c.optStr(f, 'note', fp);
@@ -356,8 +355,8 @@ function checkFlow(board, moduleIds, c) {
       if (isNonEmptyString(j.label) && [...j.label].length > LABEL_WARN_CHARS) c.warn(`${jp}.label`, `length ${[...j.label].length} exceeds the recommended ${LABEL_WARN_CHARS} characters`);
     });
   }
-  // Fit and collisions, only once the flow's structure is valid.
-  if (c.count() === before) for (const o of flowOverflows(board)) c.warn(`${fp}.${o.where}`, o.msg);
+  // Fit and collisions need a layout, so only on a board with no errors so far (rules included).
+  if (c.count() === 0) for (const o of flowOverflows(board)) c.warn(`${fp}.${o.where}`, o.msg);
 }
 
 export function validateBoardData(board, { checkHash = true } = {}) {

@@ -135,12 +135,12 @@ the same machine with the commands in `README.md`, bound to the example 05 specs
 
 | Board | Standalone | Embed | Budget |
 |---|---|---|---|
-| 05 multi-verifier (6 rules, 3 stages, 3 journeys) | 130,576 B (127.5 KB) | 130,488 B (127.4 KB) | 128 KB |
-| 06 Japanese (3 rules, 3 stages, 3 journeys, `"lang": "ja"`) | 107,854 B (105.3 KB) | 107,766 B (105.2 KB) | 128 KB |
+| 05 multi-verifier (6 rules, 3 stages, 3 journeys) | 130,792 B (127.7 KB) | 130,704 B (127.6 KB) | 128 KB |
+| 06 Japanese (3 rules, 3 stages, 3 journeys, `"lang": "ja"`) | 108,082 B (105.5 KB) | 107,994 B (105.5 KB) | 128 KB |
 
 - **Cost.** The flow code and CSS are written only into boards that have `flow`. Against the
   previous release (commit `d65cade`), boards without `flow` grow by 1,596-1,612 B, almost all
-  of it the per-language UI text; example 05 grows by 21.2 KB with its flow map.
+  of it the per-language UI text; example 05 grows by 21,372 B (20.9 KB) with its flow map.
 - **Click sweep.** `scripts/sweep_figures.py flow` over examples 00-06, standalone and embed, at
   1440x900 and 900x700: 188 real clicks (every journey, every checkpoint button, every stage
   rule chip, the way back to Flow, and a chip clicked under active filters on the index layout),

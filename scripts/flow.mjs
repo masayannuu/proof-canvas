@@ -128,10 +128,20 @@ export function flowLayout(board) {
       const tx = B.x + F.CW / 2 + off;
       const y1 = down ? A.y + CH + F.TIP : A.y - F.TIP;
       const y2 = down ? B.y - F.TIP : B.y + CH + F.TIP;
-      cy = (y1 + y2) / 2;
-      d = 'M' + pt(sx) + ' ' + pt(y1) + ' C' + pt(sx) + ' ' + pt(cy) + ', ' + pt(tx) + ' ' + pt(cy) + ', ' + pt(tx) + ' ' + pt(y2);
-      fit = flowLabel(x.e.label, x.type === 'v' ? F.CW / 2 + F.G / 2 - 30 : Math.max(106, Math.abs(tx - sx) - 38));
-      cx = x.type === 'v' ? sx + (off < 0 ? -1 : 1) * (8 + fit.pw / 2) : (sx + tx) / 2;
+      const my = (y1 + y2) / 2;
+      d = 'M' + pt(sx) + ' ' + pt(y1) + ' C' + pt(sx) + ' ' + pt(my) + ', ' + pt(tx) + ' ' + pt(my) + ', ' + pt(tx) + ' ' + pt(y2);
+      if (x.type === 'v') {
+        // A one-way label sits right of its line, except in the last column, where it turns inward.
+        const side = x.twoWay ? (off < 0 ? -1 : 1) : x.a.c === cols - 1 ? -1 : 1;
+        fit = flowLabel(x.e.label, Math.min(F.CW / 2 + F.G / 2 - 30, (side < 0 ? sx - 8 : W - sx - 8) - 14));
+        cx = sx + side * (8 + fit.pw / 2);
+        cy = my;
+      } else {
+        fit = flowLabel(x.e.label, Math.max(106, Math.abs(tx - sx) - 38));
+        cx = (sx + tx) / 2;
+        // Two diagonals between the same stages share a midpoint: one label above it, one below.
+        cy = x.twoWay ? my + (down ? -1 : 1) * (fit.ph / 2 + 4) : my;
+      }
     }
     return { e: x.e, type: x.type, d, cx, cy, fit, pill: { x: cx - fit.pw / 2, y: cy - fit.ph / 2, w: fit.pw, h: fit.ph } };
   });

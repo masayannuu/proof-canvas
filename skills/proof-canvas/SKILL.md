@@ -224,7 +224,7 @@ By figure kind (chip `tone` is `neutral \| good \| bad`):
 
 Stages are cards listing their rules as clickable chips with verifier status; labeled arrows
 join them; a journey highlights one path and links to the rule that decides it. A fixed caption
-says arrows show connections and each rule's status comes from its own proof, so the map never
+says arrows show connections and each rule's status is its reported check, so the map never
 claims the connections were verified. Say in `note` how the checkers ran.
 
 | Field | Type | Notes |

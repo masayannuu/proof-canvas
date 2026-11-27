@@ -117,7 +117,7 @@ export function flowUiEn(o) {
   const ratio = (v, t) => v + '/' + t;
   return {
     flowTitle: 'System flow', flowAll: 'All ' + (o.plural || 'stages'), journeys: 'Journeys',
-    flowCaption: 'System flow map: arrows show how stages connect; each rule\'s status reflects its verifier proof.',
+    flowCaption: 'System flow map: arrows show how stages connect; each rule\'s status reflects its reported check.',
     flowHint: 'Click a rule to open its proof', inspect: 'Inspect this rule →',
     stageBadge: (v, t, f) => (f ? f + ' failed · ' : '') + ratio(v, t) + ' verified',
     edgeKind: { bypass: 'bypass', handoff: 'handoff' },
@@ -128,7 +128,7 @@ export function flowUiJa(o) {
   const ratio = (v, t) => v + '/' + t;
   return {
     flowTitle: '全体の流れ', flowAll: '全体を見る', journeys: '流れの例',
-    flowCaption: 'システム全体の見取り図：矢印は工程のつながり、各ルールの色は検証器の証明結果を示します。',
+    flowCaption: 'システム全体の見取り図：矢印は工程のつながり、各ルールの状態は記録された検証結果を示します。',
     flowHint: 'ルールをクリックして詳細を開く', inspect: 'このルールの詳細を見る →',
     stageBadge: (v, t, f) => (f ? '違反 ' + f + ' · ' : '') + ratio(v, t) + ' 検証済み',
     edgeKind: { bypass: '迂回', handoff: '引き継ぎ' },

@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
-import { checkpointFocus, flowOverflows, flowRuntime, flowView } from './flow.mjs';
+import { checkpointFocus, flowLayout, flowOverflows, flowRuntime, flowView } from './flow.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
 import { ALL_MODULES, footerMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
 import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, ruleStatus, splitRendererKeys, validateBoardData } from './schema.mjs';
@@ -1516,11 +1516,11 @@ test('flow: a journey dims every other stage and edge and offers its checkpoint;
 
 test('flow: the honesty caption is always on the map, with flow.note after it', () => {
   const en = flowView(EX5, uiFor(EX5), '*');
-  assert.ok(en.includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its verifier proof. ' + EX5.flow.note + '</p>'));
+  assert.ok(en.includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its reported check. ' + EX5.flow.note + '</p>'));
   const ja = flowView(EX6, uiFor(EX6), 'late_post');
-  assert.ok(ja.includes('<p class="fl-cap">システム全体の見取り図：矢印は工程のつながり、各ルールの色は検証器の証明結果を示します。' + EX6.flow.note + '</p>'));
+  assert.ok(ja.includes('<p class="fl-cap">システム全体の見取り図：矢印は工程のつながり、各ルールの状態は記録された検証結果を示します。' + EX6.flow.note + '</p>'));
   const bare = withFlowEdit(EX5, (b) => { delete b.flow.note; });
-  assert.ok(flowView(bare, uiFor(bare), '*').includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its verifier proof.</p>'));
+  assert.ok(flowView(bare, uiFor(bare), '*').includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its reported check.</p>'));
 });
 
 test('flow: stage badges count the rules\' own verdicts (a failed rule turns its stage red)', () => {
@@ -1553,6 +1553,55 @@ test('flow layout: 2 to 6 stages with forward, skip, back and two-way edges fit 
   }
   const crowded = withFlowEdit(EX5, (b) => { b.flow.edges[0].label = 'an authorized and fully reviewed escrow payout request'; });
   assert.ok(hasWarning(validateBoardData(crowded), '$.flow.edges[0].label'), 'a label too long for its gap must warn');
+});
+
+// A chain of n stages over two rows, plus extra edges; returns the board and its layout.
+const chainFlow = (n, label, extra = [], lang) => {
+  const ids = EX5.rules.map((r) => r.id);
+  const b = clone(EX5);
+  if (lang) b.lang = lang;
+  b.flow.steps = Array.from({ length: n }, (_, i) => ({ id: 's' + i, label: (i + 1) + '. Stage', summary: 'Stage ' + (i + 1) + '.', ruleIds: [ids[i % ids.length]] }));
+  b.flow.edges = [...Array.from({ length: n - 1 }, (_, i) => ({ id: 'e' + i, from: 's' + i, to: 's' + (i + 1), label: i === Math.ceil(n / 2) - 1 ? label : 'next' })), ...extra];
+  b.flow.journeys = [{ id: 'j', label: 'Path', tone: 'normal', summary: 'One path.', stepIds: ['s0', 's1'], edgeIds: ['e0'] }];
+  return { b, g: flowLayout(b) };
+};
+const pillsMeet = (p, q) => p.x < q.x + q.w - 0.5 && q.x < p.x + p.w - 0.5 && p.y < q.y + q.h - 0.5 && q.y < p.y + p.h - 0.5;
+
+test('flow layout: the corner label of the last column turns inward and an outer two-way pair stays on the map', () => {
+  for (const n of [4, 6]) {
+    const last = 's' + (n - 1);
+    const audit = [{ id: 'up', from: 's0', to: last, label: 'direct audit log' }, { id: 'down', from: last, to: 's0', label: 'direct audit log' }];
+    for (const [label, lang] of [['承認済みの払い出し', 'ja'], ['approved release', undefined]]) {
+      const { b, g } = chainFlow(n, label, audit, lang);
+      assert.deepEqual(validateBoardData(b).errors, [], `${n} stages, ${label}`);
+      assert.deepEqual(flowOverflows(b), [], `${n} stages, ${label}`);
+      const corner = g.edges.find((x) => x.e.label === label);
+      assert.equal(corner.type, 'v');
+      const line = Number(corner.d.match(/^M([\d.]+)/)[1]);
+      assert.ok(corner.pill.x + corner.pill.w < line, `${label}: the last-column label sits left of its line`);
+      for (const x of g.edges) assert.ok(x.pill.x >= 0 && x.pill.x + x.pill.w <= g.W, `${n} stages, ${x.e.id} pill inside [0, W]`);
+    }
+  }
+});
+
+test('flow layout: a two-way diagonal pair puts one label above the crossing and one below', () => {
+  for (const n of [4, 6]) {
+    const cross = [{ id: 'x1', from: 's0', to: 's' + (n - 2), label: 'cross check' }, { id: 'x2', from: 's' + (n - 2), to: 's0', label: 'cross check' }];
+    const { b, g } = chainFlow(n, 'next', cross);
+    const [p, q] = ['x1', 'x2'].map((id) => g.edges.find((x) => x.e.id === id));
+    assert.equal(p.type, 'x', `${n} stages`);
+    assert.equal(pillsMeet(p.pill, q.pill), false, `${n} stages: the two diagonal labels overlap`);
+    assert.deepEqual(flowOverflows(b), [], `${n} stages`);
+  }
+});
+
+test('flow schema: a null rule is a schema error, not a crash in the flow layout', () => {
+  const b = clone(EX5);
+  b.rules.push(null);
+  let r;
+  assert.doesNotThrow(() => { r = validateBoardData(b); });
+  assert.ok(r.errors.some((e) => e.startsWith('$.rules[6]')), JSON.stringify(r.errors));
+  assert.equal(r.warnings.some((w) => w.startsWith('$.flow')), false);
 });
 
 test('flow: boards without a flow ship no flow code, styles or copy', () => {

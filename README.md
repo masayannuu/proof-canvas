@@ -44,7 +44,7 @@ their spec files and checker logs, examples 02 and 03 as illustrative sample boa
 - **Flow map.** An optional `flow` draws 2-6 stages with their rules, labeled arrows between
   them, and up to 5 journeys. Picking a journey dims the rest and offers a button that opens
   the rule deciding it in the right state. The map says that arrows show connections and each
-  rule's status comes from its own proof.
+  rule's status is its reported check.
 - **English or Japanese UI.** `"lang": "ja"` switches the renderer's own text to Japanese;
   only the chosen language is written into the HTML.
 - **Embeddable.** All CSS is scoped to the board, nothing uses `100vh`, SVG ids are unique, and

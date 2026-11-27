@@ -89,9 +89,10 @@ FLOW_PROBE_JS = """() => {
     for (const c of s.querySelectorAll('.fl-st-s')) if (c.scrollHeight > c.clientHeight + 1) out.clipped += 1;
     if (s.scrollHeight > s.clientHeight + 1) out.clipped += 1;
   });
+  const canvas = R(fl.querySelector('.fl-canvas'));
   const pills = [...fl.querySelectorAll('.fl-edge')].map((g) => {
     const p = R(g.querySelector('.fl-pill'));
-    out.outside = Math.max(out.outside, outside(R(g.querySelector('.fl-elabel')), p));
+    out.outside = Math.max(out.outside, outside(R(g.querySelector('.fl-elabel')), p), outside(p, canvas));
     return p;
   });
   pills.forEach((p, i) => {
