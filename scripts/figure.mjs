@@ -5,10 +5,13 @@
 // (it may reference only the other functions and the constants below, which are injected under
 // the same names).
 //
-// A rule's figure is one of three kinds, chosen by figure.kind (missing means 'gate'):
+// A rule's figure is one of five kinds, chosen by figure.kind (missing means 'gate'):
 //   gate      { boxes, arrows }   two inputs, one check, three outcomes      state: route, here, chips
 //   sequence  { lanes, steps }    2-3 actors with lifelines, 2-5 ordered steps  state: activeSteps, focusStep, chips?
 //   relation  { nodes, edges }    3-5 entities, 2-7 directed relations         state: activeEdges, focusNodes?, chips?
+//   state     { states, transitions }  2-5 states, 1-8 allowed / forbidden / loop transitions
+//                                                               state: activeStates, activeTransitions, focusTransition, chips?
+//   timeline  { ticks, bars, events }  2-5 time points, 1-3 windows, 1-4 events  state: activeBars, activeEvents, focusEvent, chips?
 // Every kind draws into the same 740 x 328 viewBox and marks one element with data-anchor,
 // where the connector to the screen preview starts.
 
@@ -327,16 +330,16 @@ export function bez(p, t) {
 }
 
 // Nodes sit in fixed slots by node count, in array order. An edge runs between box borders; the
-// two edges of a bidirectional pair bow apart; a self-loop leaves its node on the slot's free side.
-// Every path is a cubic Bezier [p0, c1, c2, p3]; (cx, cy) is the center of its label pill.
-export function relLayout(rule) {
-  const { nodes, edges } = rule.figure;
+// two edges of a bidirectional pair (and a state figure's loop edge) bow apart; a self-loop leaves
+// its node on the slot's free side. Every path is a cubic Bezier [p0, c1, c2, p3]; (cx, cy) is the
+// center of its label pill. Shared by the relation and state figures, each with its own slot table.
+export function graphLayout(nodes, edges, slots) {
   const W = REL.w;
   const H = REL.h;
   const ph = FS.label * 1.2 + 5;
   const N = Object.create(null);
   nodes.forEach((nd, i) => {
-    const [x, y, side] = REL.slots[nodes.length][i];
+    const [x, y, side] = slots[nodes.length][i];
     N[nd.id] = { x, y, w: W, h: H, cx: x + W / 2, cy: y + H / 2, side };
   });
   const pairs = new Set(edges.map((e) => e.from + '>' + e.to));
@@ -344,6 +347,9 @@ export function relLayout(rule) {
     nodes: N,
     edges: edges.map((e) => {
       const a = N[e.from];
+      // A forbidden state transition carries a circled x at the start of its pill.
+      const extra = e.kind === 'forbidden' ? 18 : 0;
+      const pillFor = (room) => { const f = pillFit(e.label, room - extra); return { fs: f.fs, pw: f.pw + extra }; };
       if (e.from === e.to) {
         const U = { below: [0, 1], above: [0, -1], right: [1, 0], left: [-1, 0] }[a.side];
         const T = [Math.abs(U[1]), Math.abs(U[0])];
@@ -351,16 +357,16 @@ export function relLayout(rule) {
         const at = (t, u) => [m[0] + T[0] * t + U[0] * u, m[1] + T[1] * t + U[1] * u];
         const reach = REL.loop * 0.75 + 6;
         const room = U[0] > 0 ? 736 - m[0] - reach : U[0] < 0 ? m[0] - reach - 4 : 200;
-        const fit = pillFit(e.label, room);
+        const fit = pillFor(room);
         const off = reach + (U[0] ? fit.pw : ph) / 2;
-        return { e, p: [at(-12, 0), at(-30, REL.loop), at(30, REL.loop), at(12, 0)], fit, room, cx: m[0] + U[0] * off, cy: m[1] + U[1] * off };
+        return { e, p: [at(-12, 0), at(-30, REL.loop), at(30, REL.loop), at(12, 0)], fit, room, extra, cx: m[0] + U[0] * off, cy: m[1] + U[1] * off };
       }
       const b = N[e.to];
       const dx = b.cx - a.cx;
       const dy = b.cy - a.cy;
       const len = Math.hypot(dx, dy);
       const t = Math.min(dx ? (W / 2 + 2) / Math.abs(dx) : 1, dy ? (H / 2 + 2) / Math.abs(dy) : 1);
-      const bend = pairs.has(e.to + '>' + e.from) ? REL.bend : 0;
+      const bend = pairs.has(e.to + '>' + e.from) || e.kind === 'loop' ? REL.bend : 0;
       const nx = (dy / len) * bend;
       const ny = (-dx / len) * bend;
       const s = bend ? 8 / bend : 0;
@@ -379,7 +385,7 @@ export function relLayout(rule) {
       const cos = Math.abs(dx) / len;
       const room = cos > 0.05 ? Math.min(200, (vis - 24 - ph * Math.abs(dy) / len) / cos) : vis - 24 >= ph ? 200 : 0;
       const mid = bez(p, 0.5);
-      return { e, p, fit: pillFit(e.label, room), room, cx: mid[0], cy: mid[1] };
+      return { e, p, fit: pillFor(room), room, extra, cx: mid[0], cy: mid[1] };
     }),
   };
 }
@@ -393,9 +399,40 @@ export function nodeLayout(nd, hasChip) {
   return { lay, roleY: 19, y0: 40, chipY: 49, overflow: two || lay.overflow || textW(nd.role, FS.chipMin) > REL.w - 16 };
 }
 
+// Label fit and collisions of a laid-out graph: pills leaving the figure, touching nodes or other
+// pills, lines crossing foreign nodes or pills. `path` names the edge list (figure.edges).
+export function graphCollisions(g, path) {
+  const out = [];
+  const inside = (pt, r, m) => pt[0] > r.x - m && pt[0] < r.x + r.w + m && pt[1] > r.y - m && pt[1] < r.y + r.h + m;
+  const meets = (r, q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h;
+  const samples = (p) => Array.from({ length: 33 }, (_, i) => bez(p, i / 32));
+  const pills = g.edges.map((x) => pillBox(x.cx, x.cy, x.fit));
+  g.edges.forEach((x, i) => {
+    const where = `${path}[${i}].label`;
+    const say = (msg) => out.push({ where, text: x.e.label, msg: `"${x.e.label}" ${msg}; shorten it or reorder the nodes` });
+    const pb = pills[i];
+    if (textW(x.e.label, FS.labelMin) > x.room - 12 - x.extra) out.push({ where, text: x.e.label, room: 'the free length of its line' });
+    if (pb.x < 2 || pb.y < 2 || pb.x + pb.w > 738 || pb.y + pb.h > 326) say('leaves the figure');
+    for (const [id, nb] of Object.entries(g.nodes)) {
+      if (meets(pb, nb)) say(`overlaps node "${id}"`);
+      if (id !== x.e.from && id !== x.e.to && samples(x.p).some((pt) => inside(pt, nb, -2))) say(`has a line that crosses node "${id}"`);
+    }
+    g.edges.forEach((y, j) => {
+      if (j === i) return;
+      if (j < i && meets(pb, pills[j])) say(`overlaps the label of edge "${y.e.id}"`);
+      if (samples(y.p).some((pt) => inside(pt, pb, 1))) say(`is crossed by edge "${y.e.id}"`);
+    });
+  });
+  return out;
+}
+
+export function relLayout(rule) {
+  return graphLayout(rule.figure.nodes, rule.figure.edges, REL.slots);
+}
+
 export function relOverflows(rule) {
   const out = [];
-  const { nodes, edges } = rule.figure;
+  const { nodes } = rule.figure;
   const g = relLayout(rule);
   const chipped = new Set();
   for (const [sk, st] of Object.entries(rule.states)) {
@@ -409,27 +446,7 @@ export function relOverflows(rule) {
       out.push({ where: `figure.nodes[${i}]`, text: nd.role ? nd.role + ' / ' + nd.label : nd.label, room: 'its node box (with a chip, the label must fit on one line under a role)' });
     }
   });
-  const inside = (pt, r, m) => pt[0] > r.x - m && pt[0] < r.x + r.w + m && pt[1] > r.y - m && pt[1] < r.y + r.h + m;
-  const meets = (r, q) => r.x < q.x + q.w && q.x < r.x + r.w && r.y < q.y + q.h && q.y < r.y + r.h;
-  const samples = (p) => Array.from({ length: 33 }, (_, i) => bez(p, i / 32));
-  const pills = g.edges.map((x) => pillBox(x.cx, x.cy, x.fit));
-  g.edges.forEach((x, i) => {
-    const where = `figure.edges[${i}].label`;
-    const say = (msg) => out.push({ where, text: x.e.label, msg: `"${x.e.label}" ${msg}; shorten it or reorder the nodes` });
-    const pb = pills[i];
-    if (textW(x.e.label, FS.labelMin) > x.room - 12) out.push({ where, text: x.e.label, room: 'the free length of its line' });
-    if (pb.x < 2 || pb.y < 2 || pb.x + pb.w > 738 || pb.y + pb.h > 326) say('leaves the figure');
-    for (const [id, nb] of Object.entries(g.nodes)) {
-      if (meets(pb, nb)) say(`overlaps node "${id}"`);
-      if (id !== x.e.from && id !== x.e.to && samples(x.p).some((pt) => inside(pt, nb, -2))) say(`has a line that crosses node "${id}"`);
-    }
-    g.edges.forEach((y, j) => {
-      if (j === i) return;
-      if (j < i && meets(pb, pills[j])) say(`overlaps the label of edge "${y.e.id}"`);
-      if (samples(y.p).some((pt) => inside(pt, pb, 1))) say(`is crossed by edge "${y.e.id}"`);
-    });
-  });
-  return out;
+  return out.concat(graphCollisions(g, 'figure.edges'));
 }
 
 // Relations are structure, not flow: no moving dots, so dashed forbidden edges stay distinct.
@@ -464,6 +481,202 @@ export function relSvg(rule, st, uid) {
   return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="164" r="4.5"/></svg>';
 }
 
+// ---- state: a state machine with allowed, forbidden and loop transitions (lifecycles, liveness) ----
+
+export const STM = {
+  slots: {
+    2: [[40, 124, 'below'], [532, 124, 'below']],
+    3: [[18, 22, 'below'], [554, 22, 'below'], [286, 226, 'right']],
+    4: [[18, 22, 'below'], [554, 22, 'below'], [18, 226, 'above'], [554, 226, 'above']],
+    5: [[18, 22, 'below'], [554, 22, 'below'], [286, 124, 'right'], [18, 226, 'above'], [554, 226, 'above']],
+  },
+};
+
+export function stmLayout(rule) {
+  return graphLayout(rule.figure.states, rule.figure.transitions, STM.slots);
+}
+
+// Label layout inside a state box. An initial state keeps its start dot (top left) clear of the label.
+export function stmNodeLayout(sd, hasChip) {
+  const lay = layoutBoxLabel(sd.label, REL.w - (sd.role === 'initial' ? 34 : 16), hasChip);
+  const two = lay.lines.length === 2;
+  return { lay, y0: hasChip ? (two ? 21 : 30) : midY(lay, 0, REL.h), chipY: two ? 46 : 42 };
+}
+
+export function stmOverflows(rule) {
+  const out = [];
+  const chipped = new Set();
+  for (const [sk, st] of Object.entries(rule.states)) {
+    (st.chips || []).forEach((c, ci) => {
+      chipped.add(c.state);
+      if (textW(c.text, FS.chipMin) > REL.w - 26) out.push({ where: `states.${sk}.chips[${ci}].text`, text: c.text, room: 'its state at the minimum chip size' });
+    });
+  }
+  rule.figure.states.forEach((sd, i) => {
+    if (stmNodeLayout(sd, false).lay.overflow || (chipped.has(sd.id) && stmNodeLayout(sd, true).lay.overflow)) out.push({ where: `figure.states[${i}].label`, text: sd.label, room: 'its state box' });
+  });
+  return out.concat(graphCollisions(stmLayout(rule), 'figure.transitions'));
+}
+
+// Allowed: solid arrow. Forbidden: red dashed arrow with a circled x on its pill, ending in a stop bar
+// once the fix blocks it. Loop: a bold bowed arrow (amber, red in the bug state) for lasso traces.
+export function stmSvg(rule, st, uid) {
+  const g = stmLayout(rule);
+  const act = new Set(st.activeTransitions);
+  const on = new Set(st.activeStates);
+  const chips = Object.create(null);
+  for (const c of st.chips || []) chips[c.state] = c;
+  const mk = (id, cls, d, size) => '<marker id="' + id + '-' + uid + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="' + size + '" markerHeight="' + size + '" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="' + d + '" class="' + cls + '"/></marker>';
+  let h = figOpen(rule, st, uid, mk('fg-hb', 'fg-head-bad', 'M0 0 L10 5 L0 10 z', 11) + mk('fg-hs', 'fg-stop', 'M8 0 L8 10', 18) + mk('fg-hl', 'fg-head-loop', 'M0 0 L10 5 L0 10 z', 12));
+  const xy = (pt) => pt[0].toFixed(1) + ' ' + pt[1].toFixed(1);
+  let here = null;
+  for (const x of g.edges) {
+    const e = x.e;
+    const kind = e.kind || 'allowed';
+    const isOn = act.has(e.id);
+    const blocked = isOn && kind === 'forbidden' && st.tone === 'safe';
+    const amber = kind === 'loop' && st.tone !== 'bug';
+    const marker = !isOn ? 'fg-h-' : blocked ? 'fg-hs-' : kind === 'forbidden' ? 'fg-hb-' : amber ? 'fg-hl-' : 'fg-hh-';
+    const b = pillBox(x.cx, x.cy, x.fit);
+    const cls = (kind === 'forbidden' ? 'is-forbid ' : kind === 'loop' ? 'is-loop ' + (amber ? 'is-amber ' : '') : '') + (isOn ? 'is-on' : 'is-dim') + (e.id === st.focusTransition ? ' is-here' : '') + (blocked ? ' is-blocked' : '');
+    const cross = x.extra ? '<g class="fg-x"><circle cx="' + (b.x + 10).toFixed(1) + '" cy="' + x.cy.toFixed(1) + '" r="6"/><path d="M' + (b.x + 7.2).toFixed(1) + ' ' + (x.cy - 2.8).toFixed(1) + ' l5.6 5.6 M' + (b.x + 12.8).toFixed(1) + ' ' + (x.cy - 2.8).toFixed(1) + ' l-5.6 5.6"/></g>' : '';
+    h += '<g data-tr="' + e.id + '" class="fg-arrow ' + cls + '"><path class="fg-line" d="M' + xy(x.p[0]) + ' C' + xy(x.p[1]) + ', ' + xy(x.p[2]) + ', ' + xy(x.p[3]) + '" marker-end="url(#' + marker + uid + ')"/>' +
+      '<rect class="fg-apill" x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' + b.w.toFixed(1) + '" height="' + b.h.toFixed(1) + '" rx="5"/>' +
+      '<text class="fg-alabel" x="' + (x.cx + x.extra / 2).toFixed(1) + '" y="' + (x.cy + x.fit.fs * 0.35).toFixed(1) + '" text-anchor="middle" font-size="' + x.fit.fs + '">' + esc(e.label) + '</text>' + cross + '</g>';
+    if (isOn && e.id === st.focusTransition) here = e.to;
+  }
+  for (const sd of rule.figure.states) {
+    const b = g.nodes[sd.id];
+    const c = chips[sd.id];
+    const L = stmNodeLayout(sd, !!c);
+    const cls = sd.id === here && on.has(sd.id) ? 'is-here is-on' : on.has(sd.id) ? 'is-on' : 'is-dim';
+    h += '<g data-state="' + sd.id + '" class="fg-box tone-' + (sd.role === 'bad' && on.has(sd.id) ? 'stop' : 'source') + ' ' + cls + '"><rect x="' + b.x + '" y="' + b.y + '" width="' + b.w + '" height="' + b.h + '" rx="10"/>' +
+      (sd.role === 'terminal' ? '<rect class="fg-inner" x="' + (b.x + 4) + '" y="' + (b.y + 4) + '" width="' + (b.w - 8) + '" height="' + (b.h - 8) + '" rx="7"/>' : '') +
+      (sd.role === 'initial' ? '<circle class="fg-start" cx="' + (b.x + 12) + '" cy="' + (b.y + 12) + '" r="4.5"/>' : '') +
+      blabel(L.lay, b.cx, b.y + L.y0) + (c ? chipSvg(c, b.cx, b.y + L.chipY, b.w - 14) : '') + '</g>';
+  }
+  return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="164" r="4.5"/></svg>';
+}
+
+// ---- timeline: time points, lifetime windows and events (TTLs, leases, == boundaries) ----
+
+export const TL = {
+  x0: 80, x1: 660, axisY: 244, labelY: 268, barY: [208, 172, 136], barH: 26, rowY: [92, 58, 24], tickFs: 14.5, gap: 8,
+};
+
+// Ticks spread evenly on the axis; each label gets the room between its neighbours (and the edge).
+// Bars sit in rows above the axis, in array order. Event pills take the lowest free row above the
+// bars, so two events on one tick stack upward; a pin joins each pill to the one below it or to the axis.
+export function tlLayout(rule) {
+  const { ticks, bars, events } = rule.figure;
+  const n = ticks.length;
+  const step = (TL.x1 - TL.x0) / (n - 1);
+  const at = Object.create(null);
+  const T = ticks.map((t, i) => {
+    const x = TL.x0 + i * step;
+    at[t.id] = i;
+    const room = Math.min(step - 10, 2 * (Math.min(x, 740 - x) - 4));
+    let lines = [t.label];
+    let fs = fitFontSize(t.label, TL.tickFs, room, FS.labelMin);
+    if (textW(t.label, fs) > room) {
+      const two = splitTwo(t.label);
+      if (two) { lines = two; fs = fitFontSize(textW(two[0], 1) > textW(two[1], 1) ? two[0] : two[1], TL.tickFs - 0.5, room, FS.labelMin); }
+    }
+    return { id: t.id, label: t.label, boundary: t.boundary === true, x, room, fs, lines, overflow: lines.some((ln) => textW(ln, fs) > room) };
+  });
+  const B = bars.map((b, i) => {
+    const x = T[at[b.from]].x;
+    const w = T[at[b.to]].x - x;
+    const fs = fitFontSize(b.label, FS.label, w - 16, FS.labelMin);
+    return { b, x, y: TL.barY[i], w, h: TL.barH, fs, overflow: textW(b.label, fs) > w - 16 };
+  });
+  const order = events.map((e, i) => ({ e, i, t: at[e.tick] })).sort((p, q) => p.t - q.t || p.i - q.i);
+  const placed = [];
+  const E = [];
+  for (const { e, t } of order) {
+    const x = T[t].x;
+    const fit = pillFit(e.label, 220);
+    const cx = Math.min(Math.max(x, fit.pw / 2 + 4), 736 - fit.pw / 2);
+    let row = 0;
+    while (row < TL.rowY.length && placed.some((q) => q.row === row && Math.abs(q.cx - cx) < (q.fit.pw + fit.pw) / 2 + TL.gap)) row++;
+    const ev = { e, x, row, cx, cy: TL.rowY[Math.min(row, TL.rowY.length - 1)], fit, overflow: row >= TL.rowY.length };
+    placed.push(ev);
+    E[events.indexOf(e)] = ev;
+  }
+  for (const ev of E) {
+    const below = E.filter((q) => q !== ev && q.x === ev.x && q.row < ev.row).sort((p, q) => q.row - p.row)[0];
+    ev.pinTo = below ? below.cy - (below.fit.fs * 0.65 + 2) : TL.axisY;
+  }
+  return { ticks: T, bars: B, events: E, tickAt: at };
+}
+
+export function tlOverflows(rule) {
+  const out = [];
+  const g = tlLayout(rule);
+  g.ticks.forEach((t, i) => { if (t.overflow) out.push({ where: `figure.ticks[${i}].label`, text: t.label, room: 'the space between its neighbouring ticks' }); });
+  g.bars.forEach((x, i) => { if (x.overflow) out.push({ where: `figure.bars[${i}].label`, text: x.b.label, room: 'its bar' }); });
+  const boxes = g.events.map((ev) => pillBox(ev.cx, ev.cy, ev.fit));
+  g.events.forEach((ev, i) => {
+    const say = (msg) => out.push({ where: `figure.events[${i}].label`, text: ev.e.label, msg: `"${ev.e.label}" ${msg}; shorten it or move the event` });
+    if (ev.overflow) say('needs a fourth row above its tick');
+    boxes.forEach((q, j) => {
+      const other = g.events[j];
+      if (j !== i && other.x !== ev.x && ev.x > q.x - 1 && ev.x < q.x + q.w + 1 && other.cy > ev.cy) say(`has a pin that crosses the label of event "${other.e.id}"`);
+    });
+  });
+  for (const [sk, st] of Object.entries(rule.states)) {
+    (st.chips || []).forEach((c, ci) => {
+      const t = g.ticks[g.tickAt[c.tick]];
+      if (t && textW(c.text, FS.chipMin) > t.room - 12) out.push({ where: `states.${sk}.chips[${ci}].text`, text: c.text, room: 'the space under its tick at the minimum chip size' });
+    });
+  }
+  return out;
+}
+
+export function tlSvg(rule, st, uid) {
+  const g = tlLayout(rule);
+  const bars = new Set(st.activeBars);
+  const evs = new Set(st.activeEvents);
+  const chips = Object.create(null);
+  for (const c of st.chips || []) chips[c.tick] = c;
+  let h = figOpen(rule, st, uid, '');
+  for (const t of g.ticks) if (t.boundary) h += '<line class="fg-bound" x1="' + t.x + '" y1="' + (TL.barY[2] - 8) + '" x2="' + t.x + '" y2="' + (TL.axisY + 8) + '"/>';
+  for (const ev of g.events) {
+    const top = ev.cy + ev.fit.fs * 0.55 + 4;
+    h += '<line class="fg-pin' + (evs.has(ev.e.id) ? ' is-on' : '') + '" x1="' + ev.x.toFixed(1) + '" y1="' + top.toFixed(1) + '" x2="' + ev.x.toFixed(1) + '" y2="' + ev.pinTo.toFixed(1) + '"/>';
+  }
+  for (const x of g.bars) {
+    const isOn = bars.has(x.b.id);
+    const tone = { good: 'pass', bad: 'stop' }[x.b.tone] || 'source';
+    // An opaque backing keeps pins hidden behind a dimmed (translucent) bar.
+    h += '<rect class="fg-back" x="' + x.x.toFixed(1) + '" y="' + x.y + '" width="' + x.w.toFixed(1) + '" height="' + x.h + '" rx="6"/>';
+    h += '<g data-bar="' + x.b.id + '" class="fg-box tone-' + tone + ' ' + (isOn ? 'is-on' : 'is-dim') + '"><rect x="' + x.x.toFixed(1) + '" y="' + x.y + '" width="' + x.w.toFixed(1) + '" height="' + x.h + '" rx="6"/>' +
+      '<text class="fg-blabel" x="' + (x.x + x.w / 2).toFixed(1) + '" y="' + (x.y + x.h / 2 + x.fs * 0.35).toFixed(1) + '" text-anchor="middle" font-size="' + x.fs + '">' + esc(x.b.label) + '</text></g>';
+  }
+  h += '<path class="fg-axis" d="M24 ' + TL.axisY + ' H716" marker-end="url(#fg-h-' + uid + ')"/>';
+  for (const t of g.ticks) {
+    const c = chips[t.id];
+    const lh = t.fs * 1.18;
+    h += '<g data-tick="' + t.id + '" class="fg-tick' + (t.boundary ? ' is-bound' : '') + '"><line x1="' + t.x + '" y1="' + (TL.axisY - 6) + '" x2="' + t.x + '" y2="' + (TL.axisY + 6) + '"/>' +
+      '<text text-anchor="middle" font-size="' + t.fs + '">' + t.lines.map((ln, i) => '<tspan x="' + t.x + '" y="' + (TL.labelY + i * lh).toFixed(1) + '">' + esc(ln) + '</tspan>').join('') + '</text></g>' +
+      (c ? chipSvg(c, t.x, Math.round(TL.labelY + (t.lines.length - 1) * lh + 10), Math.min(t.room, 200)) : '');
+  }
+  let focus = null;
+  for (const ev of g.events) {
+    const isOn = evs.has(ev.e.id);
+    const b = pillBox(ev.cx, ev.cy, ev.fit);
+    if (ev.e.id === st.focusEvent) focus = { ev, b };
+    h += '<g data-ev="' + ev.e.id + '" class="fg-arrow fg-ev t-' + (ev.e.tone || 'normal') + ' ' + (isOn ? 'is-on' : 'is-dim') + (ev.e.id === st.focusEvent ? ' is-here' : '') + '">' +
+      '<circle class="fg-pindot" cx="' + ev.x.toFixed(1) + '" cy="' + TL.axisY + '" r="5"/>' +
+      '<rect class="fg-apill" x="' + b.x.toFixed(1) + '" y="' + b.y.toFixed(1) + '" width="' + b.w.toFixed(1) + '" height="' + b.h.toFixed(1) + '" rx="' + (b.h / 2).toFixed(1) + '"/>' +
+      '<text class="fg-alabel" x="' + ev.cx.toFixed(1) + '" y="' + (ev.cy + ev.fit.fs * 0.35).toFixed(1) + '" text-anchor="middle" font-size="' + ev.fit.fs + '">' + esc(ev.e.label) + '</text></g>';
+  }
+  const right = focus.b.x + focus.b.w;
+  const clear = !g.events.some((ev) => ev !== focus.ev && ev.row === focus.ev.row && ev.cx > focus.ev.cx);
+  if (clear && right + 16 < 728) h += '<path class="fg-lead" d="M' + (right + 6).toFixed(1) + ' ' + focus.ev.cy + ' H728"/>';
+  return h + '<circle class="fg-port" data-anchor="1" cx="733" cy="' + (clear ? focus.ev.cy : 164) + '" r="4.5"/></svg>';
+}
+
 // ---- registry ----
 
 // figSvg and figureOverflows dispatch on figure.kind through FIGURES. figureRuntime injects the
@@ -471,7 +684,9 @@ export function relSvg(rule, st, uid) {
 export const FIGURES = {
   gate: { svg: gateSvg, overflows: gateOverflows, fns: [gateSvg], consts: { GEOM, TONES, ARROWS } },
   sequence: { svg: seqSvg, overflows: seqOverflows, fns: [midY, pillBox, pillFit, edgeSvg, seqLayout, seqSvg], consts: { SEQ } },
-  relation: { svg: relSvg, overflows: relOverflows, fns: [midY, pillBox, pillFit, edgeSvg, bez, relLayout, nodeLayout, relSvg], consts: { REL } },
+  relation: { svg: relSvg, overflows: relOverflows, fns: [midY, pillBox, pillFit, edgeSvg, bez, graphLayout, relLayout, nodeLayout, relSvg], consts: { REL } },
+  state: { svg: stmSvg, overflows: stmOverflows, fns: [midY, pillBox, pillFit, bez, graphLayout, stmLayout, stmNodeLayout, stmSvg], consts: { REL, STM } },
+  timeline: { svg: tlSvg, overflows: tlOverflows, fns: [pillBox, pillFit, tlLayout, tlSvg], consts: { TL } },
 };
 export const FIGURE_KINDS = Object.keys(FIGURES);
 const COMMON_FNS = [esc, charEm, textW, fitFontSize, splitTwo, layoutBoxLabel, figKind, figOpen, blabel, chipSvg, figSvg];

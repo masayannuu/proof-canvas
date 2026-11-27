@@ -1,0 +1,300 @@
+$ quint run models/mutant_off_by_one_ttl.qnt --backend=rust --seed=0x1 --max-samples=2000 --max-steps=12 --invariant=inv_no_expired_code_redeem
+An example execution:
+
+[State 0]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: false,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "INIT",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 0,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 0,
+  ropcAttemptedGhost: false
+}
+
+[State 1]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: false,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "TICK",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 1,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 0,
+  ropcAttemptedGhost: false
+}
+
+[State 2]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "AUTHZ",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 1,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 3]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "STUTTER",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 1,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 4]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "STUTTER",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 1,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 5]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "STUTTER",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 1,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 6]
+{
+  codeCreatedAtGhost: Map(),
+  codes: Map(),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "TICK",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 1,
+  nextTokenId: 1,
+  now: 2,
+  prevMintedCountGhost: 0,
+  redirectAudit: Set(),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 7]
+{
+  codeCreatedAtGhost: Map(1 -> 2),
+  codes:
+    Map(
+      1 ->
+        {
+          client: "C_APP",
+          expiresAt: 4,
+          issuedAt: 2,
+          redeemed: false,
+          redirectUri: "https://app.example/cb"
+        }
+    ),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "AUTHZ",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 2,
+  nextTokenId: 1,
+  now: 2,
+  prevMintedCountGhost: 0,
+  redirectAudit:
+    Set({ client: "C_APP", emittedAt: 2, targetUri: "https://app.example/cb" }),
+  rejectedCount: 1,
+  ropcAttemptedGhost: false
+}
+
+[State 8]
+{
+  codeCreatedAtGhost: Map(1 -> 2),
+  codes:
+    Map(
+      1 ->
+        {
+          client: "C_APP",
+          expiresAt: 4,
+          issuedAt: 2,
+          redeemed: false,
+          redirectUri: "https://app.example/cb"
+        }
+    ),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "AUTHZ",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 2,
+  nextTokenId: 1,
+  now: 2,
+  prevMintedCountGhost: 0,
+  redirectAudit:
+    Set({ client: "C_APP", emittedAt: 2, targetUri: "https://app.example/cb" }),
+  rejectedCount: 2,
+  ropcAttemptedGhost: false
+}
+
+[State 9]
+{
+  codeCreatedAtGhost: Map(1 -> 2),
+  codes:
+    Map(
+      1 ->
+        {
+          client: "C_APP",
+          expiresAt: 4,
+          issuedAt: 2,
+          redeemed: false,
+          redirectUri: "https://app.example/cb"
+        }
+    ),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "TICK",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 2,
+  nextTokenId: 1,
+  now: 3,
+  prevMintedCountGhost: 0,
+  redirectAudit:
+    Set({ client: "C_APP", emittedAt: 2, targetUri: "https://app.example/cb" }),
+  rejectedCount: 2,
+  ropcAttemptedGhost: false
+}
+
+[State 10]
+{
+  codeCreatedAtGhost: Map(1 -> 2),
+  codes:
+    Map(
+      1 ->
+        {
+          client: "C_APP",
+          expiresAt: 4,
+          issuedAt: 2,
+          redeemed: false,
+          redirectUri: "https://app.example/cb"
+        }
+    ),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: false,
+  lastActionKindGhost: "TICK",
+  lastRedeemAtGhost: 0,
+  lastRedeemCodeIdGhost: 0,
+  mintedAudit: Set(),
+  nextCodeId: 2,
+  nextTokenId: 1,
+  now: 4,
+  prevMintedCountGhost: 0,
+  redirectAudit:
+    Set({ client: "C_APP", emittedAt: 2, targetUri: "https://app.example/cb" }),
+  rejectedCount: 2,
+  ropcAttemptedGhost: false
+}
+
+[State 11]
+{
+  codeCreatedAtGhost: Map(1 -> 2),
+  codes:
+    Map(
+      1 ->
+        {
+          client: "C_APP",
+          expiresAt: 4,
+          issuedAt: 2,
+          redeemed: true,
+          redirectUri: "https://app.example/cb"
+        }
+    ),
+  evilRedirectAttemptedGhost: true,
+  expiredRejectObsGhost: true,
+  lastActionKindGhost: "REDEEM",
+  lastRedeemAtGhost: 4,
+  lastRedeemCodeIdGhost: 1,
+  mintedAudit:
+    Set(
+      {
+        codeExpiresAt: 4,
+        codeId: 1,
+        codeIssuedAt: 2,
+        grantType: "authorization_code",
+        redeemedAt: 4,
+        tokenId: 1
+      }
+    ),
+  nextCodeId: 2,
+  nextTokenId: 2,
+  now: 4,
+  prevMintedCountGhost: 0,
+  redirectAudit:
+    Set({ client: "C_APP", emittedAt: 2, targetUri: "https://app.example/cb" }),
+  rejectedCount: 2,
+  ropcAttemptedGhost: false
+}
+
+[violation] Found an issue (36ms at 750 traces/second).
+Use --verbosity=3 to show executions.
+Use --seed=0x6f1 --backend=rust to reproduce.
+error: Invariant violated

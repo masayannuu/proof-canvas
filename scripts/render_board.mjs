@@ -247,6 +247,33 @@ const CSS = `
 .st-pill.st-pending { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-bd); border-style: dashed; }
 /*@end*/
 
+/*@state*/
+.fg-box > rect.fg-inner { fill: none; }
+.fg-start { fill: var(--pc-ink); }
+.fg-x circle { fill: var(--pc-surface); stroke: var(--pc-bad); stroke-width: 1.6px; }
+.fg-x path { fill: none; stroke: var(--pc-bad); stroke-width: 1.8px; stroke-linecap: round; }
+.is-loop.is-on .fg-line { stroke-width: 3.4px; }
+.is-amber.is-on .fg-line { stroke: var(--pc-warn); }
+.is-amber.is-on .fg-alabel { fill: var(--pc-warn); }
+.fg-head-loop { fill: var(--pc-warn); }
+/*@end*/
+/*@timeline*/
+.fg-back { fill: var(--pc-surface); }
+.fg-axis { fill: none; stroke: var(--pc-ink-3); stroke-width: 1.4px; }
+.fg-tick line { stroke: var(--pc-ink-3); stroke-width: 1.4px; }
+.fg-tick text { fill: var(--pc-ink-2); font-weight: 500; }
+.fg-tick.is-bound text { fill: var(--pc-warn); font-weight: 700; }
+.fg-bound { stroke: var(--pc-warn); stroke-width: 1.6px; stroke-dasharray: 5 4; }
+.fg-pin { stroke: var(--pc-bd-strong); stroke-width: 1.2px; stroke-dasharray: 2 3; }
+.fg-pin.is-on { stroke: var(--pc-ink-3); }
+.fg-ev .fg-apill { stroke: var(--pc-bd-strong); stroke-width: 1px; }
+.fg-pindot { fill: #a1a1aa; }
+.fg-ev.is-on .fg-pindot { fill: var(--hot); }
+.fg-ev.t-good.is-on .fg-pindot { fill: var(--pc-good); }
+.fg-ev.t-good.is-on .fg-alabel { fill: var(--pc-good); }
+.fg-ev.t-bad.is-on .fg-pindot { fill: var(--pc-bad); }
+.fg-ev.t-bad.is-on .fg-alabel { fill: var(--pc-bad); }
+/*@end*/
 /*@bounds*/
 .pc-bounds { margin: 0 0 12px; font-size: 12px; color: var(--pc-ink-2); }
 .pc-bounds b { font-weight: 600; color: var(--pc-ink-3); margin-right: 8px; }
@@ -1303,7 +1330,7 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
     `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
-  const keep = [layout, ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : []), ...(board.run.bounds ? ['bounds'] : []),
+  const keep = [layout, ...new Set(board.rules.map(figKind)), ...(board.flow ? ['flow'] : []), ...(board.outOfScope ? ['oos'] : []), ...(board.run.bounds ? ['bounds'] : []),
     ...(binding.counterexamples ? ['trace'] : [])];
   const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
   const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board, binding) + (board.flow ? '\n' + flowRuntime() : '') +

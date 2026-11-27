@@ -13,7 +13,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
-import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
+import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, stmLayout, textW, tlLayout } from './figure.mjs';
 import { checkpointFocus, flowLayout, flowOverflows, flowRuntime, flowView } from './flow.mjs';
 import { bindEvidence, parseMutantFlag, validateBinding } from './evidence.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
@@ -1926,6 +1926,181 @@ test('bounds and witness: run.bounds is one escaped line above every view, tree-
   schemaErr(withFlowEdit(EX1, (v) => { v.rules[0].evidence.witness = 3; }), '$.rules[0].evidence.witness');
   assert.ok(hasWarning(validateBoardData(withFlowEdit(EX1, (v) => { v.run.bounds = 'x'.repeat(121); })), '$.run.bounds'));
   assert.deepEqual(validateBoardData(b).warnings, []);
+});
+
+// ---------------------------------------------------------------------------------------------
+// state and timeline figures (example 07)
+// ---------------------------------------------------------------------------------------------
+const EX7 = load('07_state_timeline/state_timeline_ja.board.json');
+const EX7_DIR = join(ROOT, 'examples', '07_state_timeline');
+const ex7Mutants = () => [['refresh_reuse', 'mutant_reuse_rotated_accepted.log'], ['code_ttl', 'mutant_off_by_one_ttl.log'], ['replay_revoke', 'mutant_tlc_replay_compromised_no_revoke.log']]
+  .map(([ruleId, f]) => ({ ruleId, path: join(EX7_DIR, f) }));
+const STM_RULE = 0;
+const TL_RULE = 1;
+const editRule = (i, f) => { const b = clone(EX7); f(b.rules[i]); return b; };
+
+test('example 07: state and timeline rules bind three real mutant logs with 0 errors, 0 warnings, under budget', () => {
+  assert.deepEqual([validateBoardData(EX7).errors, validateBoardData(EX7).warnings], [[], []]);
+  const flags = ex7Mutants().flatMap((m) => ['--mutant-log', m.ruleId + '=' + m.path]);
+  const input = join(EX7_DIR, 'state_timeline_ja.board.json');
+  for (const mode of ['standalone', 'embed']) {
+    const out = join(TMP, `07-${mode}.html`);
+    const r = node('render_board.mjs', ['--in', input, ...flags, '--mode', mode, '--out', out]);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stderr, '');
+    const v = node('validate_board.mjs', ['--in', input, ...flags, out]);
+    assert.equal(v.status, 0, v.stdout + v.stderr);
+    assert.equal(/WARN|ERR/.test(v.stdout), false, v.stdout);
+    assert.ok(readFileSync(out).length <= 128 * 1024);
+  }
+  const traces = bindEvidence(EX7, { mutantLogs: ex7Mutants() }).counterexamples;
+  assert.deepEqual(Object.values(traces).map((c) => [c.checker, c.violatedProperty, c.stepCount]),
+    [['Quint', 'inv_no_expired_code_redeem', 12], ['Quint', 'inv_refresh_reuse_revokes_family', 11], ['TLC', 'InvRevokeOnReplay', 5]]);
+  for (const c of Object.values(traces)) for (const step of c.steps) assert.equal(/\/Users|\/private|masaya/.test(step), false, step);
+});
+
+test('state: every state draws one anchor, transitions end on box borders, a forbidden pill holds its circled x', () => {
+  for (const i of [0, 2]) {
+    const r = EX7.rules[i];
+    const g = stmLayout(r);
+    for (const x of g.edges) {
+      if (x.e.from === x.e.to) continue;
+      for (const [pt, id] of [[x.p[0], x.e.from], [x.p[3], x.e.to]]) {
+        const n = g.nodes[id];
+        const inside = pt[0] > n.x && pt[0] < n.x + n.w && pt[1] > n.y && pt[1] < n.y + n.h;
+        const d = Math.hypot(Math.max(n.x - pt[0], 0, pt[0] - n.x - n.w), Math.max(n.y - pt[1], 0, pt[1] - n.y - n.h));
+        assert.ok(!inside && d <= 2.5, `${r.id} ${x.e.id} endpoint is ${inside ? 'inside' : d.toFixed(1) + ' away from'} ${id}`);
+      }
+    }
+    for (const k of STATES) {
+      const svg = figSvg(r, r.states[k], 'u', true);
+      assert.equal(anchors(svg), 1, `${r.id}/${k}`);
+      assert.equal(/NaN|undefined/.test(svg), false);
+    }
+  }
+  const r = EX7.rules[STM_RULE];
+  const bug = figSvg(r, r.states.bug, 'u', true);
+  const pill = bug.match(/data-tr="accept_old" class="fg-arrow is-forbid is-on is-here">[^]*?<rect class="fg-apill" x="([\d.]+)" y="[\d.]+" width="([\d.]+)"[^]*?<g class="fg-x"><circle cx="([\d.]+)"/);
+  assert.ok(pill, 'the forbidden self-transition is drawn with its x');
+  assert.ok(Number(pill[3]) - 6 >= Number(pill[1]) && Number(pill[3]) + 6 <= Number(pill[1]) + Number(pill[2]), 'the x sits inside its pill');
+  assert.ok(bug.includes('marker-end="url(#fg-hb-u)"'));
+  assert.ok(figSvg(r, r.states.fixed, 'u', true).includes('data-tr="revive" class="fg-arrow is-forbid is-on is-blocked"'), 'the fix blocks the forbidden revive');
+  assert.ok(figSvg(r, r.states.fixed, 'u', true).includes('marker-end="url(#fg-hs-u)"'));
+  const loop = EX7.rules[2];
+  assert.ok(figSvg(loop, loop.states.bug, 'u', true).includes('class="fg-arrow is-loop is-on is-here"'), 'a loop in the bug state is drawn hot (red)');
+  assert.ok(figSvg(loop, { ...loop.states.bug, tone: 'normal' }, 'u', true).includes('is-loop is-amber is-on'));
+  assert.ok(bug.includes('<circle class="fg-start"') && figSvg(r, r.states.fixed, 'u', true).includes('<rect class="fg-inner"'), 'initial dot and terminal double border');
+});
+
+test('state: a two-state machine with a two-way pair and a forbidden self-loop fits; label collisions warn', () => {
+  const b = editRule(STM_RULE, (r) => {
+    r.figure.states = [{ id: 'open', label: 'Open', role: 'initial' }, { id: 'closed', label: 'Closed', role: 'terminal' }];
+    r.figure.transitions = [{ id: 'close', from: 'open', to: 'closed', label: 'close' }, { id: 'reopen', from: 'closed', to: 'open', label: 'reopen', kind: 'forbidden' },
+      { id: 'spin', from: 'open', to: 'open', label: 'retry', kind: 'loop' }];
+    for (const st of Object.values(r.states)) { st.activeStates = ['open', 'closed']; st.activeTransitions = ['close', 'reopen']; st.focusTransition = 'reopen'; st.chips = [{ state: 'closed', text: 'final', tone: 'good' }]; }
+  });
+  assert.deepEqual(validateBoardData(b).warnings, []);
+  const g = stmLayout(b.rules[STM_RULE]);
+  const [p, q] = g.edges.slice(0, 2).map((x) => pillBox(x.cx, x.cy, x.fit));
+  assert.ok(p.y + p.h <= q.y || q.y + q.h <= p.y, 'the two directions of a pair keep their labels apart');
+  const crowded = editRule(STM_RULE, (r) => { r.figure.transitions[2].label = 'stolen generation-one token accepted again and again'; });
+  assert.ok(validateBoardData(crowded).warnings.some((w) => w.startsWith(`$.rules[${STM_RULE}].figure.transitions[2].label`)), validateBoardData(crowded).warnings.join('\n'));
+});
+
+test('state: invalid states, transitions and state references are errors', () => {
+  const p = `$.rules[${STM_RULE}]`;
+  const e = (f) => editRule(STM_RULE, f);
+  schemaErr(e((r) => { r.figure.states = r.figure.states.slice(0, 1); }), `${p}.figure.states`);
+  schemaErr(e((r) => { r.figure.transitions = []; }), `${p}.figure.transitions`);
+  schemaErr(e((r) => { r.figure.states[0].role = 'start'; }), `${p}.figure.states[0].role`);
+  schemaErr(e((r) => { r.figure.transitions[0].to = 'ghost'; }), `${p}.figure.transitions[0].to`);
+  schemaErr(e((r) => { r.figure.transitions[0].kind = 'maybe'; }), `${p}.figure.transitions[0].kind`);
+  schemaErr(e((r) => { r.figure.transitions[0].to = r.figure.transitions[0].from; }), `${p}.figure.transitions[0]`);
+  schemaErr(e((r) => { r.figure.transitions.push({ id: 'again', from: 'active', to: 'rotated', label: 'x' }); }), `${p}.figure.transitions[4]`);
+  schemaErr(e((r) => { r.states.bug.activeStates = []; }), `${p}.states.bug.activeStates`);
+  schemaErr(e((r) => { r.states.bug.activeTransitions = ['ghost']; }), `${p}.states.bug.activeTransitions`);
+  schemaErr(e((r) => { r.states.bug.focusTransition = 'ghost'; }), `${p}.states.bug.focusTransition`);
+  schemaErr(e((r) => { r.states.bug.chips.push({ state: 'rotated', text: 'twice', tone: 'bad' }); }), `${p}.states.bug.chips[1].state`);
+});
+
+test('timeline: two events on one tick stack upward, the pin joins them, a fourth stacked event warns', () => {
+  const r = EX7.rules[TL_RULE];
+  const g = tlLayout(r);
+  const [accept, reject] = [g.events[2], g.events[3]];
+  assert.equal(accept.x, reject.x);
+  assert.ok(reject.cy < accept.cy, 'the second event on a tick sits above the first');
+  const a = pillBox(accept.cx, accept.cy, accept.fit);
+  const q = pillBox(reject.cx, reject.cy, reject.fit);
+  assert.ok(q.y + q.h <= a.y, 'stacked pills do not overlap');
+  assert.ok(Math.abs(reject.pinTo - a.y) < 0.01, 'the upper pin ends on the lower pill');
+  for (const k of STATES) assert.equal(anchors(figSvg(r, r.states[k], 'u', true)), 1);
+  const worst = editRule(TL_RULE, (x) => {
+    x.figure.ticks = ['a', 'b', 'c', 'd', 'e'].map((id, i) => ({ id, label: 't=' + i, ...(i === 3 ? { boundary: true } : {}) }));
+    x.figure.bars = [{ id: 'b1', from: 'a', to: 'd', label: 'lease', tone: 'good' }, { id: 'b2', from: 'b', to: 'e', label: 'renewal', tone: 'bad' }, { id: 'b3', from: 'a', to: 'b', label: 'grace' }];
+    x.figure.events = [{ id: 'e1', tick: 'd', label: 'expire' }, { id: 'e2', tick: 'd', label: 'renew', tone: 'good' }, { id: 'e3', tick: 'd', label: 'use', tone: 'bad' }, { id: 'e4', tick: 'a', label: 'grant' }];
+    for (const st of Object.values(x.states)) { st.activeBars = ['b1', 'b2', 'b3']; st.activeEvents = ['e1', 'e2', 'e3', 'e4']; st.focusEvent = 'e3'; st.chips = [{ tick: 'd', text: 'now == exp', tone: 'bad' }]; }
+  });
+  assert.deepEqual(validateBoardData(worst).warnings, [], 'three bars, three stacked events and a chip fit');
+  const fourth = clone(worst);
+  fourth.rules[TL_RULE].figure.events[3].tick = 'd';
+  assert.ok(validateBoardData(fourth).warnings.some((w) => /figure\.events\[3\]\.label.*fourth row/.test(w)), validateBoardData(fourth).warnings.join('\n'));
+  const wide = clone(worst);
+  wide.rules[TL_RULE].figure.ticks[1].label = 'renewal requested by the client application after expiry';
+  assert.ok(validateBoardData(wide).warnings.some((w) => w.startsWith(`$.rules[${TL_RULE}].figure.ticks[1].label`)));
+});
+
+test('timeline: invalid ticks, bars, events and state references are errors', () => {
+  const p = `$.rules[${TL_RULE}]`;
+  const e = (f) => editRule(TL_RULE, f);
+  schemaErr(e((r) => { r.figure.ticks = r.figure.ticks.slice(0, 1); }), `${p}.figure.ticks`);
+  schemaErr(e((r) => { r.figure.ticks[2].boundary = 'yes'; }), `${p}.figure.ticks[2].boundary`);
+  schemaErr(e((r) => { r.figure.bars[0].to = 't2'; }), `${p}.figure.bars[0]`);
+  schemaErr(e((r) => { r.figure.bars[0].from = 'ghost'; }), `${p}.figure.bars[0].from`);
+  schemaErr(e((r) => { r.figure.bars[0].tone = 'warn'; }), `${p}.figure.bars[0].tone`);
+  schemaErr(e((r) => { r.figure.events[0].tick = 'ghost'; }), `${p}.figure.events[0].tick`);
+  schemaErr(e((r) => { r.figure.events[0].tone = 'warn'; }), `${p}.figure.events[0].tone`);
+  schemaErr(e((r) => { r.states.bug.activeEvents = []; }), `${p}.states.bug.activeEvents`);
+  schemaErr(e((r) => { r.states.bug.focusEvent = 'ghost'; }), `${p}.states.bug.focusEvent`);
+  schemaErr(e((r) => { r.states.bug.chips = [{ tick: 'ghost', text: 'x', tone: 'bad' }]; }), `${p}.states.bug.chips[0].tick`);
+});
+
+test('state and timeline: the runtime draws them exactly like the server; other boards ship none of their code or styles', () => {
+  const ctx = {};
+  runInNewContext(figureRuntime(['state', 'timeline']) + '\nthis.figSvg = figSvg;', ctx);
+  for (const r of EX7.rules) for (const k of STATES) assert.equal(ctx.figSvg(r, r.states[k], 'b-' + r.id, true), figSvg(r, r.states[k], 'b-' + r.id, true), `${r.id}/${k}`);
+  const markers = ['function stmSvg', 'function tlSvg', 'function tlLayout', 'const STM', 'const TL ', 'fg-start', 'fg-axis', 'fg-pindot', 'is-amber'];
+  for (const b of [EX0, EX1, EX2, EX3, EX5, EX6]) {
+    const html = renderBoardHtml(b);
+    for (const m of markers) assert.equal(html.includes(m), false, `${b.runId} ships ${m}`);
+  }
+  const html = renderBoardHtml(EX7);
+  for (const m of markers) assert.ok(html.includes(m), m);
+  const stateOnly = renderBoardHtml(withFlowEdit(EX7, (b) => { b.rules.splice(TL_RULE, 1); }));
+  assert.equal(/function tlSvg|fg-axis/.test(stateOnly), false, 'a board without a timeline ships no timeline code');
+  assert.equal(figureRuntime(['relation']).includes('STM'), false, 'relation boards do not get the state slot table');
+});
+
+test('state and timeline: ids such as constructor, toString and __proto__ draw like any other id; every label is escaped', () => {
+  const rename = (rule, map) => JSON.parse(Object.entries(map).reduce((t, [a, z]) => t.split('"' + a + '"').join('"' + z + '"'), JSON.stringify(rule)));
+  const x = '<img src=x onerror=alert(1)>';
+  const b = clone(EX7);
+  b.rules[STM_RULE] = rename(b.rules[STM_RULE], { active: 'constructor', rotated: 'toString', revoked: '__proto__' });
+  b.rules[TL_RULE] = rename(b.rules[TL_RULE], { t2: 'constructor', t4: '__proto__', accept: 'toString' });
+  b.rules[STM_RULE].figure.states[0].label = x;
+  b.rules[TL_RULE].figure.events[0].label = x;
+  b.rules[TL_RULE].figure.ticks[0].label = x;
+  assert.deepEqual(validateBoardData(b).errors, []);
+  for (const i of [STM_RULE, TL_RULE]) {
+    for (const [k, st] of Object.entries(b.rules[i].states)) {
+      const svg = figSvg(b.rules[i], st, 'u', true);
+      assert.equal(/NaN|undefined|<img/.test(svg), false, `${b.rules[i].id}/${k}`);
+      assert.equal((svg.match(/class="fg-chip /g) || []).length, (st.chips || []).length);
+    }
+  }
+  assert.ok(figSvg(b.rules[STM_RULE], b.rules[STM_RULE].states.bug, 'u', true).includes('&lt;img'));
+  const html = renderBoardHtml(b);
+  expectPass(html);
+  assert.equal(html.includes('<img src=x'), false);
 });
 
 rmSync(TMP, { recursive: true, force: true });

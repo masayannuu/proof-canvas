@@ -1,0 +1,489 @@
+$ quint run models/mutant_reuse_rotated_accepted.qnt --backend=rust --seed=0x1 --max-samples=2000 --max-steps=16 --invariant=inv_refresh_reuse_revokes_family
+An example execution:
+
+[State 0]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set()
+}
+
+[State 1]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 2]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 3]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 4]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 5]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 1,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: true,
+          familyId: 1,
+          presentedGen: 1,
+          reqScopes: Set("Read"),
+          snapActiveGen: 1,
+          snapStatus: "ACTIVE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }),
+  nextAccessId: 2,
+  presented: Set(),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 6]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read"), tokenId: 2 },
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 2,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(1),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 }),
+  nextAccessId: 3,
+  presented: Set({ familyId: 1, gen: 1, wasRotatedAtCommit: false }),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 7]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read"), tokenId: 2 },
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 2,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(1),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 }),
+  nextAccessId: 3,
+  presented: Set({ familyId: 1, gen: 1, wasRotatedAtCommit: false }),
+  stolenTokens: Set({ familyId: 1, gen: 1 })
+}
+
+[State 8]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read"), tokenId: 2 },
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 2,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(1),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 }),
+  nextAccessId: 3,
+  presented: Set({ familyId: 1, gen: 1, wasRotatedAtCommit: false }),
+  stolenTokens: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 })
+}
+
+[State 9]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read"), tokenId: 2 },
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 2,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(1),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: true,
+          familyId: 1,
+          presentedGen: 1,
+          reqScopes: Set("Read", "Write"),
+          snapActiveGen: 2,
+          snapStatus: "ACTIVE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 }),
+  nextAccessId: 3,
+  presented: Set({ familyId: 1, gen: 1, wasRotatedAtCommit: false }),
+  stolenTokens: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 })
+}
+
+[State 10]
+{
+  accessTokens:
+    Set(
+      { familyId: 1, revoked: false, scopes: Set("Read"), tokenId: 2 },
+      { familyId: 1, revoked: false, scopes: Set("Read", "Write"), tokenId: 1 }
+    ),
+  families:
+    Map(
+      1 ->
+        {
+          activeGen: 2,
+          grantedScopes: Set("Read", "Write"),
+          rotatedGens: Set(1),
+          status: "ACTIVE"
+        }
+    ),
+  inflight:
+    Map(
+      "Attacker" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        },
+      "Legit" ->
+        {
+          active: false,
+          familyId: 0,
+          presentedGen: 0,
+          reqScopes: Set(),
+          snapActiveGen: 0,
+          snapStatus: "NONE"
+        }
+    ),
+  legitHeld: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 }),
+  nextAccessId: 3,
+  presented:
+    Set(
+      { familyId: 1, gen: 1, wasRotatedAtCommit: false },
+      { familyId: 1, gen: 1, wasRotatedAtCommit: true }
+    ),
+  stolenTokens: Set({ familyId: 1, gen: 1 }, { familyId: 1, gen: 2 })
+}
+
+[violation] Found an issue (674ms at 4 traces/second).
+Use --verbosity=3 to show executions.
+Use --seed=0xb5 --backend=rust to reproduce.
+error: Invariant violated

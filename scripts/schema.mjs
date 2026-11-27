@@ -18,6 +18,10 @@ export const RULE_STATUSES = ['verified', 'failed', 'pending'];
 export const PROVENANCE_VALUES = ['verified', 'mixed', 'sample', 'unverified'];
 export const DEFAULT_VIEWS = ['rule', 'flow'];
 export const EDGE_KINDS = ['normal', 'bypass', 'handoff'];
+export const STATE_ROLES = ['initial', 'normal', 'terminal', 'bad'];
+export const TRANSITION_KINDS = ['allowed', 'forbidden', 'loop'];
+export const BAR_TONES = ['neutral', 'good', 'bad'];
+export const EVENT_TONES = ['normal', 'good', 'bad'];
 export const LABEL_WARN_CHARS = 24;
 
 // Keys the renderer adds to the embedded payload. They are never part of an input board.
@@ -261,6 +265,67 @@ const KIND_CHECKS = {
       idRefs(st.activeEdges, refs.edges, `${sp}.activeEdges`, true, 'edge', c);
       if (st.focusNodes !== undefined) idRefs(st.focusNodes, refs.nodes, `${sp}.focusNodes`, false, 'node', c);
       chipList(st.chips, 'node', refs.nodes, `${sp}.chips`, false, c);
+    },
+  },
+  state: {
+    figureKeys: ['kind', 'states', 'transitions'],
+    stateKeys: ['label', 'tone', 'activeStates', 'activeTransitions', 'focusTransition', 'edgeShort', 'chips', 'takeaway', 'preview'],
+    figure(fig, fp, c) {
+      const states = figureItems(fig.states, `${fp}.states`, 2, 5, ['id', 'label', 'role'], c);
+      const transitions = figureItems(fig.transitions, `${fp}.transitions`, 1, 8, ['id', 'from', 'to', 'label', 'kind'], c);
+      (Array.isArray(fig.states) ? fig.states : []).forEach((sd, i) => {
+        if (isPlainObject(sd) && sd.role !== undefined && !STATE_ROLES.includes(sd.role)) c.err(`${fp}.states[${i}].role`, `must be one of ${STATE_ROLES.join(', ')} when present`);
+      });
+      const pairs = new Set();
+      (Array.isArray(fig.transitions) ? fig.transitions : []).forEach((t, i) => {
+        if (!isPlainObject(t)) return;
+        const tp = `${fp}.transitions[${i}]`;
+        for (const k of ['from', 'to']) if (!states.has(t[k])) c.err(`${tp}.${k}`, `must be a state id (got "${t[k]}")`);
+        if (t.kind !== undefined && !TRANSITION_KINDS.includes(t.kind)) c.err(`${tp}.kind`, `must be one of ${TRANSITION_KINDS.join(', ')} when present`);
+        if (t.from === t.to && (t.kind ?? 'allowed') === 'allowed') c.err(tp, 'a self-transition must be kind "loop" or "forbidden"');
+        const pair = t.from + '>' + t.to;
+        if (pairs.has(pair)) c.err(tp, `a second transition from "${t.from}" to "${t.to}"`);
+        pairs.add(pair);
+      });
+      return { states, transitions };
+    },
+    state(st, refs, sp, c) {
+      idRefs(st.activeStates, refs.states, `${sp}.activeStates`, true, 'state', c);
+      idRefs(st.activeTransitions, refs.transitions, `${sp}.activeTransitions`, false, 'transition', c);
+      if (!refs.transitions.has(st.focusTransition)) c.err(`${sp}.focusTransition`, `must be a transition id (got "${st.focusTransition}")`);
+      chipList(st.chips, 'state', refs.states, `${sp}.chips`, false, c);
+    },
+  },
+  timeline: {
+    figureKeys: ['kind', 'ticks', 'bars', 'events'],
+    stateKeys: ['label', 'tone', 'activeBars', 'activeEvents', 'focusEvent', 'edgeShort', 'chips', 'takeaway', 'preview'],
+    figure(fig, fp, c) {
+      const ticks = figureItems(fig.ticks, `${fp}.ticks`, 2, 5, ['id', 'label', 'boundary'], c);
+      const bars = figureItems(fig.bars, `${fp}.bars`, 1, 3, ['id', 'from', 'to', 'label', 'tone'], c);
+      const events = figureItems(fig.events, `${fp}.events`, 1, 4, ['id', 'tick', 'label', 'tone'], c);
+      const index = new Map((Array.isArray(fig.ticks) ? fig.ticks : []).map((t, i) => [isPlainObject(t) ? t.id : undefined, i]));
+      (Array.isArray(fig.ticks) ? fig.ticks : []).forEach((t, i) => {
+        if (isPlainObject(t) && t.boundary !== undefined && typeof t.boundary !== 'boolean') c.err(`${fp}.ticks[${i}].boundary`, 'must be a boolean when present');
+      });
+      (Array.isArray(fig.bars) ? fig.bars : []).forEach((b, i) => {
+        if (!isPlainObject(b)) return;
+        const bp = `${fp}.bars[${i}]`;
+        for (const k of ['from', 'to']) if (!ticks.has(b[k])) c.err(`${bp}.${k}`, `must be a tick id (got "${b[k]}")`);
+        if (ticks.has(b.from) && ticks.has(b.to) && index.get(b.from) >= index.get(b.to)) c.err(bp, `must run forward: tick "${b.from}" comes before "${b.to}"`);
+        if (b.tone !== undefined && !BAR_TONES.includes(b.tone)) c.err(`${bp}.tone`, `must be one of ${BAR_TONES.join(', ')} when present`);
+      });
+      (Array.isArray(fig.events) ? fig.events : []).forEach((e, i) => {
+        if (!isPlainObject(e)) return;
+        if (!ticks.has(e.tick)) c.err(`${fp}.events[${i}].tick`, `must be a tick id (got "${e.tick}")`);
+        if (e.tone !== undefined && !EVENT_TONES.includes(e.tone)) c.err(`${fp}.events[${i}].tone`, `must be one of ${EVENT_TONES.join(', ')} when present`);
+      });
+      return { ticks, bars, events };
+    },
+    state(st, refs, sp, c) {
+      idRefs(st.activeBars, refs.bars, `${sp}.activeBars`, false, 'bar', c);
+      idRefs(st.activeEvents, refs.events, `${sp}.activeEvents`, true, 'event', c);
+      if (!refs.events.has(st.focusEvent)) c.err(`${sp}.focusEvent`, `must be an event id (got "${st.focusEvent}")`);
+      chipList(st.chips, 'tick', refs.ticks, `${sp}.chips`, false, c);
     },
   },
 };

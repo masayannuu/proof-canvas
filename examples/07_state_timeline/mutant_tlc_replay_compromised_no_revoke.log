@@ -1,0 +1,82 @@
+$ java -cp tla2tools-1.7.4.jar tlc2.TLC -config MutantReplayCompromisedNoRevoke.cfg MutantReplayCompromisedNoRevoke.tla
+TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)
+Running breadth-first search Model-Checking with fp 63 and seed -5031292262057332648 with 1 worker on 8 cores with 5461MB heap and 64MB offheap memory [pid: 68779] (Mac OS X 26.7.3 aarch64, Eclipse Adoptium 21.0.12 x86_64, MSBDiskFPSet, DiskStateQueue).
+Parsing file MutantReplayCompromisedNoRevoke.tla
+Parsing file OAuthCodeExchange.tla
+Parsing file FiniteSets.tla
+Parsing file Naturals.tla
+Parsing file Sequences.tla
+Semantic processing of module Naturals
+Semantic processing of module Sequences
+Semantic processing of module FiniteSets
+Semantic processing of module OAuthCodeExchange
+Semantic processing of module MutantReplayCompromisedNoRevoke
+Starting... (2026-11-27 16:30:37)
+Computing initial states...
+Finished computing initial states: 2 distinct states generated at 2026-11-27 16:30:39.
+Error: Invariant InvRevokeOnReplay is violated.
+Error: The behavior up to this point is:
+State 1: <Initial predicate>
+/\ workerPc = [LegitWorker |-> "IDLE", AttackerWorker |-> "IDLE"]
+/\ issuedTokens = {}
+/\ codeHasChallenge = TRUE
+/\ tokenStatus = [t_LegitWorker |-> "NONE", t_AttackerWorker |-> "NONE"]
+/\ workerReqVerifier = [LegitWorker |-> "NONE", AttackerWorker |-> "NONE"]
+/\ codeChallenge = "ch_legit"
+/\ codeStatus = "UNUSED"
+/\ tokenAudit = [t_LegitWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"], t_AttackerWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"]]
+/\ workerSnapStatus = [LegitWorker |-> "NONE", AttackerWorker |-> "NONE"]
+/\ postIssueAttempts = 0
+
+State 2: <ReadCode line 70, col 3 to line 76, col 61 of module OAuthCodeExchange>
+/\ workerPc = [LegitWorker |-> "READ", AttackerWorker |-> "IDLE"]
+/\ issuedTokens = {}
+/\ codeHasChallenge = TRUE
+/\ tokenStatus = [t_LegitWorker |-> "NONE", t_AttackerWorker |-> "NONE"]
+/\ workerReqVerifier = [LegitWorker |-> "NONE", AttackerWorker |-> "NONE"]
+/\ codeChallenge = "ch_legit"
+/\ codeStatus = "UNUSED"
+/\ tokenAudit = [t_LegitWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"], t_AttackerWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"]]
+/\ workerSnapStatus = [LegitWorker |-> "UNUSED", AttackerWorker |-> "NONE"]
+/\ postIssueAttempts = 0
+
+State 3: <ReadCode line 70, col 3 to line 76, col 61 of module OAuthCodeExchange>
+/\ workerPc = [LegitWorker |-> "READ", AttackerWorker |-> "READ"]
+/\ issuedTokens = {}
+/\ codeHasChallenge = TRUE
+/\ tokenStatus = [t_LegitWorker |-> "NONE", t_AttackerWorker |-> "NONE"]
+/\ workerReqVerifier = [LegitWorker |-> "NONE", AttackerWorker |-> "v_legit"]
+/\ codeChallenge = "ch_legit"
+/\ codeStatus = "UNUSED"
+/\ tokenAudit = [t_LegitWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"], t_AttackerWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"]]
+/\ workerSnapStatus = [LegitWorker |-> "UNUSED", AttackerWorker |-> "UNUSED"]
+/\ postIssueAttempts = 0
+
+State 4: <MutantNext line 33, col 25 to line 33, col 64 of module MutantReplayCompromisedNoRevoke>
+/\ workerPc = [LegitWorker |-> "READ", AttackerWorker |-> "DONE_OK"]
+/\ issuedTokens = {"t_AttackerWorker"}
+/\ codeHasChallenge = TRUE
+/\ tokenStatus = [t_LegitWorker |-> "NONE", t_AttackerWorker |-> "ACTIVE"]
+/\ workerReqVerifier = [LegitWorker |-> "NONE", AttackerWorker |-> "v_legit"]
+/\ codeChallenge = "ch_legit"
+/\ codeStatus = "USED"
+/\ tokenAudit = [t_LegitWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"], t_AttackerWorker |-> [hasChallenge |-> TRUE, challenge |-> "ch_legit", verifier |-> "v_legit"]]
+/\ workerSnapStatus = [LegitWorker |-> "UNUSED", AttackerWorker |-> "UNUSED"]
+/\ postIssueAttempts = 0
+
+State 5: <MutantNext line 33, col 25 to line 33, col 64 of module MutantReplayCompromisedNoRevoke>
+/\ workerPc = [LegitWorker |-> "DONE_ERR", AttackerWorker |-> "DONE_OK"]
+/\ issuedTokens = {"t_AttackerWorker"}
+/\ codeHasChallenge = TRUE
+/\ tokenStatus = [t_LegitWorker |-> "NONE", t_AttackerWorker |-> "ACTIVE"]
+/\ workerReqVerifier = [LegitWorker |-> "NONE", AttackerWorker |-> "v_legit"]
+/\ codeChallenge = "ch_legit"
+/\ codeStatus = "COMPROMISED"
+/\ tokenAudit = [t_LegitWorker |-> [hasChallenge |-> FALSE, challenge |-> "NONE", verifier |-> "NONE"], t_AttackerWorker |-> [hasChallenge |-> TRUE, challenge |-> "ch_legit", verifier |-> "v_legit"]]
+/\ workerSnapStatus = [LegitWorker |-> "UNUSED", AttackerWorker |-> "UNUSED"]
+/\ postIssueAttempts = 1
+
+138 states generated, 89 distinct states found, 40 states left on queue.
+The depth of the complete state graph search is 5.
+The average outdegree of the complete state graph is 2 (minimum is 0, the maximum 6 and the 95th percentile is 4).
+Finished in 07s at (2026-11-27 16:30:39)

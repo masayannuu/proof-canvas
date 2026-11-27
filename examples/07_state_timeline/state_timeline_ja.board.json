@@ -1,0 +1,594 @@
+{
+  "version": 1,
+  "runId": "oauth-token-lifecycle-07",
+  "lang": "ja",
+  "title": "トークンの寿命と状態遷移",
+  "subtitle": "状態遷移図と時間軸で読む OAuth の 3 つのルール（変異体の実反例ログつき）",
+  "generatedAt": "2026-11-27T18:00:00+09:00",
+  "provenance": "unverified",
+  "provenanceNote": "変異体ログは oauth-full-feature-fv の実行ログ（TLC はパスのみ除去）。本体の検証ログはこの例に同梱していません。",
+  "run": {
+    "tool": "Quint / TLA+ TLC",
+    "status": "verified",
+    "bounds": "Quint ランダム探索 2000 本 × 最大 12〜16 ステップ · TLC 深さ 5（138 状態）"
+  },
+  "outOfScope": [
+    {
+      "area": "実装コード",
+      "reason": "モデルの性質であり、本番コードの証明ではありません。"
+    },
+    {
+      "area": "時計のずれ",
+      "reason": "サーバー間の時刻差はモデル化していません。"
+    }
+  ],
+  "rules": [
+    {
+      "id": "refresh_reuse",
+      "no": 1,
+      "short": "再利用で全失効",
+      "title": "ローテーション済みのトークンが再利用されたら、系列ごと失効する",
+      "property": "inv_refresh_reuse_revokes_family",
+      "category": "安全性",
+      "source": "RFC 9700 §4.14.2",
+      "previewTitle": "トークン更新 API",
+      "status": "verified",
+      "figure": {
+        "kind": "state",
+        "states": [
+          {
+            "id": "active",
+            "label": "有効",
+            "role": "initial"
+          },
+          {
+            "id": "revoked",
+            "label": "系列ごと失効",
+            "role": "terminal"
+          },
+          {
+            "id": "rotated",
+            "label": "ローテーション済み"
+          }
+        ],
+        "transitions": [
+          {
+            "id": "rotate",
+            "from": "active",
+            "to": "rotated",
+            "label": "更新"
+          },
+          {
+            "id": "reuse",
+            "from": "rotated",
+            "to": "revoked",
+            "label": "旧トークン再利用"
+          },
+          {
+            "id": "accept_old",
+            "from": "rotated",
+            "to": "rotated",
+            "label": "旧トークンを受理",
+            "kind": "forbidden"
+          },
+          {
+            "id": "revive",
+            "from": "revoked",
+            "to": "active",
+            "label": "復活",
+            "kind": "forbidden"
+          }
+        ]
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "activeStates": [
+            "active",
+            "rotated"
+          ],
+          "activeTransitions": [
+            "rotate"
+          ],
+          "focusTransition": "rotate",
+          "edgeShort": "新トークン",
+          "takeaway": "更新すると新しいトークンが発行され、古いものはローテーション済みになる。",
+          "preview": {
+            "statusBadge": "更新成功",
+            "rows": [
+              {
+                "k": "提示",
+                "v": "世代 1"
+              },
+              {
+                "k": "発行",
+                "v": "世代 2",
+                "tone": "ok"
+              }
+            ],
+            "alert": "新しいリフレッシュトークンを発行しました。",
+            "buttonLabel": "続ける",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "activeStates": [
+            "active",
+            "rotated"
+          ],
+          "activeTransitions": [
+            "rotate",
+            "accept_old"
+          ],
+          "focusTransition": "accept_old",
+          "edgeShort": "盗用が通る",
+          "chips": [
+            {
+              "state": "rotated",
+              "text": "世代 1 を再提示",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "変異体では、盗まれた旧トークンの再利用がそのまま受理される。",
+          "preview": {
+            "statusBadge": "受理（危険）",
+            "rows": [
+              {
+                "k": "提示",
+                "v": "世代 1（旧）",
+                "tone": "bad"
+              },
+              {
+                "k": "系列",
+                "v": "有効のまま",
+                "tone": "bad"
+              }
+            ],
+            "alert": "旧トークンで新しいアクセストークンが発行されました。",
+            "buttonLabel": "発行する",
+            "buttonKind": "danger",
+            "logLines": [
+              "inv_refresh_reuse_revokes_family = false"
+            ]
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "activeStates": [
+            "active",
+            "rotated",
+            "revoked"
+          ],
+          "activeTransitions": [
+            "rotate",
+            "reuse",
+            "accept_old",
+            "revive"
+          ],
+          "focusTransition": "reuse",
+          "edgeShort": "系列を失効",
+          "chips": [
+            {
+              "state": "revoked",
+              "text": "全世代を失効",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "旧トークンが再提示されたら系列全体を失効させ、受理も復活もしない。",
+          "preview": {
+            "statusBadge": "拒否",
+            "rows": [
+              {
+                "k": "提示",
+                "v": "世代 1（旧）",
+                "tone": "warn"
+              },
+              {
+                "k": "系列",
+                "v": "失効",
+                "tone": "ok"
+              }
+            ],
+            "alert": "再利用を検知したため、この系列のトークンをすべて失効しました。",
+            "buttonLabel": "再ログイン",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "evidence": {
+        "ruleSummary": "ローテーション済みの世代が提示されたら、その系列の全トークンを失効させる。",
+        "ifEnforced": "盗まれた旧トークンは一度使われた時点で系列ごと無効になる。",
+        "ifNotEnforced": "攻撃者が旧トークンで新しいアクセストークンを得続けられる。",
+        "checkerSummary": "Quint: 2000 本 × 16 ステップで違反なし",
+        "scope": "Quint · 2000 本 × 16 ステップ",
+        "method": "Quint ランダム探索（rust バックエンド）",
+        "witness": "再利用→全失効に 1128/2000 本で到達",
+        "sourceQuote": "the authorization server … revokes the active refresh token as well as the refresh token that was used"
+      }
+    },
+    {
+      "id": "code_ttl",
+      "no": 2,
+      "short": "期限ちょうどで拒否",
+      "title": "認可コードは期限の時刻ちょうど（==）でも交換できない",
+      "property": "inv_no_expired_code_redeem",
+      "category": "境界条件",
+      "source": "RFC 6749 §4.1.2",
+      "previewTitle": "コード交換 API",
+      "status": "verified",
+      "figure": {
+        "kind": "timeline",
+        "ticks": [
+          {
+            "id": "t2",
+            "label": "発行 t=2"
+          },
+          {
+            "id": "t3",
+            "label": "t=3"
+          },
+          {
+            "id": "t4",
+            "label": "期限 t=4 (==)",
+            "boundary": true
+          },
+          {
+            "id": "t5",
+            "label": "t=5"
+          }
+        ],
+        "bars": [
+          {
+            "id": "valid",
+            "from": "t2",
+            "to": "t4",
+            "label": "有効 [2, 4)",
+            "tone": "good"
+          },
+          {
+            "id": "mutant",
+            "from": "t2",
+            "to": "t5",
+            "label": "変異体: t=4 も有効",
+            "tone": "bad"
+          }
+        ],
+        "events": [
+          {
+            "id": "issue",
+            "tick": "t2",
+            "label": "コード発行"
+          },
+          {
+            "id": "ok",
+            "tick": "t3",
+            "label": "t=3 交換 OK",
+            "tone": "good"
+          },
+          {
+            "id": "accept",
+            "tick": "t4",
+            "label": "t=4 で受理",
+            "tone": "bad"
+          },
+          {
+            "id": "reject",
+            "tick": "t4",
+            "label": "t=4 は拒否",
+            "tone": "good"
+          }
+        ]
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "activeBars": [
+            "valid"
+          ],
+          "activeEvents": [
+            "issue",
+            "ok"
+          ],
+          "focusEvent": "ok",
+          "edgeShort": "期限内",
+          "takeaway": "期限より前（t=3）の交換は成功する。",
+          "preview": {
+            "statusBadge": "交換成功",
+            "rows": [
+              {
+                "k": "now",
+                "v": "3"
+              },
+              {
+                "k": "expiresAt",
+                "v": "4"
+              }
+            ],
+            "alert": "アクセストークンを発行しました。",
+            "buttonLabel": "続ける",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "activeBars": [
+            "mutant"
+          ],
+          "activeEvents": [
+            "issue",
+            "accept"
+          ],
+          "focusEvent": "accept",
+          "edgeShort": "t=4 で通る",
+          "chips": [
+            {
+              "tick": "t4",
+              "text": "now == expiresAt",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "変異体は「>」と「>=」を取り違え、期限ちょうどの t=4 でも交換を受理する。",
+          "preview": {
+            "statusBadge": "受理（危険）",
+            "rows": [
+              {
+                "k": "now",
+                "v": "4",
+                "tone": "bad"
+              },
+              {
+                "k": "expiresAt",
+                "v": "4"
+              }
+            ],
+            "alert": "期限切れのコードでトークンが発行されました。",
+            "buttonLabel": "発行する",
+            "buttonKind": "danger",
+            "logLines": [
+              "inv_no_expired_code_redeem = false"
+            ]
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "activeBars": [
+            "valid"
+          ],
+          "activeEvents": [
+            "issue",
+            "reject"
+          ],
+          "focusEvent": "reject",
+          "edgeShort": "t=4 は拒否",
+          "chips": [
+            {
+              "tick": "t4",
+              "text": "now >= expiresAt",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "now >= expiresAt なら拒否するので、境界の t=4 で止まる。",
+          "preview": {
+            "statusBadge": "拒否",
+            "rows": [
+              {
+                "k": "now",
+                "v": "4",
+                "tone": "warn"
+              },
+              {
+                "k": "expiresAt",
+                "v": "4"
+              }
+            ],
+            "alert": "コードの有効期限が切れています。",
+            "buttonLabel": "やり直す",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "evidence": {
+        "ruleSummary": "now >= expiresAt のコードは交換しない。",
+        "ifEnforced": "期限ちょうどの時刻を含め、期限後のコードは使えない。",
+        "ifNotEnforced": "境界の 1 ティックだけ、漏れたコードが使えてしまう。",
+        "checkerSummary": "Quint: 2000 本 × 12 ステップで違反なし",
+        "scope": "Quint · 2000 本 × 12 ステップ",
+        "method": "Quint ランダム探索（rust バックエンド）",
+        "witness": "期限切れ拒否に 171/2000 本で到達"
+      }
+    },
+    {
+      "id": "replay_revoke",
+      "no": 3,
+      "short": "再交換で失効",
+      "title": "使用済みコードの再交換を検知したら、発行済みトークンを失効する",
+      "property": "InvRevokeOnReplay",
+      "category": "安全性",
+      "source": "RFC 6749 §4.1.2",
+      "previewTitle": "コード交換 API",
+      "status": "verified",
+      "figure": {
+        "kind": "state",
+        "states": [
+          {
+            "id": "unused",
+            "label": "未使用",
+            "role": "initial"
+          },
+          {
+            "id": "used",
+            "label": "使用済み"
+          },
+          {
+            "id": "compromised",
+            "label": "再交換を検知",
+            "role": "bad"
+          },
+          {
+            "id": "revoked",
+            "label": "トークン失効",
+            "role": "terminal"
+          }
+        ],
+        "transitions": [
+          {
+            "id": "redeem",
+            "from": "unused",
+            "to": "used",
+            "label": "交換"
+          },
+          {
+            "id": "replay",
+            "from": "used",
+            "to": "compromised",
+            "label": "再交換"
+          },
+          {
+            "id": "stay",
+            "from": "compromised",
+            "to": "compromised",
+            "label": "有効のまま",
+            "kind": "loop"
+          },
+          {
+            "id": "revoke",
+            "from": "compromised",
+            "to": "revoked",
+            "label": "全失効"
+          }
+        ]
+      },
+      "states": {
+        "normal": {
+          "label": "通常",
+          "tone": "normal",
+          "activeStates": [
+            "unused",
+            "used"
+          ],
+          "activeTransitions": [
+            "redeem"
+          ],
+          "focusTransition": "redeem",
+          "edgeShort": "1 回だけ",
+          "takeaway": "コードは 1 回だけ交換できる。",
+          "preview": {
+            "statusBadge": "交換成功",
+            "rows": [
+              {
+                "k": "コード",
+                "v": "未使用→使用済み"
+              }
+            ],
+            "alert": "アクセストークンを発行しました。",
+            "buttonLabel": "続ける",
+            "buttonKind": "ok"
+          }
+        },
+        "bug": {
+          "label": "不具合",
+          "tone": "bug",
+          "activeStates": [
+            "used",
+            "compromised"
+          ],
+          "activeTransitions": [
+            "replay",
+            "stay"
+          ],
+          "focusTransition": "stay",
+          "edgeShort": "失効しない",
+          "chips": [
+            {
+              "state": "compromised",
+              "text": "トークン有効",
+              "tone": "bad"
+            }
+          ],
+          "takeaway": "変異体は再交換を拒否するだけで、先に発行したトークンを失効させない。",
+          "preview": {
+            "statusBadge": "拒否のみ（危険）",
+            "rows": [
+              {
+                "k": "コード",
+                "v": "COMPROMISED",
+                "tone": "bad"
+              },
+              {
+                "k": "発行済みトークン",
+                "v": "ACTIVE",
+                "tone": "bad"
+              }
+            ],
+            "alert": "再交換は拒否しましたが、攻撃者のトークンは有効なままです。",
+            "buttonLabel": "続ける",
+            "buttonKind": "danger",
+            "logLines": [
+              "InvRevokeOnReplay = FALSE"
+            ]
+          }
+        },
+        "fixed": {
+          "label": "修正後",
+          "tone": "safe",
+          "activeStates": [
+            "used",
+            "compromised",
+            "revoked"
+          ],
+          "activeTransitions": [
+            "replay",
+            "revoke"
+          ],
+          "focusTransition": "revoke",
+          "edgeShort": "全て失効",
+          "chips": [
+            {
+              "state": "revoked",
+              "text": "REVOKED",
+              "tone": "good"
+            }
+          ],
+          "takeaway": "再交換を検知したら、そのコードで発行したトークンをすべて失効させる。",
+          "preview": {
+            "statusBadge": "失効",
+            "rows": [
+              {
+                "k": "コード",
+                "v": "COMPROMISED",
+                "tone": "warn"
+              },
+              {
+                "k": "発行済みトークン",
+                "v": "REVOKED",
+                "tone": "ok"
+              }
+            ],
+            "alert": "再交換を検知したため、発行済みトークンを失効しました。",
+            "buttonLabel": "再認可",
+            "buttonKind": "locked"
+          }
+        }
+      },
+      "defaultFocus": "bug",
+      "evidence": {
+        "ruleSummary": "状態が COMPROMISED になったら、そのコードで発行した全トークンを REVOKED にする。",
+        "ifEnforced": "漏れたコードで先に交換した攻撃者のトークンも無効になる。",
+        "ifNotEnforced": "攻撃者が先に得たトークンを使い続けられる。",
+        "checkerSummary": "TLC: 深さ 5 の全状態で違反なし",
+        "scope": "TLC · 深さ 5（115 状態）",
+        "method": "TLC 全状態探索（幅優先）",
+        "witness": "再交換→失効に到達（TLC 138 生成 / 89 状態）"
+      }
+    }
+  ]
+}
