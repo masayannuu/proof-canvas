@@ -367,9 +367,10 @@ const CSS = `
 .fx .fx-bug.is-on { background: var(--pc-bad); }
 .fx .fx-safe.is-on { background: var(--pc-good); }
 .fx-meta { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
-.fx-scope { font-size: 11.5px; color: var(--pc-ink-2); border: 1px dashed var(--pc-bd-strong); border-radius: 6px; padding: 1px 7px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The scope chip gives way first, so the property name stays whole. */
+.fx-scope { flex-shrink: 100; min-width: 64px; font-size: 11.5px; color: var(--pc-ink-2); border: 1px dashed var(--pc-bd-strong); border-radius: 6px; padding: 1px 7px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fx-scope b { font-weight: 600; color: var(--pc-ink-3); margin-right: 5px; }
-.tp { display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--pc-bd); white-space: nowrap; color: var(--pc-ink-3); background: var(--pc-bg); }
+.tp { flex: none; display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600; line-height: 1.6; padding: 0 8px; border-radius: 999px; border: 1px solid var(--pc-bd); white-space: nowrap; color: var(--pc-ink-3); background: var(--pc-bg); }
 .tp-illus { border-style: dashed; font-weight: 500; }
 .tp-bound { color: #166534; background: #f1f5f4; border-color: #a7c4b5; }
 .fx-prop { font-family: var(--pc-mono); font-size: 11.5px; color: var(--pc-ink-3); background: var(--pc-bg); border: 1px solid var(--pc-bd); border-radius: 6px; padding: 2px 8px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

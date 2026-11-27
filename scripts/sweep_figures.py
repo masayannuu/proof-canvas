@@ -11,7 +11,11 @@
 (exit 1) on any console or page error, external request, SVG text outside its box / pill / chip /
 viewBox, label pill touching another pill or a box, connector label over a card, clipped text,
 horizontal page overflow, a figure with no measured elements, or a figure without exactly one
-connector anchor. `--shots DIR` also saves the board of every view as a 2x PNG.
+connector anchor; timeline tick labels touching each other, a pill or a box, and a circled x or start
+dot outside its pill or state also fail. Each rule is then opened in its bug focus with the
+"Proof & log" drawer open: the trust pill must match __binding (trace-bound only with a bound
+--mutant-log), the machine trace must list exactly the bound steps, and nothing may spill out of the
+card or the page. `--shots DIR` also saves the board of every view and each drawer as a 2x PNG.
 `flow` real-clicks the flow map of each board at each viewport: every journey pill (dimming, summary,
 checkpoint CTA), the CTA (lands on the exact checkpoint rule and focus), every stage rule chip, the way
 back to the map, and, on index layouts, every status filter on the map (matching chips highlighted, the
@@ -34,7 +38,7 @@ PROBE_JS = """() => {
   const de = document.documentElement;
   const root = document.getElementById('proof-canvas-root');
   const svg = root.querySelector('.board .fg-svg');
-  const out = { svgOverflow: 0, pillHits: 0, measured: 0, anchors: 0, lkOverlap: 0, clipped: 0, overflowX: de.scrollWidth - de.clientWidth, connector: 0 };
+  const out = { svgOverflow: 0, pillHits: 0, markHits: 0, measured: 0, anchors: 0, lkOverlap: 0, clipped: 0, overflowX: de.scrollWidth - de.clientWidth, connector: 0 };
   if (!svg) return out;
   const bb = (el) => el.getBBox();
   const outside = (t, r) => Math.max(0, r.x - t.x, t.x + t.width - (r.x + r.width), r.y - t.y, t.y + t.height - (r.y + r.height));
@@ -56,6 +60,15 @@ PROBE_JS = """() => {
     for (const q of pills.slice(i + 1)) if (meets(p, q)) out.pillHits += 1;
     for (const s of solid) if (meets(p, s)) out.pillHits += 1;
   });
+  // Marks outside boxes and pills: timeline tick labels must not touch each other, a pill or a box;
+  // a forbidden transition's circled x stays inside its pill; a start dot stays inside its state.
+  const ticks = [...svg.querySelectorAll('.fg-tick text')].map(bb);
+  ticks.forEach((t, i) => {
+    for (const u of ticks.slice(i + 1)) if (meets(t, u)) out.markHits += 1;
+    for (const s of [...pills, ...solid]) if (meets(t, s)) out.markHits += 1;
+  });
+  for (const x of svg.querySelectorAll('.fg-x')) if (outside(bb(x), bb(x.parentElement.querySelector('rect.fg-apill'))) > 0) out.markHits += 1;
+  for (const d of svg.querySelectorAll('.fg-start')) if (outside(bb(d), bb(d.parentElement.querySelector(':scope > rect'))) > 0) out.markHits += 1;
   const cards = [...root.querySelectorAll('.board > .card')].map((c) => c.getBoundingClientRect());
   for (const l of root.querySelectorAll('.lk-label')) {
     const a = l.getBoundingClientRect();
@@ -73,7 +86,33 @@ PROBE_JS = """() => {
   return out;
 }"""
 
-FAIL_IF_POSITIVE = ["svgOverflow", "pillHits", "lkOverlap", "clipped", "overflowX"]
+FAIL_IF_POSITIVE = ["svgOverflow", "pillHits", "markHits", "lkOverlap", "clipped", "overflowX"]
+
+# The open "Proof & log" drawer and the scenario bar of a rule in its bug focus: the trust pill must
+# say what __binding says (trace-bound only with a bound --mutant-log), the machine trace must list
+# exactly the bound steps, and nothing may overflow the card or the page.
+DRAWER_PROBE_JS = """(rid) => {
+  const de = document.documentElement;
+  const root = document.getElementById('proof-canvas-root');
+  const b = window.__proofCanvas.getBoard().__binding || {};
+  const c = b.counterexamples && Object.hasOwn(b.counterexamples, rid) ? b.counterexamples[rid] : null;
+  const bar = root.querySelector('.fig .fx-meta');
+  const card = root.querySelector('.fig').getBoundingClientRect();
+  const ev = root.querySelector('.ev');
+  const out = { overflowX: de.scrollWidth - de.clientWidth, wrongPill: 0, wrongTrace: 0, spill: 0, clipped: 0 };
+  const pill = bar && bar.querySelector('.tp');
+  if (!pill || pill.classList.contains(c ? 'tp-illus' : 'tp-bound')) out.wrongPill += 1;
+  const steps = [...ev.querySelectorAll('.tr-steps li')].map((li) => li.textContent);
+  if (c ? JSON.stringify(steps) !== JSON.stringify(c.steps) : steps.length) out.wrongTrace += 1;
+  if (bar && bar.getBoundingClientRect().right > card.right + 0.5) out.spill += 1;
+  const er = ev.getBoundingClientRect();
+  for (const el of ev.querySelectorAll('.tr-steps li, .kv span, .kv code, .ev-facts li, .term')) {
+    const r = el.getBoundingClientRect();
+    if (r.right > er.right + 0.5) out.spill += 1;
+  }
+  for (const el of root.querySelectorAll('.tp, .fx-prop')) if (el.scrollWidth > el.clientWidth + 1) out.clipped += 1;
+  return out;
+}"""
 
 # Geometry of the flow map: stage cards, edge-label pills and the text inside each, in CSS pixels.
 FLOW_PROBE_JS = """() => {
@@ -391,6 +430,16 @@ def sweep(browser, html, viewports, shots):
                 if shots:
                     Path(shots).mkdir(parents=True, exist_ok=True)
                     page.locator(".board").first.screenshot(path=str(Path(shots) / f"{Path(html).stem}-{w}-{rid}-{k}.png"))
+            page.evaluate("(s) => window.__proofCanvas.setState(s)",
+                          {"view": "focus", "ruleId": rid, "status": "all", "focusByRule": {rid: "bug"}, "evOpen": True})
+            settle(page)
+            d = page.evaluate(DRAWER_PROBE_JS, rid)
+            views += 1
+            bad = [f"{f}={d[f]}" for f in d if d[f] > 0]
+            if bad:
+                failures.append(f"{Path(html).name} {w}x{h} {rid}/drawer: {', '.join(bad)}")
+            if shots:
+                page.locator(".ev").first.screenshot(path=str(Path(shots) / f"{Path(html).stem}-{w}-{rid}-drawer.png"))
         for kind in ["console", "pageErrors", "external"]:
             if log[kind]:
                 failures.append(f"{Path(html).name} {w}x{h} {kind}: {log[kind][:3]}")
