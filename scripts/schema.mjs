@@ -2,6 +2,8 @@
 // Zero dependencies: Node 22+ standard-library ESM only.
 
 import { FIGURE_KINDS, figureOverflows } from './figure.mjs';
+import { flowOverflows } from './flow.mjs';
+import { LANGS } from './i18n.mjs';
 
 export const BOX_KEYS = ['src1', 'src2', 'gate', 'pass', 'hold', 'bad'];
 export const ARROW_KEYS = ['a1', 'a2', 'a3', 'a4', 'a5'];
@@ -14,6 +16,9 @@ export const ROW_TONES = ['normal', 'ok', 'bad', 'warn', 'mute'];
 export const RUN_STATUSES = ['verified', 'failed', 'pending'];
 export const RULE_STATUSES = ['verified', 'failed', 'pending'];
 export const PROVENANCE_VALUES = ['verified', 'mixed', 'sample', 'unverified'];
+export const DEFAULT_VIEWS = ['rule', 'flow'];
+export const EDGE_KINDS = ['normal', 'bypass', 'handoff'];
+export const LABEL_WARN_CHARS = 24;
 
 // Keys the renderer adds to the embedded payload. They are never part of an input board.
 export const RENDERER_KEYS = ['__provenance', '__layout', '__titleOverride', '__binding'];
@@ -23,7 +28,12 @@ export const SHORT_WARN_CHARS = 20;
 export const EDGE_WARN_CHARS = 12;
 
 const KEYS = {
-  board: ['version', 'runId', 'title', 'subtitle', 'generatedAt', 'provenance', 'provenanceNote', 'run', 'modules', 'rules'],
+  board: ['version', 'runId', 'title', 'subtitle', 'generatedAt', 'provenance', 'provenanceNote', 'lang', 'labels', 'defaultView', 'run', 'modules', 'flow', 'rules'],
+  labels: ['moduleSingular', 'modulePlural', 'overview'],
+  flow: ['title', 'note', 'steps', 'edges', 'journeys'],
+  flowStep: ['id', 'label', 'summary', 'moduleId', 'ruleIds'],
+  flowEdge: ['id', 'from', 'to', 'label', 'kind'],
+  journey: ['id', 'label', 'tone', 'summary', 'stepIds', 'edgeIds', 'checkpointRuleId', 'checkpointFocus'],
   run: ['tool', 'toolVersion', 'specHash', 'status'],
   module: ['id', 'title', 'summary'],
   rule: ['id', 'no', 'moduleId', 'short', 'title', 'property', 'category', 'source', 'previewTitle', 'figure', 'states', 'defaultFocus', 'status', 'stepsChecked', 'evidence'],
@@ -253,6 +263,103 @@ const KIND_CHECKS = {
   },
 };
 
+// A flow list: objects with unique [a-zA-Z0-9_-] ids, count in [min, max]. Returns the valid ids.
+function flowItems(list, path, min, max, allowed, c) {
+  const ids = new Set();
+  if (!Array.isArray(list) || list.length < min || list.length > max) {
+    c.err(path, `must be an array of ${min} to ${max} items`);
+    return ids;
+  }
+  list.forEach((it, i) => {
+    const ip = `${path}[${i}]`;
+    if (!isPlainObject(it)) { c.err(ip, 'must be an object'); return; }
+    c.keys(it, allowed, ip);
+    if (!isNonEmptyString(it.id) || !SAFE_ID.test(it.id)) c.err(`${ip}.id`, 'must be a non-empty [a-zA-Z0-9_-] string');
+    else if (ids.has(it.id)) c.err(`${ip}.id`, `duplicate id "${it.id}"`);
+    else ids.add(it.id);
+    c.reqStr(it, 'label', ip);
+  });
+  return ids;
+}
+
+// board.flow: stages (each resolving to at least one rule), labeled edges between them, and
+// optional journeys that highlight a path and may open one checkpoint rule.
+function checkFlow(board, moduleIds, c) {
+  const f = board.flow;
+  const fp = '$.flow';
+  if (!isPlainObject(f)) { c.err(fp, 'must be an object when present'); return; }
+  const before = c.count();
+  c.keys(f, KEYS.flow, fp);
+  c.optStr(f, 'title', fp);
+  c.optStr(f, 'note', fp);
+  const rules = Array.isArray(board.rules) ? board.rules.filter(isPlainObject) : [];
+  const ruleModule = new Map(rules.map((r) => [r.id, r.moduleId]));
+  const stepIds = flowItems(f.steps, `${fp}.steps`, 2, 6, KEYS.flowStep, c);
+  (Array.isArray(f.steps) ? f.steps : []).forEach((s, i) => {
+    if (!isPlainObject(s)) return;
+    const sp = `${fp}.steps[${i}]`;
+    c.optStr(s, 'summary', sp);
+    if (s.moduleId !== undefined) {
+      if (!moduleIds.size) c.err(`${sp}.moduleId`, 'requires a top-level $.modules array');
+      else if (!moduleIds.has(s.moduleId)) c.err(`${sp}.moduleId`, `unknown module "${s.moduleId}"`);
+    }
+    if (s.ruleIds !== undefined) {
+      if (!Array.isArray(s.ruleIds) || s.ruleIds.length < 1) { c.err(`${sp}.ruleIds`, 'must be a non-empty array of rule IDs when present'); return; }
+      const seen = new Set();
+      for (const id of s.ruleIds) {
+        if (!ruleModule.has(id)) c.err(`${sp}.ruleIds`, `invalid rule ID "${id}"`);
+        else if (seen.has(id)) c.err(`${sp}.ruleIds`, `duplicate rule ID "${id}"`);
+        else if (s.moduleId !== undefined && ruleModule.get(id) !== s.moduleId) c.err(`${sp}.ruleIds`, `rule "${id}" belongs to module "${ruleModule.get(id) ?? '(none)'}", not "${s.moduleId}"`);
+        seen.add(id);
+      }
+    } else if (s.moduleId === undefined) {
+      c.err(sp, 'needs ruleIds or a moduleId so the stage shows at least one rule');
+    } else if (moduleIds.has(s.moduleId) && !rules.some((r) => r.moduleId === s.moduleId)) {
+      c.err(`${sp}.moduleId`, `module "${s.moduleId}" has no rules, so the stage would be empty`);
+    }
+  });
+  const edgeIds = flowItems(f.edges, `${fp}.edges`, 1, 9, KEYS.flowEdge, c);
+  const ends = new Map();
+  const pairs = new Set();
+  (Array.isArray(f.edges) ? f.edges : []).forEach((e, i) => {
+    if (!isPlainObject(e)) return;
+    const ep = `${fp}.edges[${i}]`;
+    for (const k of ['from', 'to']) if (!stepIds.has(e[k])) c.err(`${ep}.${k}`, `must be a step id (got "${e[k]}")`);
+    if (e.from === e.to) c.err(ep, `an edge from stage "${e.from}" to itself`);
+    if (e.kind !== undefined && !EDGE_KINDS.includes(e.kind)) c.err(`${ep}.kind`, `must be one of ${EDGE_KINDS.join(', ')} when present`);
+    const pair = e.from + '>' + e.to;
+    if (pairs.has(pair)) c.err(ep, `a second edge from "${e.from}" to "${e.to}"`);
+    pairs.add(pair);
+    if (isNonEmptyString(e.id)) ends.set(e.id, [e.from, e.to]);
+  });
+  if (f.journeys !== undefined) {
+    flowItems(f.journeys, `${fp}.journeys`, 1, 5, KEYS.journey, c);
+    (Array.isArray(f.journeys) ? f.journeys : []).forEach((j, i) => {
+      if (!isPlainObject(j)) return;
+      const jp = `${fp}.journeys[${i}]`;
+      if (!FOCUS_TONES.includes(j.tone)) c.err(`${jp}.tone`, `must be one of ${FOCUS_TONES.join(', ')}`);
+      c.reqStr(j, 'summary', jp);
+      idRefs(j.stepIds, stepIds, `${jp}.stepIds`, true, 'step', c);
+      if (j.edgeIds !== undefined) {
+        idRefs(j.edgeIds, edgeIds, `${jp}.edgeIds`, false, 'edge', c);
+        const on = new Set(Array.isArray(j.stepIds) ? j.stepIds : []);
+        for (const id of Array.isArray(j.edgeIds) ? j.edgeIds : []) {
+          const [from, to] = ends.get(id) ?? [];
+          if (edgeIds.has(id) && !(on.has(from) && on.has(to))) c.err(`${jp}.edgeIds`, `edge "${id}" runs from "${from}" to "${to}", but both ends must be in stepIds`);
+        }
+      }
+      if (j.checkpointRuleId !== undefined && !ruleModule.has(j.checkpointRuleId)) c.err(`${jp}.checkpointRuleId`, `invalid rule ID "${j.checkpointRuleId}"`);
+      if (j.checkpointFocus !== undefined) {
+        if (j.checkpointRuleId === undefined) c.err(`${jp}.checkpointFocus`, 'requires checkpointRuleId');
+        else if (!STATE_KEYS.includes(j.checkpointFocus)) c.err(`${jp}.checkpointFocus`, `must be one of ${STATE_KEYS.join(', ')}`);
+      }
+      if (isNonEmptyString(j.label) && [...j.label].length > LABEL_WARN_CHARS) c.warn(`${jp}.label`, `length ${[...j.label].length} exceeds the recommended ${LABEL_WARN_CHARS} characters`);
+    });
+  }
+  // Fit and collisions, only once the flow's structure is valid.
+  if (c.count() === before) for (const o of flowOverflows(board)) c.warn(`${fp}.${o.where}`, o.msg);
+}
+
 export function validateBoardData(board, { checkHash = true } = {}) {
   const errors = [];
   const warnings = [];
@@ -266,7 +373,7 @@ export function validateBoardData(board, { checkHash = true } = {}) {
   };
   const reqStr = (obj, k, path) => { if (!isNonEmptyString(obj[k])) err(`${path}.${k}`, 'must be a non-empty string'); };
   const optStr = (obj, k, path) => { if (obj[k] !== undefined && !isNonEmptyString(obj[k])) err(`${path}.${k}`, 'must be a non-empty string when present'); };
-  const ctx = { err, keys, reqStr, optStr };
+  const ctx = { err, warn, keys, reqStr, optStr, count: () => errors.length };
 
   if (!isPlainObject(board)) {
     err('$', 'root must be a JSON object');
@@ -280,6 +387,22 @@ export function validateBoardData(board, { checkHash = true } = {}) {
   if (board.provenance !== undefined && !PROVENANCE_VALUES.includes(board.provenance)) {
     err('$.provenance', `must be one of ${PROVENANCE_VALUES.join(', ')}`);
   }
+  if (board.lang !== undefined && !LANGS.includes(board.lang)) err('$.lang', `must be one of ${LANGS.join(', ')} when present`);
+  if (board.labels !== undefined) {
+    if (!isPlainObject(board.labels)) {
+      err('$.labels', 'must be an object when present');
+    } else {
+      keys(board.labels, KEYS.labels, '$.labels');
+      for (const k of KEYS.labels) {
+        optStr(board.labels, k, '$.labels');
+        if (isNonEmptyString(board.labels[k]) && [...board.labels[k]].length > LABEL_WARN_CHARS) {
+          warn(`$.labels.${k}`, `length ${[...board.labels[k]].length} exceeds the recommended ${LABEL_WARN_CHARS} characters`);
+        }
+      }
+    }
+  }
+  if (board.defaultView !== undefined && !DEFAULT_VIEWS.includes(board.defaultView)) err('$.defaultView', `must be one of ${DEFAULT_VIEWS.join(', ')} when present`);
+  else if (board.defaultView === 'flow' && board.flow === undefined) err('$.defaultView', '"flow" requires a $.flow');
 
   const run = board.run;
   if (!isPlainObject(run)) {
@@ -463,6 +586,8 @@ export function validateBoardData(board, { checkHash = true } = {}) {
       if (m && isNonEmptyString(m.id) && !usedModules.has(m.id)) warn('$.modules', `module "${m.id}" has no rules`);
     }
   }
+
+  if (board.flow !== undefined) checkFlow(board, moduleIds, ctx);
 
   // Honesty: a declared "verified" must be backed by the board's own statuses.
   if (board.provenance === 'verified' && errors.length === 0) {

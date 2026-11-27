@@ -14,9 +14,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, decodePayload, encodePayload, findPayloads } from './payload.mjs';
 import { FIGURE_KINDS, GEOM, figSvg, figureOverflows, figureRuntime, layoutBoxLabel, pillBox, relLayout, textW } from './figure.mjs';
-import { uiFor } from './i18n.mjs';
+import { checkpointFocus, flowOverflows, flowRuntime, flowView } from './flow.mjs';
+import { uiFor, uiSource } from './i18n.mjs';
 import { ALL_MODULES, footerMarkup, provLabel, renderBoardHtml, ruleEvidenceDetails, toolLabel } from './render_board.mjs';
-import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, splitRendererKeys, validateBoardData } from './schema.mjs';
+import { SAFE_ID, isRealHash, layoutFor, resolveProvenance, ruleStatus, splitRendererKeys, validateBoardData } from './schema.mjs';
 import { synthBoard } from './synth_board.mjs';
 import { validateHtmlContent } from './validate_board.mjs';
 
@@ -1216,8 +1217,8 @@ test('example 06_japanese_board: binds to the 05 specs and logs, 3/3 green, no w
     assert.equal(rendered.status, 0, rendered.stderr);
     assert.equal(rendered.stderr, '');
     const html = readFileSync(output, 'utf8');
-    assert.match(html, /pc-prov-good[^>]*><span[^>]*><\/span>Spec &amp; log verified \(3\/3\)/);
-    assert.match(html, /<html lang="en">/);
+    assert.match(html, /pc-prov-good[^>]*><span[^>]*><\/span>実ログ検証済み \(3\/3\)/);
+    assert.match(html, /<html lang="ja">/);
     assert.ok(CJK.test(html), 'the Japanese board copy is missing');
     assert.ok(html.includes('締済みの会計期間には計上できない'));
     const validated = node('validate_board.mjs', ['--in', input, ...ex5Flags(), output]);
@@ -1253,11 +1254,13 @@ test('figure: the injected runtime draws every kind exactly like the server, and
 });
 test('figure: a board whose first rule is a relation still server-renders unique static markers', () => {
   const b = clone(EX5);
+  delete b.defaultView;
   b.rules.unshift(...b.rules.splice(REL_RULE, 1));
   const html = renderBoardHtml(b);
   expectPass(html);
   assert.ok(html.includes('id="fg-hs-focus-delegation_cycle"'));
   const seqFirst = clone(EX5);
+  delete seqFirst.defaultView;
   seqFirst.rules.unshift(...seqFirst.rules.splice(SEQ_RULE, 1));
   expectPass(renderBoardHtml(seqFirst));
 });
@@ -1384,6 +1387,246 @@ test('figure: lane and node ids such as constructor, toString and __proto__ draw
     }
   }
   expectPass(renderBoardHtml(b));
+});
+
+// ---------------------------------------------------------------------------------------------
+// Flow view (board.flow) and language-aware chrome (board.lang, board.labels)
+// ---------------------------------------------------------------------------------------------
+const ex5Evidence = () => {
+  const f = ex5Flags();
+  return { specPaths: f.filter((_, i) => f[i - 1] === '--spec'), logPaths: f.filter((_, i) => f[i - 1] === '--log') };
+};
+const JOURNEY_IDS = (b) => ['*', ...b.flow.journeys.map((j) => j.id)];
+const withFlowEdit = (base, f) => { const b = clone(base); f(b); return b; };
+const NO_FLOW = { '00_minimal': EX0, '01_room_booking': EX1, '02_escrow_payout': EX2, '03_multi_module_20rules': EX3 };
+
+test('flow: examples 05 and 06 open on a valid flow with three journeys and no warnings', () => {
+  for (const b of [EX5, EX6]) {
+    const r = validateBoardData(b);
+    assert.deepEqual(r.errors, []);
+    assert.deepEqual(r.warnings, []);
+    assert.equal(b.defaultView, 'flow');
+    assert.equal(b.flow.journeys.length, 3);
+    assert.deepEqual(b.flow.journeys.map((j) => j.tone), ['normal', 'bug', 'safe']);
+  }
+  assert.deepEqual(EX5.flow.steps.map((s) => s.moduleId), ['delegation', 'escrow', 'period']);
+  assert.equal(EX6.lang, 'ja');
+});
+
+test('flow schema: bad references, empty stages, self-loops, duplicates and misplaced options are errors', () => {
+  const e5 = (f) => withFlowEdit(EX5, f);
+  schemaErr(e5((b) => { delete b.flow; }), '$.defaultView');
+  schemaErr(e5((b) => { b.defaultView = 'grid'; }), '$.defaultView');
+  schemaErr(e5((b) => { b.lang = 'fr'; }), '$.lang');
+  schemaErr(e5((b) => { b.labels = { modulePlural: '' }; }), '$.labels.modulePlural');
+  schemaErr(e5((b) => { b.labels = 'stages'; }), '$.labels');
+  schemaErr(e5((b) => { b.flow = []; }), '$.flow');
+  schemaErr(e5((b) => { b.flow.steps = b.flow.steps.slice(0, 1); }), '$.flow.steps');
+  schemaErr(e5((b) => { b.flow.steps.push(...['a', 'b', 'c', 'd'].map((id) => ({ id, label: id, moduleId: 'escrow' }))); }), '$.flow.steps');
+  schemaErr(e5((b) => { b.flow.steps[1].id = 'access'; }), '$.flow.steps[1].id');
+  schemaErr(e5((b) => { b.flow.steps[1].id = 'bad id'; }), '$.flow.steps[1].id');
+  schemaErr(e5((b) => { b.flow.steps[1].moduleId = 'ghost'; }), '$.flow.steps[1].moduleId');
+  schemaErr(e5((b) => { delete b.flow.steps[1].moduleId; }), '$.flow.steps[1]');
+  schemaErr(e5((b) => { b.flow.steps[0].ruleIds = ['refund_cap']; }), '$.flow.steps[0].ruleIds');
+  schemaErr(e5((b) => { b.flow.steps[0].ruleIds = ['ghost']; }), '$.flow.steps[0].ruleIds');
+  schemaErr(e5((b) => { b.flow.steps[0].ruleIds = []; }), '$.flow.steps[0].ruleIds');
+  schemaErr(e5((b) => { b.flow.steps[0].ruleIds = ['self_approval', 'self_approval']; }), '$.flow.steps[0].ruleIds');
+  schemaErr(e5((b) => { b.flow.edges = []; }), '$.flow.edges');
+  schemaErr(e5((b) => { b.flow.edges[0].to = 'access'; }), '$.flow.edges[0]');
+  schemaErr(e5((b) => { b.flow.edges[0].to = 'ghost'; }), '$.flow.edges[0].to');
+  schemaErr(e5((b) => { b.flow.edges[1].id = 'approved'; }), '$.flow.edges[1].id');
+  schemaErr(e5((b) => { b.flow.edges.push({ ...b.flow.edges[0], id: 'again' }); }), '$.flow.edges[2]');
+  schemaErr(e5((b) => { b.flow.edges[0].kind = 'teleport'; }), '$.flow.edges[0].kind');
+  schemaErr(e5((b) => { delete b.flow.edges[0].label; }), '$.flow.edges[0].label');
+  schemaErr(e5((b) => { b.flow.journeys = []; }), '$.flow.journeys');
+  schemaErr(e5((b) => { b.flow.journeys[2].id = 'happy'; }), '$.flow.journeys[2].id');
+  schemaErr(e5((b) => { b.flow.journeys[0].stepIds = ['ghost']; }), '$.flow.journeys[0].stepIds');
+  schemaErr(e5((b) => { b.flow.journeys[0].stepIds = []; }), '$.flow.journeys[0].stepIds');
+  schemaErr(e5((b) => { b.flow.journeys[1].edgeIds = ['posting']; }), '$.flow.journeys[1].edgeIds');
+  schemaErr(e5((b) => { b.flow.journeys[1].edgeIds = ['ghost']; }), '$.flow.journeys[1].edgeIds');
+  schemaErr(e5((b) => { b.flow.journeys[1].tone = 'scary'; }), '$.flow.journeys[1].tone');
+  schemaErr(e5((b) => { delete b.flow.journeys[1].summary; }), '$.flow.journeys[1].summary');
+  schemaErr(e5((b) => { b.flow.journeys[1].checkpointRuleId = 'ghost'; }), '$.flow.journeys[1].checkpointRuleId');
+  schemaErr(e5((b) => { b.flow.journeys[0].checkpointFocus = 'bug'; }), '$.flow.journeys[0].checkpointFocus');
+  schemaErr(e5((b) => { b.flow.journeys[1].checkpointFocus = 'broken'; }), '$.flow.journeys[1].checkpointFocus');
+  schemaErr(withFlowEdit(EX6, (b) => { b.flow.steps[0].moduleId = 'access'; }), '$.flow.steps[0].moduleId');
+  const lone = withFlowEdit(EX5, (b) => { b.modules.push({ id: 'audit', title: 'Audit' }); b.flow.steps[2].moduleId = 'audit'; });
+  schemaErr(lone, '$.flow.steps[2].moduleId');
+  const long = validateBoardData(e5((b) => { b.labels.overview = 'A very long overview button label'; b.flow.journeys[0].label = 'A journey label that runs too long'; }));
+  assert.equal(long.ok, true, long.errors.join('\n'));
+  assert.ok(hasWarning(long, '$.labels.overview') && hasWarning(long, '$.flow.journeys[0].label'), long.warnings.join('\n'));
+});
+
+test('flow: a journey checkpoint opens the given focus, or the one its tone implies', () => {
+  const [happy, bug, safe] = EX5.flow.journeys;
+  assert.equal(checkpointFocus(bug), 'bug');
+  assert.equal(checkpointFocus(safe), 'fixed');
+  assert.equal(checkpointFocus(happy), 'normal');
+  assert.equal(checkpointFocus({ ...bug, checkpointFocus: undefined }), 'bug');
+  assert.equal(checkpointFocus({ ...safe, checkpointFocus: 'normal' }), 'normal');
+});
+
+test('flow: stage, edge and journey ids such as constructor, toString and __proto__ draw like any other id', () => {
+  const rename = { access: 'constructor', escrow: 'toString', period: '__proto__', approved: 'constructor', posting: '__proto__', happy: 'toString', unreviewed: 'constructor', guarded: '__proto__' };
+  const b = clone(EX5);
+  for (const s of b.flow.steps) s.id = rename[s.id];
+  for (const e of b.flow.edges) { e.id = rename[e.id]; e.from = rename[e.from]; e.to = rename[e.to]; }
+  for (const j of b.flow.journeys) { j.id = rename[j.id]; j.stepIds = j.stepIds.map((x) => rename[x]); j.edgeIds = j.edgeIds.map((x) => rename[x]); }
+  assert.deepEqual(validateBoardData(b).errors, []);
+  assert.deepEqual(validateBoardData(b).warnings, []);
+  for (const jid of JOURNEY_IDS(b)) {
+    const html = flowView(b, uiFor(b), jid);
+    assert.equal(/NaN|undefined|\[object/.test(html), false, `journey ${jid} draws NaN or undefined`);
+    assert.equal((html.match(/class="fl-stage/g) || []).length, 3);
+    assert.equal((html.match(/data-act="flow-rule"/g) || []).length, 6);
+  }
+  assert.ok(flowView(b, uiFor(b), 'constructor').includes('data-journey="constructor"'));
+  expectPass(renderBoardHtml(b));
+});
+
+test('flow: the injected runtime renders every journey exactly like the server, and the SSR opens on it', () => {
+  for (const b of [EX5, EX6]) {
+    const ctx = { B: b };
+    runInNewContext([figureRuntime(FIGURE_KINDS), ruleStatus.toString(), uiSource(b), flowRuntime(), 'this.out = (j) => flowView(B, UI(uiOptions(B)), j);'].join('\n'), ctx);
+    for (const jid of JOURNEY_IDS(b)) assert.equal(ctx.out(jid), flowView(b, uiFor(b), jid), `${b.runId} / ${jid}`);
+    const html = renderBoardHtml(b, ex5Evidence());
+    assert.ok(html.includes('<div class="pc-wrap pc-main">' + flowView(b, uiFor(b), '*') + '</div></main>'), 'the SSR shell is not the runtime flow markup');
+    assert.match(html, /<div class="pc-root" id="proof-canvas-root" data-mode="standalone" data-layout="[a-z]+" data-view="flow" [^>]*data-journey="\*">/);
+    assert.equal(html.includes('id="fg-h-focus-'), false, 'a flow-first board still server-renders the first rule');
+  }
+});
+
+test('flow: a journey dims every other stage and edge and offers its checkpoint; "all" dims nothing', () => {
+  const L = uiFor(EX5);
+  const all = flowView(EX5, L, '*');
+  assert.equal(/is-dim|is-on|fl-cta/.test(all), false);
+  assert.ok(all.includes(L.flowHint));
+  const bug = flowView(EX5, L, 'unreviewed');
+  assert.match(bug, /<section class="card fl tn-bug" data-flow data-journey="unreviewed">/);
+  assert.match(bug, /class="fl-stage is-on[^"]*" data-step="access"/);
+  assert.match(bug, /class="fl-stage is-dim[^"]*" data-step="period"/);
+  assert.match(bug, /class="fl-edge k-normal is-on" data-edge="approved"/);
+  assert.match(bug, /class="fl-edge k-normal is-dim" data-edge="posting"/);
+  assert.match(bug, /class="fl-chip st-verified is-cp" data-act="flow-rule" data-v="self_approval"/);
+  assert.match(bug, /<button type="button" class="fl-cta" data-act="checkpoint" data-v="unreviewed">Inspect this rule →<\/button>/);
+  assert.ok(bug.includes(EX5.flow.journeys[1].summary.replace(/'/g, "'")));
+  assert.equal(flowView(EX5, L, 'happy').includes('fl-cta'), false, 'a journey without a checkpoint shows no button');
+  assert.equal(flowView(EX5, L, 'ghost'), all, 'an unknown journey shows every stage');
+});
+
+test('flow: the honesty caption is always on the map, with flow.note after it', () => {
+  const en = flowView(EX5, uiFor(EX5), '*');
+  assert.ok(en.includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its verifier proof. ' + EX5.flow.note + '</p>'));
+  const ja = flowView(EX6, uiFor(EX6), 'late_post');
+  assert.ok(ja.includes('<p class="fl-cap">システム全体の見取り図：矢印は工程のつながり、各ルールの色は検証器の証明結果を示します。' + EX6.flow.note + '</p>'));
+  const bare = withFlowEdit(EX5, (b) => { delete b.flow.note; });
+  assert.ok(flowView(bare, uiFor(bare), '*').includes('<p class="fl-cap">System flow map: arrows show how stages connect; each rule\'s status reflects its verifier proof.</p>'));
+});
+
+test('flow: stage badges count the rules\' own verdicts (a failed rule turns its stage red)', () => {
+  const b = withFlowEdit(EX5, (x) => { x.rules[3].status = 'failed'; x.rules[3].evidence.counterexample = 'trace'; x.rules[4].status = 'pending'; });
+  const html = flowView(b, uiFor(b), '*');
+  assert.match(html, /data-step="access"[^>]*>.*?<span class="st-pill st-failed fl-st-b">1 failed · 1\/2 verified<\/span>/);
+  assert.match(html, /data-step="escrow"[^>]*>.*?<span class="st-pill st-verified fl-st-b">2\/2 verified<\/span>/);
+  assert.match(html, /data-step="period"[^>]*>.*?<span class="st-pill st-pending fl-st-b">1\/2 verified<\/span>/);
+  assert.match(html, /class="fl-stage has-fail" data-step="access"/);
+  assert.equal(resolveProvenance(b, undefined).kind, 'failed', 'the flow never changes the board badge rules');
+});
+
+test('flow layout: 2 to 6 stages with forward, skip, back and two-way edges fit without collisions', () => {
+  const ids = EX5.rules.map((r) => r.id);
+  for (let n = 2; n <= 6; n += 1) {
+    const b = clone(EX5);
+    b.flow.steps = Array.from({ length: n }, (_, i) => ({ id: 's' + i, label: (i + 1) + '. Stage ' + (i + 1), summary: 'What happens in stage ' + (i + 1) + '.', ruleIds: [ids[i % ids.length]] }));
+    const edges = Array.from({ length: n - 1 }, (_, i) => ({ id: 'e' + i, from: 's' + i, to: 's' + (i + 1), label: 'hand over ' + i }));
+    if (n >= 3) edges.push({ id: 'skip', from: 's0', to: 's2', label: 'skip review', kind: 'bypass' });
+    if (n >= 4) edges.push({ id: 'back', from: 's' + (n - 1), to: 's0', label: 'retry', kind: 'handoff' });
+    edges.push({ id: 'undo', from: 's1', to: 's0', label: 'send back' });
+    b.flow.edges = edges;
+    b.flow.journeys = [{ id: 'j', label: 'Path', tone: 'bug', summary: 'One path.', stepIds: ['s0', 's1'], edgeIds: ['e0', 'undo'] }];
+    const r = validateBoardData(b);
+    assert.deepEqual(r.errors, [], `${n} stages`);
+    assert.deepEqual(flowOverflows(b), [], `${n} stages`);
+    const html = flowView(b, uiFor(b), 'j');
+    assert.equal((html.match(/class="fl-edge/g) || []).length, edges.length);
+    assert.equal(/NaN|undefined/.test(html), false);
+  }
+  const crowded = withFlowEdit(EX5, (b) => { b.flow.edges[0].label = 'an authorized and fully reviewed escrow payout request'; });
+  assert.ok(hasWarning(validateBoardData(crowded), '$.flow.edges[0].label'), 'a label too long for its gap must warn');
+});
+
+test('flow: boards without a flow ship no flow code, styles or copy', () => {
+  for (const [name, b] of [...Object.entries(NO_FLOW), ['04_refund_guard', refund]]) {
+    const html = renderBoardHtml(b);
+    for (const needle of ['function flowView', 'fl-stage', 'fl-jbar', 'Inspect this rule', 'System flow map', 'data-journey', 'openFromFlow']) {
+      assert.equal(html.includes(needle), false, `${name} ships "${needle}"`);
+    }
+  }
+  const html = renderBoardHtml(EX5, ex5Evidence());
+  for (const needle of ['function flowView', 'fl-stage', 'Inspect this rule', 'openFromFlow']) assert.ok(html.includes(needle), needle);
+});
+
+test('lang: Japanese boards get <html lang="ja"> and Japanese chrome; English boards stay CJK-free', () => {
+  const ja = renderBoardHtml(EX6, ex5Evidence());
+  assert.match(ja, /<html lang="ja">/);
+  for (const s of ['実ログ検証済み (3/3)', 'このボードは実ファイルと突合済みです。', '動きを比べる', '根拠と実ログ', 'このルールがないときの反例', '反例は記録されていません', 'ルールを検索...', 'ルール一覧', '全体の流れ', '全体を見る', 'このルールの詳細を見る →', 'ルールをクリックして詳細を開く', '見本データ', '一部未検証']) {
+    assert.ok(ja.includes(s), `missing Japanese chrome "${s}"`);
+  }
+  for (const s of ["'Proof & log'", "'Compare'", 'Spec &amp; log verified', "'Search rules…'"]) assert.equal(ja.includes(s), false, `English chrome "${s}" leaked into a Japanese board`);
+  const en = renderBoardHtml(EX5, ex5Evidence());
+  assert.match(en, /<html lang="en">/);
+  assert.equal(CJK.test(en), false, 'an English flow board carries CJK text');
+  for (const s of ["'Compare'", "'Proof & log'", 'Spec &amp; log verified (6/6)']) assert.ok(en.includes(s), s);
+  assert.equal(en.includes("'Scenario'") || en.includes("evTitle: 'Evidence'"), false);
+});
+
+test('labels: module wording and the overview button follow labels, then the language default', () => {
+  assert.equal(uiFor(EX5).allModules(3), 'All stages (3)');
+  assert.equal(uiFor(EX5).hubOpen, 'Filter to this stage');
+  assert.equal(uiFor(EX3).allModules(4), 'All modules (4)');
+  assert.equal(uiFor(EX6).allModules(3), 'すべての工程 (3)');
+  assert.equal(uiFor({ lang: 'ja' }).allModules(2), 'すべてのグループ (2)');
+  assert.equal(uiFor(EX5).overview, 'Flow');
+  assert.equal(uiFor(EX1).overview, 'Overview');
+  assert.equal(uiFor(EX6).overview, '全体の流れ');
+  assert.equal(uiFor({ lang: 'ja' }).overview, '一覧');
+  assert.equal(uiFor({ ...EX5, labels: { overview: 'Map' } }).overview, 'Map');
+  assert.equal(uiFor(EX6).viewAll(3), '一覧 (3)');
+  assert.equal(uiFor(EX1).viewAll(3), 'Overview (3)');
+});
+
+test('flow: every new text field is escaped in the server render and in each journey', () => {
+  const x = '<img src=x onerror=alert(1)>"';
+  const b = withFlowEdit(EX5, (v) => {
+    v.flow.title = x; v.flow.note = x;
+    v.flow.steps[0].label = x; v.flow.steps[0].summary = x;
+    v.flow.edges[0].label = x;
+    v.flow.journeys[1].label = x; v.flow.journeys[1].summary = x;
+    v.labels = { moduleSingular: x, modulePlural: x, overview: x };
+  });
+  assert.deepEqual(validateBoardData(b).errors, []);
+  const html = renderBoardHtml(b);
+  expectPass(html);
+  assert.equal(html.includes('<img src=x'), false);
+  for (const jid of JOURNEY_IDS(b)) assert.equal(flowView(b, uiFor(b), jid).includes('<img'), false, jid);
+  assert.ok(flowView(b, uiFor(b), 'unreviewed').includes('&lt;img src=x onerror=alert(1)&gt;&quot;'));
+});
+
+test('examples 05 and 06: the flow boards bind to real specs and logs with 0 errors, 0 warnings, under budget', () => {
+  const inputs = { '05_multi_verifier': join(ROOT, 'examples', '05_multi_verifier', 'multi_verifier.board.json'), '06_japanese_board': join(ROOT, 'examples', '06_japanese_board', 'multi_verifier_ja.board.json') };
+  for (const [name, input] of Object.entries(inputs)) {
+    for (const mode of ['standalone', 'embed']) {
+      const output = join(TMP, `${name}-${mode}.html`);
+      const rendered = node('render_board.mjs', ['--in', input, ...ex5Flags(), '--mode', mode, '--out', output]);
+      assert.equal(rendered.status, 0, rendered.stderr);
+      assert.equal(rendered.stderr, '', rendered.stderr);
+      assert.match(rendered.stdout, /provenance=verified/);
+      const validated = node('validate_board.mjs', ['--in', input, ...ex5Flags(), output]);
+      assert.equal(validated.status, 0, validated.stdout + validated.stderr);
+      assert.equal(/WARN|ERR/.test(validated.stdout), false, validated.stdout);
+      assert.ok(readFileSync(output).length < 128 * 1024, `${name} ${mode} is over the 128 KB budget`);
+    }
+  }
 });
 
 rmSync(TMP, { recursive: true, force: true });

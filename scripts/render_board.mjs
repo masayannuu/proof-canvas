@@ -9,6 +9,7 @@ import { dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { bindEvidence } from './evidence.mjs';
 import { esc, figKind, figSvg, figureRuntime } from './figure.mjs';
+import { flowRuntime, flowView } from './flow.mjs';
 import { uiFor, uiSource } from './i18n.mjs';
 import {
   BASE64_RE, DATA_ELEMENT_ID, GZIP_TYPE, JSON_TYPE, MAX_DECODED_BYTES, MAX_PAYLOAD_TEXT_BYTES, PAYLOAD_MODES, ROOT_ELEMENT_ID, encodePayload,
@@ -239,11 +240,18 @@ const CSS = `
 .pc-seg .n { font-variant-numeric: tabular-nums; color: var(--pc-ink-3); font-weight: 600; font-size: 11.5px; }
 .pc-seg button[aria-pressed="true"] .n { color: var(--pc-ink-2); }
 .pc-seg button:disabled { opacity: 0.45; }
+.pc-tb-icon { padding: 5px 7px !important; }
+/*@end*/
+
+/*@index,flow*/
 .st-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
 .st-dot.st-verified { background: var(--pc-good); }
 .st-dot.st-failed { background: var(--pc-bad); }
 .st-dot.st-pending { background: transparent; border: 1.5px dashed var(--pc-warn); }
-.pc-tb-icon { padding: 5px 7px !important; }
+.st-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 9px; border: 1px solid; white-space: nowrap; }
+.st-pill.st-verified { color: var(--pc-good); background: var(--pc-good-bg); border-color: var(--pc-good-bd); }
+.st-pill.st-failed { color: var(--pc-bad); background: var(--pc-bad-bg); border-color: var(--pc-bad-bd); }
+.st-pill.st-pending { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-bd); border-style: dashed; }
 /*@end*/
 
 /* Provenance pill */
@@ -303,10 +311,6 @@ const CSS = `
 .crumb-btn:hover:not(:disabled) { border-color: var(--pc-bd-strong); color: var(--pc-ink); }
 .crumb-btn:disabled { opacity: 0.4; }
 .crumb-btn svg { width: 15px; height: 15px; }
-.st-pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; border-radius: 999px; padding: 1px 9px; border: 1px solid; white-space: nowrap; }
-.st-pill.st-verified { color: var(--pc-good); background: var(--pc-good-bg); border-color: var(--pc-good-bd); }
-.st-pill.st-failed { color: var(--pc-bad); background: var(--pc-bad-bg); border-color: var(--pc-bad-bd); }
-.st-pill.st-pending { color: var(--pc-warn); background: var(--pc-warn-bg); border-color: var(--pc-warn-bd); border-style: dashed; }
 .pc-empty-main { padding: 40px 20px; text-align: center; color: var(--pc-ink-3); font-size: 13px; display: flex; flex-direction: column; gap: 10px; align-items: center; }
 /*@end*/
 
@@ -549,6 +553,64 @@ const CSS = `
 .hv-grid.lod-min .spoke-t { display: none; }
 /*@end*/
 
+/*@flow*/
+/* Flow view: fixed-geometry map of stages and labeled edges. Each stage element sets its font size
+   in --u (1/W of the map width) and sizes everything else in em, so the map scales as one picture. */
+.fl { padding: 16px 18px 14px; }
+.pc-root[data-mode="embed"] .fl { padding: 12px 14px; }
+.fl-head, .fl-foot { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }
+.fl-title { font-size: 16.5px; font-weight: 650; letter-spacing: -0.015em; line-height: 1.35; }
+.fl > .fl-cap { margin-top: 4px; font-size: 12.5px; color: var(--pc-ink-3); max-width: 880px; }
+.fl-legend { margin-left: auto; display: inline-flex; gap: 12px; font-size: 11.5px; color: var(--pc-ink-3); }
+.fl-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.fl-legend svg { width: 24px; height: 8px; }
+.fl-jbar { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; margin-top: 12px; border: 1px solid var(--pc-bd); border-radius: 16px; background: var(--pc-bg); }
+.fl-jbar button { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; padding: 3px 12px; min-height: 28px; border-radius: 999px; border: 0; background: none; color: var(--pc-ink-2); white-space: nowrap; }
+.fl-jbar button:hover { color: var(--pc-ink); }
+.fl-jbar button[aria-pressed="true"] { background: var(--pc-control); color: #fff; font-weight: 600; }
+.fl-jdot { width: 7px; height: 7px; border-radius: 50%; background: var(--tn); }
+.tn-normal { --tn: var(--pc-info); --tn-bg: var(--pc-info-bg); --tn-bd: var(--pc-info-bd); }
+.tn-bug { --tn: var(--pc-bad); --tn-bg: var(--pc-bad-bg); --tn-bd: var(--pc-bad-bd); }
+.tn-safe { --tn: var(--pc-good); --tn-bg: var(--pc-good-bg); --tn-bd: var(--pc-good-bd); }
+.fl-canvas { --u: calc(100cqw / var(--fw)); position: relative; width: 100%; margin: 14px auto 0; container-type: inline-size; }
+.fl-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; font-family: var(--pc-font); }
+.fl-edge, .fl-stage { transition: opacity 0.2s ease; }
+.fl-edge.is-dim, .fl-stage.is-dim { opacity: 0.32; }
+.fl-line { fill: none; stroke: #a1a1aa; stroke-width: 1.6px; stroke-linecap: round; }
+.k-bypass .fl-line { stroke-dasharray: 7 5; }
+.k-handoff .fl-line { stroke-dasharray: 0.1 5; stroke-width: 2.4px; }
+.fl-tip { fill: #a1a1aa; }
+.fl-tip-on { fill: var(--tn); }
+.fl-pill { fill: var(--pc-surface); stroke: var(--pc-bd); }
+.fl-elabel { fill: var(--pc-ink-2); font-weight: 500; }
+.fl-edge.is-on .fl-line { stroke: var(--tn); stroke-width: 2.6px; }
+.fl-edge.is-on .fl-pill { stroke: var(--tn-bd); }
+.fl-edge.is-on .fl-elabel { fill: var(--tn); font-weight: 600; }
+.fl-run { fill: none; stroke: var(--pc-surface); stroke-width: 2.6px; stroke-linecap: round; stroke-dasharray: 0.1 14; animation: pc-fgflow 0.9s linear infinite; }
+.fl-stage { position: absolute; display: flex; flex-direction: column; overflow: hidden; font-size: calc(12 * var(--u)); padding: 1em; border-radius: 1em; background: var(--pc-surface); border: 1px solid var(--pc-bd); box-shadow: var(--pc-shadow-1); }
+.fl-stage.has-fail { border-color: var(--pc-bad-bd); }
+.fl-stage.is-on { border-color: var(--tn); box-shadow: 0 0 0 0.25em var(--tn-bg); }
+.fl-stage.is-dim:hover, .fl-stage.is-dim:focus-within { opacity: 0.85; }
+.fl-st-t { flex: none; font-size: calc(14.5 * var(--u)); line-height: 1.31; height: 1.31em; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-stage > .fl-st-s { flex: none; margin-top: 0.25em; height: 2.833em; line-height: 1.4166; color: var(--pc-ink-3); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fl-stage > .fl-st-b { flex: none; align-self: flex-start; margin-top: 0.695em; height: 1.739em; padding: 0 0.7em; font-size: calc(11.5 * var(--u)); }
+.fl-chips { list-style: none; margin: 0.666em 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.333em; }
+.fl-chip { width: 100%; height: 2.08em; display: flex; align-items: center; gap: 0.48em; padding: 0 0.64em 0 0.32em; border: 1px solid var(--pc-bd); border-radius: 0.56em; background: var(--pc-surface); color: var(--pc-ink-2); font-size: calc(12.5 * var(--u)); text-align: left; }
+.fl-chip:hover { border-color: var(--pc-control); color: var(--pc-ink); }
+.fl-chip.is-cp { border-color: var(--tn); box-shadow: 0 0 0 0.16em var(--tn-bd); color: var(--pc-ink); font-weight: 600; }
+.fl-chip-no { display: inline-grid; place-items: center; min-width: 2em; height: 1.636em; padding: 0 0.36em; border-radius: 0.45em; font-size: 0.88em; font-weight: 650; font-variant-numeric: tabular-nums; background: var(--pc-hover); }
+.fl-chip.st-verified .fl-chip-no { background: var(--pc-good-bg); color: var(--pc-good); }
+.fl-chip.st-failed { border-color: var(--pc-bad-bd); color: var(--pc-bad); }
+.fl-chip.st-failed .fl-chip-no { background: var(--pc-bad); color: #fff; }
+.fl-chip.st-pending .fl-chip-no { color: var(--pc-warn); border: 1px dashed; background: none; }
+.fl-chip-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fl-foot { margin-top: 14px; min-height: 36px; padding-top: 12px; border-top: 1px solid var(--pc-bd); }
+.fl-sum { flex: 1 1 320px; font-size: 14px; font-weight: 600; color: var(--tn); text-wrap: pretty; }
+.fl-hint { font-size: 12.5px; color: var(--pc-ink-3); }
+.fl-cta { margin-left: auto; font-size: 13px; font-weight: 600; padding: 7px 14px; min-height: 34px; border-radius: 8px; border: 0; background: var(--pc-control); color: #fff; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .fl-run { animation: none; } }
+/*@end*/
+
 /* Footer */
 .pc-foot { padding: 9px 16px; font-size: 12px; color: var(--pc-ink-3); border-top: 1px solid var(--pc-bd); background: var(--pc-surface); display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-variant-numeric: tabular-nums; }
 .pc-foot > span:first-child { min-width: 0; overflow-wrap: anywhere; }
@@ -640,6 +702,9 @@ ${SHARED_FNS}
     chevron: SV('<path d="m6 9 6 6 6-6"/>'),
     left: SV('<path d="m15 18-6-6 6-6"/>'),
     right: SV('<path d="m9 18 6-6-6-6"/>'),
+    /*@flow*/
+    flow: SV('<rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/>'),
+    /*@end*/
     grid: SV('<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>'),
     search: SV('<path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/>'),
     panel: SV('<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>'),
@@ -665,6 +730,20 @@ ${SHARED_FNS}
     indexOpen: MODE !== 'embed' && window.innerWidth >= 1100,
   };
   const activeRule = () => BY_ID[S.ruleId] || RULES[0];
+  // The view the index toolbar button and the "o" key toggle: the flow map when there is one.
+  let HUB = 'overview';
+  /*@flow*/
+  HUB = 'flow';
+  S.journey = ALL;
+  if (BOARD.defaultView === 'flow') S.view = 'flow';
+  const JOURNEY = Object.create(null);
+  for (const j of BOARD.flow.journeys || []) JOURNEY[j.id] = j;
+  // Open a rule from the flow map: clear the filters so the index layout cannot swap it out.
+  function openFromFlow(id, focus) {
+    S.ruleId = id; S.view = 'focus'; S.module = ALL; S.status = 'all'; S.q = '';
+    if (focus) S.focusByRule[id] = focus;
+  }
+  /*@end*/
   const focusOf = (r) => S.focusByRule[r.id] || r.defaultFocus;
 
   /*@index*/
@@ -791,13 +870,20 @@ ${SHARED_FNS}
     root.dataset.layout = LAYOUT;
     root.dataset.status = S.status;
     root.dataset.module = S.module;
+    /*@flow*/
+    root.dataset.journey = S.journey;
+    /*@end*/
   }
 
   /*@compact*/
   // ================= compact layout (<= 6 rules, single module) =================
   function compactBar() {
+    let lead = '';
+    /*@flow*/
+    lead = '<button type="button" aria-pressed="' + (S.view === 'flow') + '" data-act="view" data-v="flow">' + ICON.flow + esc(L.overview) + '</button><span class="pc-float-sep" aria-hidden="true"></span>';
+    /*@end*/
     const btns = RULES.map((r) => '<button type="button" aria-pressed="' + (S.view === 'focus' && S.ruleId === r.id) + '" data-act="rule" data-v="' + esc(r.id) + '"><span class="pc-float-no">' + esc(r.no) + '.</span>' + esc(r.short) + '</button>').join('');
-    return '<div class="pc-float-wrap"><nav class="pc-float-bar" aria-label="' + esc(L.navRules) + '">' + btns +
+    return '<div class="pc-float-wrap"><nav class="pc-float-bar" aria-label="' + esc(L.navRules) + '">' + lead + btns +
       '<span class="pc-float-sep" aria-hidden="true"></span><button type="button" aria-pressed="' + (S.view === 'overview') + '" data-act="view" data-v="overview">' + ICON.grid + esc(L.viewAll(RULES.length)) + '</button></nav></div>';
   }
 
@@ -816,7 +902,10 @@ ${SHARED_FNS}
 
   function renderCompact() {
     const r = activeRule();
-    const main = S.view === 'overview' ? compactOverview() : boardMarkup(r, focusOf(r), 'focus-' + r.id) + evCard(r);
+    let main = S.view === 'overview' ? compactOverview() : boardMarkup(r, focusOf(r), 'focus-' + r.id) + evCard(r);
+    /*@flow*/
+    if (S.view === 'flow') main = flowView(BOARD, L, S.journey);
+    /*@end*/
     root.innerHTML = headerHtml() + '<main class="pc-canvas">' + compactBar() + '<div class="pc-wrap pc-main">' + main + '</div></main>' + footerHtml();
   }
   /*@end*/
@@ -833,7 +922,7 @@ ${SHARED_FNS}
       '<label class="pc-search">' + ICON.search + '<span class="sr">' + esc(L.search) + '</span><input type="search" id="pc-q" placeholder="' + esc(L.searchPh) + '" autocomplete="off" spellcheck="false"><span class="pc-kbd" aria-hidden="true">/</span></label>' +
       '<div class="pc-seg" role="group" aria-label="' + esc(L.statusGroup) + '">' + seg + '</div>' +
       '<span class="pc-float-sep" aria-hidden="true"></span>' +
-      '<button type="button" data-act="view" data-v="overview">' + ICON.grid + esc(L.overview) + '</button></div></div>';
+      '<button type="button" data-act="view" data-v="' + HUB + '">' + (HUB === 'flow' ? ICON.flow : ICON.grid) + esc(L.overview) + '</button></div></div>';
   }
 
   function renderShell() {
@@ -852,7 +941,7 @@ ${SHARED_FNS}
     if (sel) sel.value = S.module;
     const q = root.querySelector('#pc-q');
     if (q && q.value !== S.q) q.value = S.q;
-    root.querySelector('[data-act="view"]').setAttribute('aria-pressed', String(S.view === 'overview'));
+    root.querySelector('[data-act="view"]').setAttribute('aria-pressed', String(S.view === HUB));
     root.querySelector('[data-act="index"]').setAttribute('aria-pressed', String(S.indexOpen));
     root.querySelector('.pc-split').dataset.index = S.indexOpen ? 'open' : 'closed';
   }
@@ -935,6 +1024,9 @@ ${SHARED_FNS}
   function renderMain(vis) {
     const main = root.querySelector('#pc-main');
     if (S.view === 'overview') { main.innerHTML = hubOverview(vis); return; }
+    /*@flow*/
+    if (S.view === 'flow') { main.innerHTML = flowView(BOARD, L, S.journey); return; }
+    /*@end*/
     if (!vis.length) { main.innerHTML = '<div class="card pc-empty-main" data-empty>' + emptyState() + '</div>'; return; }
     const r = activeRule();
     main.innerHTML = crumbHtml(r, vis) + boardMarkup(r, focusOf(r), 'focus-' + r.id) + evCard(r);
@@ -1046,7 +1138,7 @@ ${SHARED_FNS}
     else if (act === 'rule-open') { S.ruleId = v; if (LAYOUT === 'compact') S.focusByRule[v] = S.ovFocus; S.view = 'focus'; }
     else if (act === 'focus') { S.focusByRule[activeRule().id] = v; render(); root.querySelectorAll('.board').forEach((b) => b.classList.add('is-swap')); return; }
     else if (act === 'ov-focus') { S.ovFocus = v; }
-    else if (act === 'view') { S.view = S.view === 'overview' ? 'focus' : 'overview'; }
+    else if (act === 'view') { S.view = S.view === v ? 'focus' : v; }
     else if (act === 'ev') { S.evOpen = !S.evOpen; }
     else if (act === 'status') { S.status = v; }
     else if (act === 'module') { S.module = S.module === v ? ALL : v; }
@@ -1054,6 +1146,11 @@ ${SHARED_FNS}
     else if (act === 'index') { S.indexOpen = !S.indexOpen; }
     else if (act === 'step') { stepRule(Number(v)); return; }
     else if (act === 'clear') { S.module = ALL; S.status = 'all'; S.q = ''; }
+    /*@flow*/
+    else if (act === 'journey') { S.journey = v; }
+    else if (act === 'flow-rule') { openFromFlow(v); }
+    else if (act === 'checkpoint') { const j = JOURNEY[v]; if (!j) return; openFromFlow(j.checkpointRuleId, checkpointFocus(j)); }
+    /*@end*/
     else return;
     render();
   });
@@ -1078,7 +1175,8 @@ ${SHARED_FNS}
     } else if (LAYOUT === 'index' && (e.key === 'j' || e.key === 'k')) {
       stepRule(e.key === 'j' ? 1 : -1);
     } else if (e.key === 'o') {
-      S.view = S.view === 'overview' ? 'focus' : 'overview'; render();
+      const hub = LAYOUT === 'compact' ? 'overview' : HUB;
+      S.view = S.view === hub ? 'focus' : hub; render();
     } else if (e.key === 'e' && S.view === 'focus') {
       S.evOpen = !S.evOpen; render();
     }
@@ -1196,23 +1294,27 @@ function render(board, binding, { mode, payload: payloadMode, title }) {
   const L = uiFor(board);
   const first = board.rules[0];
   const firstSt = first.states[first.defaultFocus];
+  const flowFirst = board.defaultView === 'flow';
 
-  // Pre-hydration shell: header, provenance badge and the first rule's figure.
-  const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="focus" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}">` +
-    `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
-    `<div class="pc-head-right">${provenanceBadge(prov, L)}</div></header>` +
-    `<main class="pc-canvas"><div class="pc-wrap pc-main"><div class="board" data-board="focus-${esc(first.id)}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
+  // Pre-hydration shell: header, provenance badge and the first view (the flow map, or the first
+  // rule's figure). The flow markup is the exact string the runtime renders for the same state.
+  const firstView = flowFirst ? flowView(board, L, '*')
+    : `<div class="board" data-board="focus-${esc(first.id)}" data-tone="${firstSt.tone}" data-edge="${esc(firstSt.edgeShort)}">` +
     `<section class="card fig" data-fig><div class="fig-head"><span class="no">${esc(first.no)}</span><h2 class="fig-title">${esc(first.title)}</h2></div>` +
     `<div class="fg-wrap">${figSvg(first, firstSt, `focus-${first.id}`, false)}</div><p class="take take-${firstSt.tone}">${esc(firstSt.takeaway)}</p></section>` +
     `<section class="card pv pv-${firstSt.tone} link-target"><div class="pv-chrome"><span class="pv-title">${esc(first.previewTitle)}</span></div><div class="pv-body"><span class="pv-badge pv-badge-${firstSt.tone}">${esc(firstSt.preview.statusBadge)}</span></div></section>` +
-    `<svg class="link-layer" aria-hidden="true"></svg></div></div></main>` +
+    `<svg class="link-layer" aria-hidden="true"></svg></div>`;
+  const ssrShell = `<div class="pc-root" id="${ROOT_ELEMENT_ID}" data-mode="${mode}" data-layout="${layout}" data-view="${flowFirst ? 'flow' : 'focus'}" data-rule="${esc(first.id)}" data-focus="${first.defaultFocus}"${board.flow ? ' data-journey="*"' : ''}>` +
+    `<header class="pc-head"><div class="pc-brand"><h1 class="pc-title">${esc(shownTitle)}</h1><p class="pc-sub">${esc(board.subtitle)}</p></div>` +
+    `<div class="pc-head-right">${provenanceBadge(prov, L)}</div></header>` +
+    `<main class="pc-canvas"><div class="pc-wrap pc-main">${firstView}</div></main>` +
     `<footer class="pc-foot" data-provenance-note="${prov.kind}"><span>${esc(provNote(prov, board, binding, L))}</span></footer>` +
     // Inside the root so the scoped CSS applies; the runtime replaces the root's content anyway.
     `${renderNoscript(board, shownTitle, prov, L)}</div>`;
 
-  const keep = [layout];
+  const keep = board.flow ? [layout, 'flow'] : [layout];
   const css = (mode === 'standalone' ? STANDALONE_CSS : '') + scopeCss(minCss(pickBlocks(CSS, keep)));
-  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board);
+  const runtime = figureRuntime(board.rules.map(figKind)) + '\n' + uiSource(board) + (board.flow ? '\n' + flowRuntime() : '');
   return `<!doctype html>
 <html lang="${L.lang}">
 <head>

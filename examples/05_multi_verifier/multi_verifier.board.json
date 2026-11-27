@@ -4,6 +4,11 @@
   "title": "Access & Escrow System",
   "subtitle": "Formal verification of escrow refunds, delegated approval, and period posting",
   "generatedAt": "2026-11-26T18:09:18+00:00",
+  "labels": {
+    "moduleSingular": "stage",
+    "modulePlural": "stages"
+  },
+  "defaultView": "flow",
   "run": {
     "tool": "Multiple checkers",
     "specHash": "sha256:55cb9e26947178c2cefc6f816df4b25e71685891134084d0374e5bfa5c759309",
@@ -995,5 +1000,92 @@
       "title": "Accounting period",
       "summary": "Post escrow releases while the period is open and within budget."
     }
-  ]
+  ],
+  "flow": {
+    "title": "From approval to the books",
+    "note": "Each checker ran its module on its own.",
+    "steps": [
+      {
+        "id": "access",
+        "label": "1. Access control",
+        "summary": "Who may approve an escrow release.",
+        "moduleId": "delegation"
+      },
+      {
+        "id": "escrow",
+        "label": "2. Escrow payout",
+        "summary": "Refund a two-unit escrow without overpaying.",
+        "moduleId": "escrow"
+      },
+      {
+        "id": "period",
+        "label": "3. Period close",
+        "summary": "Post releases only while the period is open.",
+        "moduleId": "period"
+      }
+    ],
+    "edges": [
+      {
+        "id": "approved",
+        "from": "access",
+        "to": "escrow",
+        "label": "approved release"
+      },
+      {
+        "id": "posting",
+        "from": "escrow",
+        "to": "period",
+        "label": "payout to post"
+      }
+    ],
+    "journeys": [
+      {
+        "id": "happy",
+        "label": "Happy path",
+        "tone": "normal",
+        "summary": "Bob approves Alice's release as her delegate, escrow pays it within the cap, and it posts while October is open.",
+        "stepIds": [
+          "access",
+          "escrow",
+          "period"
+        ],
+        "edgeIds": [
+          "approved",
+          "posting"
+        ]
+      },
+      {
+        "id": "unreviewed",
+        "label": "Self-approved release",
+        "tone": "bug",
+        "summary": "Without the self-approval rule, Alice approves her own release and an unreviewed payout reaches escrow.",
+        "stepIds": [
+          "access",
+          "escrow"
+        ],
+        "edgeIds": [
+          "approved"
+        ],
+        "checkpointRuleId": "self_approval",
+        "checkpointFocus": "bug"
+      },
+      {
+        "id": "guarded",
+        "label": "All checks hold",
+        "tone": "safe",
+        "summary": "Self-approval is refused, refunds stop at the escrow cap, and a release after October closes is rejected.",
+        "stepIds": [
+          "access",
+          "escrow",
+          "period"
+        ],
+        "edgeIds": [
+          "approved",
+          "posting"
+        ],
+        "checkpointRuleId": "period_closed",
+        "checkpointFocus": "fixed"
+      }
+    ]
+  }
 }
