@@ -86,6 +86,7 @@ FLOW_PROBE_JS = """() => {
   stages.forEach((s, i) => {
     for (const c of s.querySelectorAll('.fl-st-t, .fl-st-s, .fl-st-b, .fl-chip')) out.outside = Math.max(out.outside, outside(R(c), sr[i]));
     for (const c of s.querySelectorAll('.fl-st-t, .fl-chip-t')) if (c.scrollWidth > c.clientWidth + 1) out.clipped += 1;
+    for (const c of s.querySelectorAll('.fl-st-s')) if (c.scrollHeight > c.clientHeight + 1) out.clipped += 1;
     if (s.scrollHeight > s.clientHeight + 1) out.clipped += 1;
   });
   const pills = [...fl.querySelectorAll('.fl-edge')].map((g) => {
