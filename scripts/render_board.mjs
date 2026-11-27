@@ -587,7 +587,7 @@ const CSS = `
 .fl-edge.is-on .fl-pill { stroke: var(--tn-bd); }
 .fl-edge.is-on .fl-elabel { fill: var(--tn); font-weight: 600; }
 .fl-run { fill: none; stroke: var(--pc-surface); stroke-width: 2.6px; stroke-linecap: round; stroke-dasharray: 0.1 14; animation: pc-fgflow 0.9s linear infinite; }
-.fl-stage { position: absolute; display: flex; flex-direction: column; overflow: hidden; font-size: calc(12 * var(--u)); padding: 1em; border-radius: 1em; background: var(--pc-surface); border: 1px solid var(--pc-bd); box-shadow: var(--pc-shadow-1); }
+.fl-stage { position: absolute; display: flex; flex-direction: column; overflow: hidden; font-size: calc(12 * var(--u)); padding: calc(1em - 1px); border-radius: 1em; background: var(--pc-surface); border: 1px solid var(--pc-bd); box-shadow: var(--pc-shadow-1); }
 .fl-stage.has-fail { border-color: var(--pc-bad-bd); }
 .fl-stage.is-on { border-color: var(--tn); box-shadow: 0 0 0 0.25em var(--tn-bg); }
 .fl-stage.is-dim:hover, .fl-stage.is-dim:focus-within { opacity: 0.85; }
